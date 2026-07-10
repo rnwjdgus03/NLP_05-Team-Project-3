@@ -59,10 +59,57 @@ python kosis_table_search.py
 
 전체 카테고리를 한 번에 크롤링하면 오래 걸리고 KOSIS 분당 호출 제한에 걸릴 수 있으니, 관련 있는 상위 카테고리 1~2개부터 시작하는 걸 권장합니다. 최상위 카테고리 코드는 스크립트 상단 주석 참고.
 
+현재 `kosis_table_summary.csv`에는 농림·인구·노동·물가·사회일반 카테고리, 총 19,913개 통계표가 인덱싱되어 있습니다.
+
+### `kosis_metadata_summary.py` — 표별 분류/항목/단위 조회
+
+통계표설명(메타정보) API(`method=getMeta&type=ITM`)를 이용해, 실제 데이터를 조회하지 않고도 표의 분류 코드 전체 + 항목 코드 전체를 확인합니다.
+
+```bash
+python kosis_metadata_summary.py
+```
+
+- `kosis_api_test.py`의 `get_meta()` / `summarize_meta()` 함수를 사용
+- 응답에서 `OBJ_ID=="ITEM"`인 행이 항목(itmId), 그 외 `OBJ_ID`(A, B ...)인 행이 분류(objL1 등)
+- 결과를 `kosis_metadata_summary.csv`로 저장
+
+### `match_claims_to_tables.py` — A팀 주장 후보 자동 매칭
+
+A팀이 만든 `claim_candidates.csv`(claim_id, claim_text, metric, time, population, unit 컬럼)를 읽어서, 각 주장마다 `kosis_table_summary.csv`에서 후보 통계표를 검색하고 메타정보 힌트까지 붙여 `table_claim_mapping.csv` 초안을 생성합니다.
+
+```bash
+python match_claims_to_tables.py
+```
+
+완전 자동 검증은 아니고 1차 초안이라, 후보 표 중 실제로 맞는 표를 고르고 `calculation`(계산식)·`verifiable`(일치/불일치/판단불가)은 직접 확인해서 채워야 합니다.
+
+### `crawl_more_categories.py` / `merge_table_summaries.py` — 팀원과 나눠서 카테고리 크롤링
+
+팀원이 동시에 다른 카테고리를 크롤링할 때는 같은 파일을 동시에 건드리면 git 충돌이 나므로, `--out`으로 각자 다른 파일에 저장한 뒤 병합합니다.
+
+```bash
+# 팀원 A: 인구/노동
+python crawl_more_categories.py A D
+
+# 팀원 B: 각자 다른 파일명으로
+python crawl_more_categories.py --out kosis_table_summary_이름.csv P2 B
+
+# 병합 (한 명이 최종적으로)
+python merge_table_summaries.py kosis_table_summary.csv kosis_table_summary.csv kosis_table_summary_이름.csv
+```
+
 ## 알아두면 좋은 KOSIS API 주의사항
 
 - 개발가이드 문서엔 `parentId`라고 나오지만, 실제로는 `parentListId` 파라미터여야 동작합니다.
 - `format=json`이라 해도 응답이 표준 JSON이 아니라 key에 따옴표가 없는 형식이라, 그냥 `res.json()`을 쓰면 에러가 납니다. `kosis_api_test.py`의 `_parse_kosis_json()`으로 전처리해서 씁니다.
+- 응답이 1건뿐이면 배열이 아니라 객체 하나로 오는 경우가 있어, 항상 리스트로 감싸는 처리가 필요합니다.
+- 통계표설명(메타정보) API로 실제 데이터 없이 분류/항목 코드를 먼저 확인할 수 있습니다 (`method=getMeta&type=ITM`).
+- 파라미터 상세 내용은 [`kosis_param_guide.md`](./kosis_param_guide.md) 참고.
+
+## 현재 진행 상황 (2026.07.10 기준)
+
+- B팀: KOSIS API 연동, 통계표 인덱스(19,913개), 메타정보 조회, 파라미터 가이드, 자동 매칭 스크립트까지 준비 완료
+- A팀: `feature/data` 브랜치에 조선일보 원본 기사 크롤링(`chosun.csv`) 업로드 — 다만 키워드 필터링 및 주장 후보 라벨링은 아직 진행 전으로 보임. `claim_candidates.csv` 형식(claim_id, claim_text, metric, time, population, unit)으로 정리되면 B팀 매칭 스크립트를 바로 돌릴 수 있음
 
 ## 브랜치 전략
 
