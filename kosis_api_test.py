@@ -25,6 +25,7 @@ if not API_KEY:
 
 LIST_URL = "https://kosis.kr/openapi/statisticsList.do"
 DATA_URL = "https://kosis.kr/openapi/Param/statisticsParameterData.do"
+META_URL = "https://kosis.kr/openapi/statisticsData.do"  # method=getMeta
 
 # KOSIS가 "format=json"으로 줘도 실제로는 key에 따옴표가 없는 JS 객체 리터럴을
 # 반환한다 (예: [{LIST_NM:"인구",LIST_ID:"A"}] <- LIST_NM, LIST_ID 에 따옴표 없음).
@@ -89,6 +90,45 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
     res = requests.get(DATA_URL, params=params, timeout=10)
     res.raise_for_status()
     return _parse_kosis_json(res.text)
+
+
+def get_meta(org_id, tbl_id, meta_type="ITM"):
+    """
+    통계표설명(메타정보) API - 실제 데이터를 안 당겨도 분류/항목 코드 전체를 알 수 있음.
+    meta_type="TBL" -> 표 이름만 (기본정보)
+    meta_type="ITM" -> 분류(objL1 등) 코드 전체 + 항목(itmId) 코드 전체를 한번에 줌
+                       응답 안에서 OBJ_ID=="ITEM" 인 행이 "항목"(itmId 후보),
+                       그 외 OBJ_ID(A, B ...) 인 행이 "분류"(objL1, objL2 ... 후보) 코드임
+    """
+    params = {
+        "method": "getMeta",
+        "type": meta_type,
+        "apiKey": API_KEY,
+        "orgId": org_id,
+        "tblId": tbl_id,
+        "format": "json",
+    }
+    res = requests.get(META_URL, params=params, timeout=10)
+    res.raise_for_status()
+    return _parse_kosis_json(res.text)
+
+
+def summarize_meta(org_id, tbl_id):
+    """
+    get_meta(type=ITM) 결과를 "분류축(objL1 등)"과 "항목(itmId)"으로 나눠서 요약.
+    """
+    rows = get_meta(org_id, tbl_id, meta_type="ITM")
+    items = [r for r in rows if r.get("OBJ_ID") == "ITEM"]
+    classifications = {}
+    for r in rows:
+        if r.get("OBJ_ID") == "ITEM":
+            continue
+        key = (r.get("OBJ_ID"), r.get("OBJ_NM"))
+        classifications.setdefault(key, []).append((r.get("ITM_ID"), r.get("ITM_NM")))
+    return {
+        "items": [(r.get("ITM_ID"), r.get("ITM_NM")) for r in items],
+        "classifications": classifications,  # {(objId, 분류축이름): [(코드, 이름), ...]}
+    }
 
 
 if __name__ == "__main__":
