@@ -34,7 +34,13 @@ _UNQUOTED_KEY = re.compile(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)')
 
 def _parse_kosis_json(text):
     fixed = _UNQUOTED_KEY.sub(r'\1"\2"\3', text)
-    return json.loads(fixed)
+    parsed = json.loads(fixed)
+    # 결과가 1건뿐이면 KOSIS가 리스트가 아니라 객체 하나만 돌려주는 경우가 있어서
+    # 항상 리스트로 통일해준다 (안 그러면 for item in ... 할 때 dict의 key(문자열)를
+    # 순회하게 돼서 'str' object has no attribute 'get' 에러가 남).
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    return parsed
 
 
 def get_list(vw_cd="MT_ZTITLE", parent_id=""):

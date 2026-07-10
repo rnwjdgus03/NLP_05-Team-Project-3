@@ -50,16 +50,22 @@ def crawl_all_tables(start_parent="", vw_cd="MT_ZTITLE", delay=0.3, max_calls=No
     """
     results = []
     calls = 0
+    seen = set()  # 같은 parent_id를 두 번 타는 걸 방지 (무한 재귀/중복 호출 방지)
 
     def _walk(parent_id, path):
         nonlocal calls
         if max_calls is not None and calls >= max_calls:
             return
+        if parent_id in seen:
+            return
+        seen.add(parent_id)
         calls += 1
         items = get_list(vw_cd=vw_cd, parent_id=parent_id)
         time.sleep(delay)  # 분당 호출건수 제한 대비
         for item in items:
-            if "TBL_ID" in item:
+            if not isinstance(item, dict):
+                continue
+            if item.get("TBL_ID"):
                 results.append({
                     "ORG_ID": item.get("ORG_ID"),
                     "TBL_ID": item.get("TBL_ID"),
@@ -68,8 +74,12 @@ def crawl_all_tables(start_parent="", vw_cd="MT_ZTITLE", delay=0.3, max_calls=No
                     "path": " > ".join(path),
                 })
             else:
-                name = item.get("LIST_NM")
-                _walk(item.get("LIST_ID"), path + [name])
+                list_id = item.get("LIST_ID")
+                if not list_id:
+                    # LIST_ID도 TBL_ID도 없는 이상한 항목이면 더 못 내려가니 건너뜀
+                    continue
+                name = item.get("LIST_NM") or list_id
+                _walk(list_id, path + [name])
 
     _walk(start_parent, [])
     return results
@@ -102,7 +112,7 @@ if __name__ == "__main__":
     # 예시: A팀이 "농가 고령화" 관련 주장을 뽑아왔다고 가정
     # 1) 관련 있어 보이는 상위 카테고리(농림=K1)만 먼저 크롤링해서 캐시 생성
     print("K1(농림) 하위 통계표 크롤링 중...")
-    table_index = crawl_all_tables(start_parent="K1")
+    table_index = crawl_all_tables(start_parent="K1_9")
     save_table_summary(table_index)
     print(f"{len(table_index)}개 통계표 저장 완료 -> kosis_table_summary.csv")
 
