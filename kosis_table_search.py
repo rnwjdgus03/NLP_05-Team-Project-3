@@ -24,6 +24,7 @@ T=환경 U=에너지 V=지역통계
 """
 
 import csv
+import sys
 import time
 
 from kosis_api_test import API_KEY, LIST_URL, _parse_kosis_json
@@ -62,6 +63,9 @@ def crawl_all_tables(start_parent="", vw_cd="MT_ZTITLE", delay=0.3, max_calls=No
         calls += 1
         items = get_list(vw_cd=vw_cd, parent_id=parent_id)
         time.sleep(delay)  # 분당 호출건수 제한 대비
+        location = " > ".join(path) if path else "(최상위)"
+        print(f"\r  [진행] API 호출 {calls}회 | 통계표 {len(results)}개 수집 | 현재: {location}          ",
+              end="", flush=True)
         for item in items:
             if not isinstance(item, dict):
                 continue
@@ -82,6 +86,7 @@ def crawl_all_tables(start_parent="", vw_cd="MT_ZTITLE", delay=0.3, max_calls=No
                 _walk(list_id, path + [name])
 
     _walk(start_parent, [])
+    print()  # 진행 표시 줄 마무리
     return results
 
 
