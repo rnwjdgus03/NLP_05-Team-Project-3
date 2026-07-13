@@ -63,17 +63,30 @@ MY_CATEGORY_TABLES = [
 
 
 def get_sample_unit(org_id, tbl_id, classifications, items):
-    """분류/항목 코드 중 하나씩 골라 실제 데이터 1건만 조회해서 단위(UNIT_NM)를 확인."""
+    """분류/항목 코드 중 하나씩 골라 실제 데이터 1건만 조회해서 단위(UNIT_NM)를 확인.
+
+    분류축이 2개 이상인 표(예: "교육분류(영역)별; 연령")는 objL1만 넣으면
+    KOSIS가 값을 못 찾아 빈 응답을 주는 경우가 많다. OBJ_ID(A, B, C...) 순서대로
+    objL1, objL2, objL3 ... 에 각각 첫 코드를 채워 넣어야 정상 조회된다.
+    """
     if not classifications or not items:
         return "확인 불가 (분류/항목 코드 없음)"
-    any_obj_id = next(iter(classifications))[0]  # 예: "A"
-    any_code = classifications[next(iter(classifications))][0][0]  # 그 분류의 첫 코드
+
+    # OBJ_ID(A, B, C...) 순서대로 정렬해서 objL1, objL2, objL3... 에 매핑
+    sorted_axes = sorted(classifications.keys(), key=lambda k: k[0])
+    obj_l1 = classifications[sorted_axes[0]][0][0]
+    extra = {}
+    for i, axis_key in enumerate(sorted_axes[1:], start=2):
+        code = classifications[axis_key][0][0]
+        extra[f"objL{i}"] = code
+
     any_item_id = items[0][0]
     try:
         rows = get_stat_data(
             org_id, tbl_id,
-            obj_l1=any_code, itm_id=any_item_id,
+            obj_l1=obj_l1, itm_id=any_item_id,
             prd_se="Y", new_est_prd_cnt=1,
+            **extra,
         )
         if rows:
             return rows[0].get("UNIT_NM", "확인 불가")
