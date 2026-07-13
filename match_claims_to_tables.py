@@ -1,33 +1,25 @@
 """
 A팀의 claim_candidates.csv 가 오면 실행 -> table_claim_mapping.csv 초안 생성.
-
-전제:
-- claim_candidates.csv 에 최소한 claim_id, claim_text 컬럼은 있다고 가정.
-  metric/time/population/unit 컬럼이 있으면 그것도 활용(더 정확한 키워드 추출 가능).
-  없어도 동작은 함 (claim_text에서 대충 키워드를 뽑아서 검색).
-- kosis_table_summary.csv 가 이미 있어야 함 (kosis_table_search.py로 미리 크롤링해둔 것).
-
-이 스크립트가 하는 일은 "완전 자동 검증"이 아니라 "1차 초안 생성"임.
-사람이 candidate_kosis_table 후보들 중 진짜 맞는 표를 고르고,
-calculation(계산식)과 verifiable(일치/불일치/판단불가)은 직접 확인해서 채워야 함.
-
-사용법:
-    python match_claims_to_tables.py claim_candidates.csv
-    (인자 없이 실행하면 claim_candidates.csv를 찾음)
 """
 
 import csv
+import math
 import re
 import sys
 
 from kosis_api_test import summarize_meta
-from kosis_table_search import save_table_summary  # noqa: F401 (참고용 import)
+from kosis_table_search import save_table_summary  # noqa: F401
 
 
 STOPWORDS = {
     "이", "가", "은", "는", "을", "를", "에", "의", "와", "과", "도", "로", "으로",
     "에서", "까지", "부터", "만", "년", "월", "일", "그", "이번", "지난", "올해",
     "것", "등", "위해", "대해", "따르면", "라고", "했다", "밝혔다",
+    "평균", "기간", "수준", "기록", "결과", "증가", "감소", "비율", "대비", "대상",
+    "조사", "발표", "관련", "전체", "이상", "이하", "전년", "동월", "동기", "분석",
+    "전망", "현황", "동향", "포함", "기준", "이후", "이전", "직전", "직후", "연속",
+    "계속", "지난달", "지난해", "올랐다", "내렸다", "늘었다", "줄었다", "나타났다",
+    "전망된다", "보인다", "가운데", "가장", "지속", "각각", "같은", "당시",
 }
 
 
@@ -36,22 +28,62 @@ def load_table_index(path="kosis_table_summary.csv"):
         return list(csv.DictReader(f))
 
 
-def search_candidate_tables(keywords, table_index, top_n=5):
+def compute_keyword_df(all_keywords, table_index):
+    df = {kw: 0 for kw in all_keywords}
+    for row in table_index:
+        text = f"{row.get('TBL_NM', '')} {row.get('path', '')}"
+        for kw in all_keywords:
+            if kw in text:
+                df[kw] += 1
+    return df
+
+
+def search_candidate_tables(keywords, table_index, df, top_n=10):
+    n_total = len(table_index)
     scored = []
     for row in table_index:
         text = f"{row.get('TBL_NM', '')} {row.get('path', '')}"
-        score = sum(1 for kw in keywords if kw and kw in text)
+        score = 0.0
+        for kw in keywords:
+            if kw and kw in text:
+                d = df.get(kw, 0)
+                score += math.log(n_total / (1 + d))
         if score > 0:
             scored.append((score, row))
     scored.sort(key=lambda x: -x[0])
     return [row for _, row in scored[:top_n]]
 
 
+_JOSA_SUFFIXES = sorted(
+    ["으로는", "에서는", "에게서", "으로도", "에서도", "까지는",
+     "으로", "에서", "에게", "부터", "까지", "만은", "이나", "라도",
+     "이", "가", "은", "는", "을", "를", "에", "의", "와", "과", "도", "로", "만"],
+    key=len, reverse=True,
+)
+
+
+def _strip_josa(token):
+    for suf in _JOSA_SUFFIXES:
+        if token.endswith(suf) and len(token) - len(suf) >= 1:
+            return token[: -len(suf)]
+    return token
+
+
+_VERB_SUFFIXES = sorted(
+    ["했다", "한다", "된다", "하는", "되는", "였다", "한", "된", "할", "될"],
+    key=len, reverse=True,
+)
+
+
+def _is_verb_form_of_stopword(token):
+    for suf in _VERB_SUFFIXES:
+        if token.endswith(suf) and len(token) - len(suf) >= 1:
+            if token[: -len(suf)] in STOPWORDS:
+                return True
+    return False
+
+
 def extract_keywords(claim_row):
-    """
-    metric/population 같은 컬럼이 있으면 그걸 우선 쓰고,
-    없으면 claim_text를 대충 토큰화해서 후보 키워드를 뽑음 (정교한 형태소분석 아님, 1차 필터용).
-    """
     keywords = []
     for col in ("population", "metric", "keyword", "keywords"):
         val = claim_row.get(col)
@@ -60,16 +92,14 @@ def extract_keywords(claim_row):
 
     if not keywords:
         text = claim_row.get("claim_text", "")
-        # 숫자, 조사 등을 대충 걸러내고 2글자 이상 한글 토큰만 후보로
         tokens = re.findall(r"[가-힣]{2,}", text)
-        keywords = [t for t in tokens if t not in STOPWORDS]
+        tokens = [_strip_josa(t) for t in tokens]
+        keywords = [t for t in tokens if t not in STOPWORDS and not _is_verb_form_of_stopword(t)]
 
-    # 중복 제거, 너무 흔한 조사류 제거
-    return [k for k in dict.fromkeys(keywords) if k and k not in STOPWORDS]
+    return [k for k in dict.fromkeys(keywords) if k and k not in STOPWORDS and not _is_verb_form_of_stopword(k)]
 
 
 def suggest_api_params(candidate):
-    """상위 후보 표 하나에 대해 메타정보(분류/항목)를 조회해서 참고용 힌트를 만듦."""
     org_id, tbl_id = candidate.get("ORG_ID"), candidate.get("TBL_ID")
     try:
         meta = summarize_meta(org_id, tbl_id)
@@ -80,20 +110,26 @@ def suggest_api_params(candidate):
         return f"orgId={org_id}, tblId={tbl_id} | 메타 조회 실패: {e}"
 
 
-def main(claim_csv_path="claim_candidates.csv"):
+def main(claim_csv_path="claim_candidates.csv", out_path="table_claim_mapping.csv"):
     with open(claim_csv_path, encoding="utf-8-sig") as f:
         claims = list(csv.DictReader(f))
 
     table_index = load_table_index()
     print(f"{len(claims)}개 주장, {len(table_index)}개 통계표 인덱스 로드")
 
+    claim_keywords_list = [extract_keywords(c) for c in claims]
+    all_keywords = set()
+    for kws in claim_keywords_list:
+        all_keywords.update(kws)
+    print(f"고유 키워드 {len(all_keywords)}개 -> 문서빈도(df) 계산 중...")
+    df = compute_keyword_df(all_keywords, table_index)
+
     out_rows = []
-    for claim in claims:
+    for claim, keywords in zip(claims, claim_keywords_list):
         claim_id = claim.get("claim_id", "")
         claim_text = claim.get("claim_text", "")
-        keywords = extract_keywords(claim)
 
-        candidates = search_candidate_tables(keywords, table_index, top_n=5)
+        candidates = search_candidate_tables(keywords, table_index, df, top_n=10)
         print(f"\n[{claim_id}] {claim_text}")
         print("  키워드:", keywords)
 
@@ -126,16 +162,17 @@ def main(claim_csv_path="claim_candidates.csv"):
 
     fieldnames = ["claim_id", "claim_text", "metric", "time", "population", "unit",
                   "candidate_kosis_table", "api_params", "calculation", "verifiable"]
-    with open("table_claim_mapping.csv", "w", newline="", encoding="utf-8-sig") as f:
+    with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(out_rows)
 
-    print(f"\n완료 -> table_claim_mapping.csv ({len(out_rows)}행)")
+    print(f"\n완료 -> {out_path} ({len(out_rows)}행)")
     print("주의: 이건 초안이에요. candidate_kosis_table 중 실제로 맞는 표 고르고,")
     print("calculation/verifiable은 직접 조회해서 채워야 함.")
 
 
 if __name__ == "__main__":
     path = sys.argv[1] if len(sys.argv) > 1 else "claim_candidates.csv"
-    main(path)
+    out = sys.argv[2] if len(sys.argv) > 2 else "table_claim_mapping.csv"
+    main(path, out)
