@@ -236,7 +236,7 @@
 - 상황: 구정현이 전체 KOSIS 검토 대상 6,404건을 직접 보기로 했고, 처음부터 가능한 데까지 자동 처리하기로 함.
 - 문제:
   - 6,404건을 사람이 한 줄씩 바로 검토하면 시간이 너무 오래 걸림.
-  - KOSIS 표 목록은 96,018건이라, 각 claim마다 전체 표를 매번 검색하면 처리 속도가 매우 느림.
+  - KOSIS 표 목록은 107,138건이라, 각 claim마다 전체 표를 매번 검색하면 처리 속도가 매우 느림.
 - 1차 시도:
   - 각 claim마다 전체 KOSIS 표를 순회해 후보표를 찾는 방식으로 실행함.
   - 처리 시간이 과도하게 길어져 중단함.
@@ -356,7 +356,7 @@
   - `data/archive/kosis_metadata_summary_팀원이름.csv`
   - `data/archive/뉴스_노이즈_제거_파이프라인 (1).ipynb`
 - 루트에 남긴 핵심 파일:
-  - `kosis_table_summary.csv`: 96,018개 KOSIS 표 인덱스, 여러 스크립트 기본 입력
+  - `kosis_table_summary.csv`: 107,138개 KOSIS 표 인덱스, 여러 스크립트 기본 입력
   - `kosis_metadata_summary.csv`: 주요 후보표 메타 요약
   - `kosis_api_test.py`, `kosis_table_search.py`, `match_claims_to_tables.py`, `verify_claim.py` 등 실행 코드
 - 삭제한 파일:

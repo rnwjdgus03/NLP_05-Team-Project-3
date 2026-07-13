@@ -303,4 +303,117 @@ def get_actual_value(row, claim_type="LEVEL"):
     actual_number = parse_number(rows[0].get("DT"))
     if actual_number is None:
         return None, "KOSIS 응답에 숫자 DT 값이 없음"
-    return actual_number, "KOSIS API
+    return actual_number, "KOSIS API 조회값 사용"
+
+
+def parse_numbers_cell(row):
+    """numbers 컬럼이 있으면 우선 쓰고, 없으면 claim_text에서 숫자 추출."""
+    raw_numbers = row.get("numbers")
+    if raw_numbers:
+        try:
+            parsed = json.loads(raw_numbers)
+            if isinstance(parsed, list):
+                return [parse_number(x) for x in parsed if parse_number(x) is not None]
+        except Exception:
+            pass
+        return extract_numbers(raw_numbers)
+    return extract_numbers(row.get("claim_text", ""))
+
+
+def verify_row(row):
+    """CSV 한 줄을 판정 결과가 붙은 dict로 변환."""
+    claim_text = row.get("claim_text", "")
+    numbers = parse_numbers_cell(row)
+    claim_type = row.get("claim_type") or classify_claim_type(claim_text, numbers)
+    claim_number = pick_claim_number(row, numbers, claim_type)
+    actual_number, actual_source = get_actual_value(row, claim_type)
+
+    if claim_number is None:
+        verdict, diff, note = "판단불가", None, "claim에서 비교할 숫자를 고르지 못함"
+    else:
+        verdict, diff, note = judge(claim_number, actual_number, claim_type)
+
+    result = dict(row)
+    result.update({
+        "claim_type": claim_type,
+        "claim_number": claim_number,
+        "actual_number": actual_number,
+        "actual_source": actual_source,
+        "verdict": verdict,
+        "diff": diff,
+        "judge_note": note,
+    })
+    return result
+
+
+def verify_file(input_path, output_path):
+    """table_claim_mapping.csv를 읽어 verified_claims.csv를 만든다."""
+    with open(input_path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        raise RuntimeError(f"{input_path}에 데이터가 없음")
+
+    verified_rows = [verify_row(row) for row in rows]
+    fieldnames = list(rows[0].keys())
+    for column in (
+        "claim_type",
+        "claim_number",
+        "actual_number",
+        "actual_source",
+        "verdict",
+        "diff",
+        "judge_note",
+    ):
+        if column not in fieldnames:
+            fieldnames.append(column)
+
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(verified_rows)
+
+    counts = {}
+    for row in verified_rows:
+        counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1
+    return counts
+
+
+def run_examples():
+    # 간단한 예시 (실행 확인용) - 실제 데이터 연결 전 로직 자체만 테스트
+    examples = [
+        ("최저임금이 1.7% 인상된다", [1.7], "CHANGE_RATE", 1.7, 1.72),
+        ("소비자물가가 2.2% 올랐다", [2.2], "CHANGE_RATE", 2.2, 1.8),
+        ("청년 고용률 49개월 만에 최대 낙폭", [], "LEVEL", 42.5, 42.3),
+    ]
+    for text, nums, ctype, claim_val, actual_val in examples:
+        verdict, diff, note = judge(claim_val, actual_val, ctype)
+        print(f"[{ctype}] {text}\n  -> {verdict} | {note}\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="뉴스 claim 숫자와 KOSIS 실제값 비교 판정")
+    parser.add_argument("--input", default="table_claim_mapping.csv", help="입력 CSV")
+    parser.add_argument("--output", default="verified_claims.csv", help="출력 CSV")
+    parser.add_argument("--examples", action="store_true", help="간단 예시만 실행")
+    args = parser.parse_args()
+
+    if args.examples:
+        run_examples()
+        return
+
+    try:
+        counts = verify_file(args.input, args.output)
+    except FileNotFoundError:
+        print(f"{args.input} 파일이 없어서 예시만 실행합니다.\n")
+        run_examples()
+        return
+
+    print(f"완료 -> {args.output}")
+    for verdict, count in counts.items():
+        print(f"{verdict}: {count}건")
+
+
+if __name__ == "__main__":
+    main()
