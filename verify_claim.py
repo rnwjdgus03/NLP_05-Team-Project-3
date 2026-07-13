@@ -22,6 +22,11 @@ import argparse
 import csv
 import json
 import re
+import sys
+
+# claim_text/후보 컬럼 등 일부 필드가 매우 길 수 있어(특히 obj_l1_candidates/
+# itm_id_candidates), 기본 필드 크기 제한(131072바이트)을 넉넉하게 늘려둔다.
+csv.field_size_limit(sys.maxsize)
 
 # ------------------------------------------------------------------
 # 1) claim 유형 분류
@@ -33,8 +38,20 @@ import re
 #
 # TODO: 실제 table_claim_mapping.csv 사례를 더 보고 이 분류가 충분한지 점검.
 
-CHANGE_KEYWORDS = re.compile(r"(증가|감소|줄었|늘었|올랐|내렸|상승|하락|급증|급감)")
+CHANGE_KEYWORDS = re.compile(
+    r"(증가|감소|줄었|늘었|올랐|내렸|상승|하락|급증|급감|"
+    r"성장|뒷걸음질|둔화|위축|확대|축소|개선|악화|반등|신장|역성장)"
+)
+POINT_KEYWORDS = re.compile(r"(포인트|p\s*(?:상승|하락|올라|내려|증가|감소)|%p)")
 NUMBER_RE = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
+# 날짜/기간 표현에 붙는 숫자(예: "1월", "5~9일", "2023년", "3분기", "16개월")는
+# 비교 대상 수치가 아니므로 claim_number 후보에서 제외한다.
+# 범위 표현(예: "5∼9일", "1~3월")은 두 숫자 모두 제거하기 위해 범위 패턴을 먼저 처리한다.
+DATE_RANGE_RE = re.compile(
+    r"\d+(?:,\d{3})*(?:\.\d+)?\s*[~∼\-]\s*\d+(?:,\d{3})*(?:\.\d+)?\s*(?:년대?|월|일|주째|주|분기|개월|시|번째|차)"
+)
+DATE_SUFFIX_RE = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?\s*(?:년대?|월|일|주째|주|분기|개월|시|번째|차)")
+
 ACTUAL_VALUE_COLUMNS = (
     "actual_number",
     "actual_value",
@@ -42,6 +59,10 @@ ACTUAL_VALUE_COLUMNS = (
     "kosis_actual_value",
     "actual",
 )
+# CHANGE_RATE(%) / POINT_CHANGE(포인트, %p) 판정 시 우선적으로 사용할, 미리 계산된
+# 전기 대비 증감 컬럼 (fetch_kosis_actual_values.py가 채워둠).
+CHANGE_PCT_COLUMNS = ("actual_change_pct",)
+CHANGE_POINT_COLUMNS = ("actual_change_point",)
 
 
 def classify_claim_type(claim_text, numbers):
@@ -51,6 +72,8 @@ def classify_claim_type(claim_text, numbers):
     """
     if len(numbers) >= 2 and re.search(r"(에서|→|->).*(으로|로)", claim_text):
         return "ABS_TO_ABS"
+    if POINT_KEYWORDS.search(claim_text):
+        return "POINT_CHANGE"
     if CHANGE_KEYWORDS.search(claim_text):
         return "CHANGE_RATE"
     return "LEVEL"
@@ -91,11 +114,32 @@ def parse_number(value):
         return None
 
 
+def strip_date_numbers(text):
+    """
+    "1월", "5~9일", "2023년", "3분기", "16개월", "두번째" 등 날짜/기간 표현에
+    붙은 숫자를 제거한 뒤 남는 숫자만 뽑는다. (claim_number가 날짜 조각을
+    잘못 집는 걸 방지)
+    """
+    if not text:
+        return []
+    cleaned = DATE_RANGE_RE.sub(" ", str(text))
+    cleaned = DATE_SUFFIX_RE.sub(" ", cleaned)
+    out = []
+    for match in NUMBER_RE.findall(cleaned):
+        try:
+            out.append(float(match.replace(",", "")))
+        except ValueError:
+            continue
+    return out
+
+
 def pick_claim_number(row, numbers, claim_type):
     """
     주장에서 비교 대상 숫자 하나를 고른다.
-    - CHANGE_RATE는 보통 % 증감률이 핵심이므로, percent/change 계열 컬럼을 우선 사용.
-    - 그 외에는 numbers 컬럼 또는 claim_text에서 첫 숫자를 사용.
+    - CHANGE_RATE/POINT_CHANGE는 %  또는 포인트 표현이 핵심이므로 그 계열을 우선 사용.
+    - LEVEL/ABS_TO_ABS는 날짜/기간 숫자(1월, 5~9일, 2023년 등)를 먼저 걸러내고 남는
+      숫자 중에서 고른다 (예전엔 "1월 둘째주(5~9일)"에서 '5'나 '9'를 가격으로 착각하는
+      문제가 있었음).
 
     TODO: 한 문장에 숫자가 여러 개 있을 때 어떤 숫자가 검증 대상인지 사람이 확정한
     claim_number 컬럼을 받는 방식이 가장 안전함.
@@ -105,11 +149,21 @@ def pick_claim_number(row, numbers, claim_type):
         if picked is not None:
             return picked
 
-    if claim_type == "CHANGE_RATE":
-        text = str(row.get("claim_text", ""))
+    text = str(row.get("claim_text", ""))
+
+    if claim_type in ("CHANGE_RATE", "POINT_CHANGE"):
+        # %p / 포인트 표현이 있으면 그 앞 숫자를 최우선으로 사용
+        point_matches = re.findall(r"([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:%p|포인트|p\b)", text)
+        if point_matches:
+            return parse_number(point_matches[-1])
         percent_matches = re.findall(r"([-+]?\d+(?:,\d{3})*(?:\.\d+)?)\s*%", text)
         if percent_matches:
             return parse_number(percent_matches[-1])
+
+    # LEVEL / ABS_TO_ABS 등: 날짜/기간 조각 제거 후 남는 숫자 사용
+    filtered = strip_date_numbers(text)
+    if filtered:
+        return filtered[0]
 
     return numbers[0] if numbers else None
 
@@ -123,6 +177,7 @@ def pick_claim_number(row, numbers, claim_type):
 # TODO: 실제 사례로 이 숫자들이 적절한지 검증하고 조정할 것.
 TOLERANCE = {
     "CHANGE_RATE": 0.3,  # %p 단위 절대 오차 (예: 주장 6.4% vs 실제 6.1% -> 0.3%p 차이면 일치)
+    "POINT_CHANGE": 0.3,  # CSI 등 포인트 변화 - 절대 오차 0.3포인트
     "LEVEL": 0.05,  # 상대 오차 5% (예: 주장 21% vs 실제 20.3% -> 5% 이내면 일치)
     "ABS_TO_ABS": 0.02,  # 절대 수치(금액 등)는 더 엄격하게 2% 이내
 }
@@ -144,8 +199,8 @@ def judge(claim_number, actual_number, claim_type):
 
     tol = TOLERANCE.get(claim_type, 0.05)
 
-    if claim_type == "CHANGE_RATE":
-        diff = abs(claim_number - actual_number)  # %p 절대 차이
+    if claim_type in ("CHANGE_RATE", "POINT_CHANGE"):
+        diff = abs(claim_number - actual_number)  # %p/포인트 절대 차이
         ok = diff <= tol
     else:
         # 상대 오차로 비교 (0으로 나누기 방지)
@@ -171,21 +226,39 @@ def calculate_change_rate(previous_value, current_value):
     return (current_value - previous_value) / previous_value * 100
 
 
-def get_actual_value(row):
+def get_actual_value(row, claim_type="LEVEL"):
     """
-    실제 KOSIS 값을 가져온다.
+    실제 KOSIS 값을 가져온다. claim_type에 따라 어떤 컬럼을 볼지 우선순위가 다르다:
+      - CHANGE_RATE(%) -> actual_change_pct (fetch_kosis_actual_values.py가 전기 대비
+        증감률을 미리 계산해둔 값) 우선, 없으면 actual_value(수준값) 자체를 최후 수단으로 사용
+      - POINT_CHANGE(포인트/%p, 예: CSI) -> actual_change_point 우선
+      - LEVEL/ABS_TO_ABS -> actual_value(수준값) 그대로 사용
 
-    1순위: 사람이 CSV에 이미 적어둔 actual_number / actual_value / kosis_value 사용
-    2순위: org_id, tbl_id, obj_l1, itm_id 등이 있으면 kosis_api_test.get_stat_data() 호출
+    1순위: 위 규칙에 맞는, 사람/스크립트가 미리 계산해둔 컬럼 사용
+    2순위: org_id, tbl_id, obj_l1, itm_id 등이 있으면 kosis_api_test.get_stat_data() 직접 호출
+           (이 경로는 단일 시점만 조회하므로 CHANGE_RATE/POINT_CHANGE는 정확히 계산 못 함 -
+            증감이 필요한 claim은 fetch_kosis_actual_values.py로 미리 채워두는 걸 권장)
 
-    TODO:
-      - objL2, objL3 같은 다중 분류축을 claim별로 정확히 넘기는 규칙 보강
-      - CHANGE_RATE에서 KOSIS가 수준값만 줄 때 이전/현재 두 시점으로 증감률 계산
+    TODO: objL2, objL3 같은 다중 분류축을 claim별로 정확히 넘기는 규칙 보강
     """
+    preferred_columns = []
+    if claim_type == "CHANGE_RATE":
+        preferred_columns = list(CHANGE_PCT_COLUMNS)
+    elif claim_type == "POINT_CHANGE":
+        preferred_columns = list(CHANGE_POINT_COLUMNS)
+
+    for column in preferred_columns:
+        actual_number = parse_number(row.get(column))
+        if actual_number is not None:
+            return actual_number, f"{column} 컬럼 사용(전기대비 계산값)"
+
     for column in ACTUAL_VALUE_COLUMNS:
         actual_number = parse_number(row.get(column))
         if actual_number is not None:
-            return actual_number, f"{column} 컬럼 사용"
+            label = f"{column} 컬럼 사용"
+            if claim_type in ("CHANGE_RATE", "POINT_CHANGE"):
+                label += " (주의: 증감 계산값이 없어 수준값 자체와 비교 - 부정확할 수 있음)"
+            return actual_number, label
 
     org_id = row.get("org_id") or row.get("ORG_ID")
     tbl_id = row.get("tbl_id") or row.get("TBL_ID")
@@ -230,117 +303,4 @@ def get_actual_value(row):
     actual_number = parse_number(rows[0].get("DT"))
     if actual_number is None:
         return None, "KOSIS 응답에 숫자 DT 값이 없음"
-    return actual_number, "KOSIS API 조회값 사용"
-
-
-def parse_numbers_cell(row):
-    """numbers 컬럼이 있으면 우선 쓰고, 없으면 claim_text에서 숫자 추출."""
-    raw_numbers = row.get("numbers")
-    if raw_numbers:
-        try:
-            parsed = json.loads(raw_numbers)
-            if isinstance(parsed, list):
-                return [parse_number(x) for x in parsed if parse_number(x) is not None]
-        except Exception:
-            pass
-        return extract_numbers(raw_numbers)
-    return extract_numbers(row.get("claim_text", ""))
-
-
-def verify_row(row):
-    """CSV 한 줄을 판정 결과가 붙은 dict로 변환."""
-    claim_text = row.get("claim_text", "")
-    numbers = parse_numbers_cell(row)
-    claim_type = row.get("claim_type") or classify_claim_type(claim_text, numbers)
-    claim_number = pick_claim_number(row, numbers, claim_type)
-    actual_number, actual_source = get_actual_value(row)
-
-    if claim_number is None:
-        verdict, diff, note = "판단불가", None, "claim에서 비교할 숫자를 고르지 못함"
-    else:
-        verdict, diff, note = judge(claim_number, actual_number, claim_type)
-
-    result = dict(row)
-    result.update({
-        "claim_type": claim_type,
-        "claim_number": claim_number,
-        "actual_number": actual_number,
-        "actual_source": actual_source,
-        "verdict": verdict,
-        "diff": diff,
-        "judge_note": note,
-    })
-    return result
-
-
-def verify_file(input_path, output_path):
-    """table_claim_mapping.csv를 읽어 verified_claims.csv를 만든다."""
-    with open(input_path, newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    if not rows:
-        raise RuntimeError(f"{input_path}에 데이터가 없음")
-
-    verified_rows = [verify_row(row) for row in rows]
-    fieldnames = list(rows[0].keys())
-    for column in (
-        "claim_type",
-        "claim_number",
-        "actual_number",
-        "actual_source",
-        "verdict",
-        "diff",
-        "judge_note",
-    ):
-        if column not in fieldnames:
-            fieldnames.append(column)
-
-    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(verified_rows)
-
-    counts = {}
-    for row in verified_rows:
-        counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1
-    return counts
-
-
-def run_examples():
-    # 간단한 예시 (실행 확인용) - 실제 데이터 연결 전 로직 자체만 테스트
-    examples = [
-        ("최저임금이 1.7% 인상된다", [1.7], "CHANGE_RATE", 1.7, 1.72),
-        ("소비자물가가 2.2% 올랐다", [2.2], "CHANGE_RATE", 2.2, 1.8),
-        ("청년 고용률 49개월 만에 최대 낙폭", [], "LEVEL", 42.5, 42.3),
-    ]
-    for text, nums, ctype, claim_val, actual_val in examples:
-        verdict, diff, note = judge(claim_val, actual_val, ctype)
-        print(f"[{ctype}] {text}\n  -> {verdict} | {note}\n")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="뉴스 claim 숫자와 KOSIS 실제값 비교 판정")
-    parser.add_argument("--input", default="table_claim_mapping.csv", help="입력 CSV")
-    parser.add_argument("--output", default="verified_claims.csv", help="출력 CSV")
-    parser.add_argument("--examples", action="store_true", help="간단 예시만 실행")
-    args = parser.parse_args()
-
-    if args.examples:
-        run_examples()
-        return
-
-    try:
-        counts = verify_file(args.input, args.output)
-    except FileNotFoundError:
-        print(f"{args.input} 파일이 없어서 예시만 실행합니다.\n")
-        run_examples()
-        return
-
-    print(f"완료 -> {args.output}")
-    for verdict, count in counts.items():
-        print(f"{verdict}: {count}건")
-
-
-if __name__ == "__main__":
-    main()
+    return actual_number, "KOSIS API
