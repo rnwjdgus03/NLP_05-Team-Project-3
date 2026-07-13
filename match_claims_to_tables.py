@@ -107,7 +107,7 @@ def suggest_api_params(candidate):
         item_count = len(meta["items"])
         return f"orgId={org_id}, tblId={tbl_id} | 분류: {obj_names} | 항목 {item_count}개 (직접 objL1/itmId 확인 필요)"
     except Exception as e:
-        return f"orgId={org_id}, tblId={tbl_id} | 메타 조회 실패: {e}"
+        return f"orgId={org_id}, tblId={tbl_id} | 메타 조회 실패: {type(e).__name__}"
 
 
 def main(claim_csv_path="claim_candidates.csv", out_path="table_claim_mapping.csv"):
