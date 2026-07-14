@@ -7,6 +7,7 @@ verify_claim.py가 바로 사용할 수 있는 table_claim_mapping.csv를 만드
 
 동작 방식:
   1) org_id/tbl_id가 채워진 행만 대상 (obj_l1/itm_id가 비어있으면 "ALL"로 조회)
+     obj_l2~obj_l8이 있으면 KOSIS objL2~objL8 파라미터로 함께 전달
   2) kosis_api_test.get_stat_data()로 최근 N개 시점 데이터를 가져옴
      (여러 시점을 가져온 뒤, claim의 'year' 컬럼과 매칭되는 시점을 우선 채택.
       year 정보가 없거나 매칭 실패 시 가장 최근 시점 값을 사용)
@@ -393,6 +394,11 @@ def main(
         obj_l1 = r.get("obj_l1", "").strip() or "ALL"
         itm_id = r.get("itm_id", "").strip() or "ALL"
         prd_se = r.get("prd_se", "").strip() or "Y"
+        extra_objects = {}
+        for level in range(2, 9):
+            value = (r.get(f"obj_l{level}", "") or "").strip()
+            if value:
+                extra_objects[f"objL{level}"] = value
 
         out_row = dict(r)
         try:
@@ -411,6 +417,7 @@ def main(
             data = get_stat_data(
                 org_id=org_id, tbl_id=tbl_id, obj_l1=obj_l1, itm_id=itm_id,
                 prd_se=prd_se, new_est_prd_cnt=period_count,
+                **extra_objects,
             )
             value, period, prev_value, prev_period = pick_best_match(
                 data, years, target_period=target_period, target_quarter=target_quarter,

@@ -1,0 +1,14 @@
+﻿section,label,count
+expansion_decision,수동검토유지,1281
+expansion_decision,코드북_비검증분류,329
+expansion_decision,코드북_자동검증대상,33
+expansion_verdict,일치,28
+expansion_verdict,판단불가,3
+expansion_verdict,불일치,2
+existing_unavailable_337,KOSIS 미제공,273
+existing_unavailable_337,정보 부족,32
+existing_unavailable_337,지역·분류 불일치,31
+existing_unavailable_337,기여도 미제공,1
+new_unavailable_from_recheck,정보 부족,187
+new_unavailable_from_recheck,KOSIS 미제공,120
+new_unavailable_from_recheck,기여도 미제공,22
