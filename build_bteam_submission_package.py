@@ -84,7 +84,7 @@ def main(input_path=DEFAULT_INPUT, output_prefix="submission"):
         "",
         "- 2,001건 전체에 대해 KOSIS API 실제값 조회 및 자동 검증을 수행했다.",
         "- 자동 검증 결과를 그대로 최종 사실판정으로 쓰지 않고, 단위/시점/증감률 오류를 후처리해 제출 큐를 분리했다.",
-        "- 현재 바로 제출 가능한 확정 일치 건은 70건이다.",
+        f"- 현재 바로 제출 가능한 확정 일치 건은 {len(matches)}건이다.",
         "- 나머지는 뉴스가 틀렸다는 뜻이 아니라, 표/항목/시점/단위 기준 재검토가 필요한 건으로 분리했다.",
         "",
         "## 결과 요약",
@@ -105,6 +105,8 @@ def main(input_path=DEFAULT_INPUT, output_prefix="submission"):
             meaning = "증감률 claim인데 이전 시점 값이 없어 계산 보류"
         elif key == "판단불가_파라미터미확정":
             meaning = "obj_l1/itm_id 등 필수 파라미터 미확정"
+        elif key == "판단불가_검증대상아님":
+            meaning = "정책/전망/순위/기간 숫자 등 KOSIS 직접 검증 대상이 아님"
         else:
             meaning = "추가 확인 필요"
         report.append(f"| {key} | {count} | {meaning} |")

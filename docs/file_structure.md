@@ -27,9 +27,9 @@ B팀 KOSIS 매칭/검토 산출물.
 - `bteam_kosis_review_enriched.csv`: `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`이 보강된 2,001건 기준 입력
 - `final_verified_enriched.csv`: enriched 입력 기준 최종 검증 상세 파일
 - `final_verified_enriched_summary.csv`: enriched 입력 기준 최종 검증 요약
-- `submission_enriched_verified_matches.csv`: enriched 기준 바로 제출 가능한 엄격 일치 117건
-- `submission_enriched_recheck_needed.csv`: enriched 기준 재검토 필요 1,393건
-- `submission_enriched_unverifiable.csv`: enriched 기준 판단불가 491건
+- `submission_enriched_verified_matches.csv`: tbl_id 재매핑 기준 바로 제출 가능한 엄격 일치 108건
+- `submission_enriched_recheck_needed.csv`: tbl_id 재매핑 기준 재검토 필요 868건
+- `submission_enriched_unverifiable.csv`: tbl_id 재매핑 기준 판단불가 1,025건
 - `submission_enriched_recheck_cause_analysis.csv`: enriched 기준 재검토/판단불가 원인 라벨
 - `submission_enriched_recheck_cause_summary.csv`: enriched 기준 재검토/판단불가 원인 요약
 - `submission_enriched_bteam_status_report.md`: enriched 기준 팀 공유용 제출 상태 보고서
