@@ -194,3 +194,123 @@ python merge_table_summaries.py kosis_table_summary.csv kosis_table_summary.csv 
 - `feature/기능명`, `fix/버그명`: 각자 작업 브랜치, develop으로 PR 병합
 
 커밋 메시지는 `feat:`, `fix:`, `docs:`, `chore:` 등 Conventional Commits 형식을 따릅니다.
+---
+
+## Poc 브랜치 초기 기록
+
+아래 내용은 `Poc` 브랜치에서 정리한 초기 자동 매칭 PoC 진행 결과다. 현재 기준 성능과 제출 파일은 위의 최신 진행 현황 및 `outputs/bteam_holdout2/` 결과를 따른다.
+
+# 📊 B팀 KOSIS 매칭 PoC 진행 결과
+
+## 1. 데이터 수령 및 전처리
+
+**A팀 전달 데이터**
+
+* 원본 파일: `claim_df.csv`
+* 총 주장(Claim) 수: **20,486건**
+
+### 포함 컬럼
+
+| 컬럼            |
+| ------------- |
+| claim_id      |
+| article_id    |
+| title         |
+| date          |
+| url           |
+| claim_text    |
+| prev_sentence |
+| next_sentence |
+| numbers       |
+| units         |
+| year          |
+| region        |
+
+---
+
+## 2. 수행 작업
+
+| 단계            | 결과 파일                                | 내용                                                                         | 상태 |
+| ------------- | ------------------------------------ | -------------------------------------------------------------------------- | -- |
+| ① A팀 데이터 확인   | `claim_df.csv`                       | Claim 데이터 구조 및 컬럼 확인                                                       | ✅  |
+| ② B팀 입력 형식 변환 | `claim_candidates_from_a_sample.csv` | `claim_text`, `numbers`, `units`, `time`, `population`, `keywords` 형식으로 변환 | ✅  |
+| ③ 검증 우선 후보 선별 | `claim_candidates_top30.csv`         | %, 원, 억원, 조원, 명, 건 등 통계 검증 가능성이 높은 주장 30건 선정                               | ✅  |
+| ④ KOSIS 자동 매칭 | `table_claim_mapping.csv`            | KOSIS 통계표(`kosis_table_summary.csv`)와 자동 후보 매칭                             | ✅  |
+| ⑤ 결과 검토 요약    | `metric_review_summary.csv`          | 자동 후보 적합 여부 및 수동 검토 필요 여부 정리                                               | ✅  |
+
+---
+
+# 🔄 PoC 파이프라인
+
+```text
+A팀 Claim 데이터
+        │
+        ▼
+B팀 입력 형식 변환
+        │
+        ▼
+검증 가능 Claim 선별
+        │
+        ▼
+KOSIS 통계표 후보 검색
+        │
+        ▼
+자동 매칭 결과 생성
+        │
+        ▼
+사람 검토용 요약 생성
+```
+
+---
+
+# 📈 진행 결과
+
+### ✅ 성공한 부분
+
+* PoC 파이프라인 전체 실행 성공
+* A팀 Claim 데이터를 B팀 입력 형식으로 변환 성공
+* KOSIS 통계표 후보 자동 매칭 성공
+* 사람이 검토 가능한 결과 요약 파일 생성 성공
+
+---
+
+# ⚠️ 확인된 한계
+
+현재 A팀 Claim 데이터에는 아래 정보가 포함되어 있지 않습니다.
+
+* **metric**
+* **population**
+* **keywords**
+
+이 정보가 부족하여 일부 자동 매칭의 정확도가 낮아지는 사례가 확인되었습니다.
+
+### 예시
+
+* ✅ **물가 관련 주장** → 소비자물가지수(CPI) 통계표와 비교적 정확하게 매칭
+* ⚠️ **수출 / GDP / 가계소득 관련 주장** → 의미가 유사한 다른 통계표가 후보로 선택되는 경우 발생
+
+---
+
+# 💡 PoC 결론
+
+### ✔ 확인된 사항
+
+* A팀의 **수치 기반 주장 후보**를 B팀의 **KOSIS 통계표 후보**와 연결하는 전체 파이프라인은 정상적으로 동작함을 확인했습니다.
+
+### ✔ 향후 개선 사항
+
+자동 매칭 정확도를 높이기 위해 A팀 Claim Schema에 아래 컬럼을 추가하여 전달받는 것이 필요합니다.
+
+| 추가 필요 컬럼       | 목적                   |
+| -------------- | -------------------- |
+| **metric**     | 비교 대상 통계 지표 명확화      |
+| **population** | 대상 집단 정보 제공          |
+| **keywords**   | 의미 기반 검색 및 매칭 정확도 향상 |
+
+---
+
+## ✅ 최종 결론
+
+> **PoC는 전체 데이터 흐름(Claim → KOSIS 통계표 매칭 → 검토 요약) 검증에 성공했습니다.**
+>
+> 향후 **metric, population, keywords** 정보를 함께 제공받는다면 KOSIS 통계표 자동 매칭의 정확도를 더욱 향상시킬 수 있을 것으로 판단됩니다.
