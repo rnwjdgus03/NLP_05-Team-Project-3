@@ -1,0 +1,6 @@
+﻿domain,sample_count,gold_verifiable_count,auto_decision_coverage,eligibility_strict_accuracy,table_strict_accuracy,item_period_strict_accuracy,auto_mapping_precision
+물가,20,9,0.8,0.8,1.0,1.0,1.0
+고용,20,4,0.4,0.4,0.75,0.75,1.0
+무역,20,1,0.15,0.15,1.0,1.0,1.0
+인구,20,12,0.6,0.6,0.8333333333333334,0.8333333333333334,1.0
+소매,20,7,0.6,0.6,0.7142857142857143,0.7142857142857143,1.0

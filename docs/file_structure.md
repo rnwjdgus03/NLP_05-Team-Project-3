@@ -49,8 +49,17 @@ B팀 KOSIS 매칭/검토 산출물.
 
 - `outputs/bteam_gold/`: 개발용 골드 100건, 코드북, 1,643건 확대 적용 결과
 - `outputs/bteam_holdout/`: 개발 데이터와 겹치지 않는 독립 홀드아웃 100건과 최초 평가 결과
+- `outputs/bteam_holdout/codebook_v1_v2_development_comparison.*`: v1과 v2 개발 지표 비교. v2는 독립 성능이 아님
 
 독립 평가의 자동 결정 구간 정확도는 96.2%(25/26)지만, 보류를 포함한 항목·시점 엄격 정확도는 18.2%(6/33)다. 80% 품질 게이트를 통과하기 전에는 자동 후보를 최종 확정하지 않는다.
+
+## `outputs/bteam_holdout2/`
+
+- `holdout2_100_selection.csv`: 골드100·첫 홀드아웃100과 claim·기사 중복이 없는 새 100건
+- `holdout2_100_review.csv`: 동결 코드북 v2 자동 예측과 비어 있는 수동 `gold_*` 입력 컬럼
+- `holdout2_100_review_report.md`: 표본 구성, 자동 결정 분포, 수동 확정 절차
+
+새 표본은 아직 수동 골드가 완성되지 않아 독립 품질 점수를 계산하지 않는다.
 
 ## `outputs/archive/bteam_poc_20260714/`
 

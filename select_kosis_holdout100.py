@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import os
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -12,6 +14,11 @@ REPO = Path(__file__).resolve().parent
 INPUT = REPO / "outputs/bteam_review/final_verified_filled_2001_remapped_v6.csv"
 GOLD = REPO / "outputs/bteam_gold/gold100_selection.csv"
 OUTPUT = REPO / "outputs/bteam_holdout/holdout100_selection.csv"
+OUTPUT = Path(os.environ.get("KOSIS_HOLDOUT_SELECTION_OUTPUT", OUTPUT))
+EXTRA_EXCLUDE = [Path(value) for value in os.environ.get("KOSIS_HOLDOUT_EXTRA_EXCLUDE", "").split(os.pathsep) if value]
+EXTRA_SOURCE = [Path(value) for value in os.environ.get("KOSIS_HOLDOUT_EXTRA_SOURCE", "").split(os.pathsep) if value]
+RANK_SALT = os.environ.get("KOSIS_HOLDOUT_RANK_SALT", "kosis-holdout-v1")
+csv.field_size_limit(sys.maxsize)
 DOMAINS = ("물가", "고용", "무역", "인구", "소매")
 BUCKET_TARGET = {"증감률재검토": 7, "수준값재검토": 7, "판단불가": 6}
 
@@ -51,6 +58,12 @@ def bucket(row):
         return "수준값재검토"
     if status.startswith("판단불가"):
         return "판단불가"
+    if not status:
+        if str(row.get("verifiable", "")).lower() in {"n", "false", "판단불가"}:
+            return "판단불가"
+        if "%" in (row.get("claim_text", "") or ""):
+            return "증감률재검토"
+        return "수준값재검토"
     return "기타"
 
 
@@ -59,19 +72,25 @@ def normalized(text):
 
 
 def rank(row, salt):
-    payload = f"kosis-holdout-v1|{salt}|{row.get('claim_id', '')}".encode("utf-8")
+    payload = f"{RANK_SALT}|{salt}|{row.get('claim_id', '')}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
 def main():
-    with GOLD.open(encoding="utf-8-sig", newline="") as handle:
-        gold_rows = list(csv.DictReader(handle))
-    gold_ids = {row["claim_id"] for row in gold_rows}
-    gold_articles = {row.get("article_id", "") for row in gold_rows if row.get("article_id")}
-    gold_texts = {normalized(row.get("claim_text", "")) for row in gold_rows}
+    exclusion_rows = []
+    for path in [GOLD, *EXTRA_EXCLUDE]:
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            exclusion_rows.extend(csv.DictReader(handle))
+    gold_ids = {row["claim_id"] for row in exclusion_rows}
+    gold_articles = {row.get("article_id", "") for row in exclusion_rows if row.get("article_id")}
+    gold_texts = {normalized(row.get("claim_text", "")) for row in exclusion_rows}
 
-    with INPUT.open(encoding="utf-8-sig", newline="") as handle:
-        source_rows = list(csv.DictReader(handle))
+    source_rows = []
+    for path in [INPUT, *EXTRA_SOURCE]:
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            for source in csv.DictReader(handle):
+                source["source_dataset"] = str(path.relative_to(REPO))
+                source_rows.append(source)
 
     pools = defaultdict(lambda: defaultdict(list))
     for source in source_rows:
@@ -135,7 +154,7 @@ def main():
         row["holdout_no"] = index
 
     fields = [
-        "holdout_no", "holdout_domain", "selection_reason", "selection_bucket", "source_status",
+        "holdout_no", "holdout_domain", "selection_reason", "selection_bucket", "source_status", "source_dataset",
         "claim_id", "article_id", "title", "date", "url", "prev_sentence", "claim_text", "next_sentence",
         "metric", "metric_all", "numbers", "units", "year", "region", "population",
         "org_id", "tbl_id", "obj_l1", "obj_l2", "itm_id", "prd_se",
@@ -152,6 +171,7 @@ def main():
     print("domains=", dict(Counter(row["holdout_domain"] for row in selected)))
     print("buckets=", dict(Counter(row["selection_bucket"] for row in selected)))
     print(f"excluded_gold_claims={len(gold_ids)} articles={len(gold_articles)}")
+    print(f"source_rows={len(source_rows)} files={1 + len(EXTRA_SOURCE)}")
     print(OUTPUT.resolve())
 
 

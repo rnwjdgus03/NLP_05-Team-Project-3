@@ -16,17 +16,23 @@ REPO = Path(__file__).resolve().parent
 SELECTION = REPO / "outputs/bteam_holdout/holdout100_selection.csv"
 OUTPUT_DIR = REPO / "outputs/bteam_holdout"
 GOLD_CACHE_PATH = OUTPUT_DIR / "holdout_gold_api_cache.json"
-AUTO_CACHE_PATH = OUTPUT_DIR / "holdout_auto_api_cache.json"
+OUTPUT_STEM = os.environ.get("KOSIS_HOLDOUT_STEM", "holdout100")
+AUTO_CACHE_PATH = OUTPUT_DIR / f"{OUTPUT_STEM}_auto_api_cache.json"
+CODEBOOK_FILE = os.environ.get("KOSIS_CODEBOOK_FILE", "expand_kosis_codebook.py")
 
 sys.path.insert(0, str(REPO))
 os.chdir(REPO)
 from kosis_api_test import get_stat_data  # noqa: E402
 
-spec = importlib.util.spec_from_file_location("frozen_codebook", REPO / "expand_kosis_codebook.py")
+spec = importlib.util.spec_from_file_location("frozen_codebook", REPO / CODEBOOK_FILE)
 codebook = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 spec.loader.exec_module(codebook)
 codebook.CACHE_PATH = AUTO_CACHE_PATH
+
+
+def output_file(suffix):
+    return OUTPUT_DIR / f"{OUTPUT_STEM}_{suffix}"
 
 
 def cfg(
@@ -243,6 +249,7 @@ def rate(correct, denominator):
 
 
 def main():
+    is_development = "development" in OUTPUT_STEM.lower()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with SELECTION.open(encoding="utf-8-sig", newline="") as handle:
         selection = list(csv.DictReader(handle))
@@ -376,8 +383,8 @@ def main():
         rows.append(out)
 
     fields = list(rows[0].keys())
-    write_csv(OUTPUT_DIR / "holdout100_evaluation.csv", rows, fields)
-    write_csv(OUTPUT_DIR / "holdout100_manual_labels.csv", rows, fields)
+    write_csv(output_file("evaluation.csv"), rows, fields)
+    write_csv(output_file("manual_labels.csv"), rows, fields)
 
     eligible_rows = [row for row in rows if row["gold_verifiable"] == "Y"]
     covered_rows = [row for row in rows if row["auto_decision"] != "보류"]
@@ -402,7 +409,7 @@ def main():
     add_metric("최종 판정 엄격 일치율", sum(row["verdict_correct"] == "Y" for row in rows), len(rows), "보류를 오답으로 포함한 100건 기준")
     add_metric("자동결정 최종 판정 일치율", sum(row["verdict_correct"] == "Y" for row in covered_rows), len(covered_rows), "자동결정한 행만 평가")
     add_metric("골드 API 성공률", sum(row["gold_api_success"] == "Y" for row in eligible_rows), len(eligible_rows), "수동 확정 매핑의 현재 KOSIS 값 조회")
-    write_csv(OUTPUT_DIR / "holdout100_metrics.csv", metrics, ["metric", "correct_or_success", "denominator", "rate", "definition"])
+    write_csv(output_file("metrics.csv"), metrics, ["metric", "correct_or_success", "denominator", "rate", "definition"])
 
     domain_rows = []
     for domain in ("물가", "고용", "무역", "인구", "소매"):
@@ -419,7 +426,7 @@ def main():
             "item_period_strict_accuracy": rate(sum(row["item_period_correct"] == "Y" for row in eligible_subset), len(eligible_subset)),
             "auto_mapping_precision": rate(sum(row["item_period_correct"] == "Y" for row in mapped_subset), len(mapped_subset)),
         })
-    write_csv(OUTPUT_DIR / "holdout100_metrics_by_domain.csv", domain_rows, list(domain_rows[0].keys()))
+    write_csv(output_file("metrics_by_domain.csv"), domain_rows, list(domain_rows[0].keys()))
 
     errors = []
     for row in rows:
@@ -446,7 +453,7 @@ def main():
             else:
                 out["error_cause"] = "매핑 또는 판정 불일치"
             errors.append(out)
-    write_csv(OUTPUT_DIR / "holdout100_error_analysis.csv", errors, list(errors[0].keys()))
+    write_csv(output_file("error_analysis.csv"), errors, list(errors[0].keys()))
 
     false_negative_rows = [
         row for row in rows
@@ -518,7 +525,7 @@ def main():
             "evaluation_policy": "API 성공률과 매핑 정확도를 별도 지표로 계속 보고",
         })
     write_csv(
-        OUTPUT_DIR / "holdout100_improvement_backlog.csv",
+        output_file("improvement_backlog.csv"),
         backlog,
         ["priority", "scope", "count", "evidence", "recommended_action", "evaluation_policy"],
     )
@@ -530,16 +537,18 @@ def main():
     auto_verdicts = Counter(row["auto_verdict"] or "보류" for row in rows)
     exclusion_counts = Counter(row["gold_exclusion_reason"] for row in rows if row["gold_verifiable"] == "N")
     report = [
-        "# KOSIS 독립 홀드아웃 100건 평가",
+        f"# KOSIS 홀드아웃 100건 평가 - {OUTPUT_STEM}",
         "",
         "## 결론",
         "",
         "- 기존 개발용 골드 100건과 claim_id 및 article_id 중복 0건",
+        f"- 평가 코드북: `{CODEBOOK_FILE}`",
         "- 물가·고용·무역·인구·소매 각 20건",
         f"- 골드 검증 가능: {len(eligible_rows)}건 / 검증 불가: {len(rows) - len(eligible_rows)}건 ({dict(exclusion_counts)})",
         f"- 자동 결정: {dict(decision_counts)}",
         f"- 항목·시점 결합 엄격 정확도: {gate_rate:.1%}",
-        f"- 80% 품질 게이트: {'통과' if gate_rate >= 0.8 else '실패'}",
+        f"- 80% 품질 기준: {'개발셋 통과(독립 재평가 필요)' if gate_rate >= 0.8 and is_development else ('통과' if gate_rate >= 0.8 else '실패')}",
+        "- 이 표본의 오류를 보고 코드북을 수정했으므로 더 이상 독립 평가셋이 아니다." if is_development else "- 이 평가는 코드북을 수정하지 않은 독립 표본 결과다.",
         "- 게이트 실패 시 1,281건 수동검토 큐의 자동 확정을 확대하지 않고 코드북을 보완한다.",
         "- 인구 분야는 골드 기사 제외 후 남은 독립 기사 수가 적어 8개 신규 기사에서 20개 서로 다른 주장 문장을 사용했다.",
         "",
@@ -567,21 +576,20 @@ def main():
         "",
         "## 다음 단계",
         "",
-        "1. P0 오분류 1건을 먼저 수정해 명시적 소매통계가 정책 배경 단어 때문에 차단되지 않게 한다.",
-        "2. 분야별 검증가능 보류 26건과 검증불가 보류 48건을 코드북 v2 개발 자료로 사용한다.",
+        "1. 개발이 끝난 코드북을 동결하고 현재 표본과 겹치지 않는 새 표본을 수동 확정한다.",
+        "2. 새 독립 표본에서 항목·시점 결합 정확도 80%를 다시 측정한다.",
         "3. 최신 출생 잠정치 표 탐색과 API 재시도 큐를 별도 구현한다.",
-        "4. 코드북 v2를 고정한 뒤 현재 홀드아웃과 겹치지 않는 새 표본으로 80% 게이트를 다시 측정한다.",
-        "5. 새 독립 평가가 80%를 통과하기 전까지 1,281건 자동 확정 확대는 보류한다.",
+        "4. 새 독립 평가가 80%를 통과하기 전까지 1,281건 자동 확정 확대는 보류한다.",
         "",
         "## 산출물",
         "",
-        "- `holdout100_evaluation.csv`: 골드 라벨과 동결 코드북 예측 전체",
-        "- `holdout100_metrics.csv`: 전체 성능 지표",
-        "- `holdout100_metrics_by_domain.csv`: 분야별 성능",
-        "- `holdout100_error_analysis.csv`: 오류 행과 원인",
-        "- `holdout100_improvement_backlog.csv`: 코드북 v2 개선 우선순위",
+        f"- `{OUTPUT_STEM}_evaluation.csv`: 골드 라벨과 코드북 예측 전체",
+        f"- `{OUTPUT_STEM}_metrics.csv`: 전체 성능 지표",
+        f"- `{OUTPUT_STEM}_metrics_by_domain.csv`: 분야별 성능",
+        f"- `{OUTPUT_STEM}_error_analysis.csv`: 오류 행과 원인",
+        f"- `{OUTPUT_STEM}_improvement_backlog.csv`: 개선 우선순위",
     ])
-    (OUTPUT_DIR / "holdout100_report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    output_file("report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
     print(f"eligible={len(eligible_rows)} exclusions={dict(exclusion_counts)}")
     print(f"auto_decisions={dict(decision_counts)}")
