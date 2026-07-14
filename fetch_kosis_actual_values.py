@@ -299,6 +299,7 @@ def main(
     limit=None,
     sleep_sec=SLEEP_SEC,
     require_complete=False,
+    period_count=30,
 ):
     with open(input_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -367,7 +368,7 @@ def main(
         try:
             data = get_stat_data(
                 org_id=org_id, tbl_id=tbl_id, obj_l1=obj_l1, itm_id=itm_id,
-                prd_se=prd_se, new_est_prd_cnt=30,
+                prd_se=prd_se, new_est_prd_cnt=period_count,
             )
             years = parse_years(r.get("year", "")) or infer_year_from_context(r)
             claim_text = r.get("claim_text", "")
@@ -438,6 +439,7 @@ if __name__ == "__main__":
     ap.add_argument("--output", default=OUT_PATH, help="KOSIS 실제값을 추가할 CSV 경로")
     ap.add_argument("--limit", type=int, default=None, help="테스트용으로 앞에서 N건만 처리")
     ap.add_argument("--sleep", type=float, default=SLEEP_SEC, help="API 호출 사이 대기 초")
+    ap.add_argument("--period-count", type=int, default=30, help="KOSIS에서 가져올 최근 시점 개수")
     ap.add_argument(
         "--require-complete",
         action="store_true",
@@ -450,4 +452,5 @@ if __name__ == "__main__":
         limit=args.limit,
         sleep_sec=args.sleep,
         require_complete=args.require_complete,
+        period_count=args.period_count,
     )
