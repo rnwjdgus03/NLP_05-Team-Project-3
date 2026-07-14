@@ -31,6 +31,20 @@ B팀 KOSIS 매칭/검토 산출물.
 - `bteam_kosis_tbl_meta_candidates.csv`: 자동 매칭 표의 메타정보
 - `bteam_kosis_codebook_needed.csv`: 세부 코드 확인용 코드북
 
+## `outputs/bteam_verification/`
+
+B팀 표본 검증과 후속 수동검토 산출물.
+
+- `bteam_kosis_review_ready.csv`: 주요 ID 4종이 채워진 1,998건
+- `bteam_kosis_review_unresolved.csv`: 메타데이터 확인 후 판단불가 처리한 3건
+- `bteam_kosis_review_sample.csv`: 수록주기/통계표를 섞은 24건 표본
+- `bteam_kosis_claim_mapping_sample.csv`: 표본 KOSIS 실제값 조회 결과
+- `bteam_kosis_verified_sample.csv`: 표본 자동 판정 결과
+- `bteam_kosis_mapping_recheck_1998.csv`: 1,998건 의미 매핑 재검토 큐
+- `bteam_kosis_review_manual_prioritized_4403.csv`: 4,403건 수동검토 우선순위 큐
+- `bteam_kosis_review_manual_batch_001.csv`: 수동검토 1차 100건
+- `B팀_KOSIS_검증_진행현황.xlsx`: 판정 근거, 표본 결과, 다음 작업 요약
+
 ## `data/archive/`
 
 현재 기준으로 직접 작업하지 않는 예전 입력/참고 파일 + v2 파이프라인 이전(v1, claim_candidates.csv 기반 422건 배치)에 나온 산출물.

@@ -28,6 +28,8 @@ verify_claim.py가 바로 사용할 수 있는 table_claim_mapping.csv를 만드
 import argparse
 import ast
 import csv
+from datetime import datetime
+from pathlib import Path
 import re
 import sys
 import time
@@ -50,6 +52,9 @@ SEQUENTIAL_RE = re.compile(
     r"직전\s*달|직전\s*분기|직전\s*월|전달비"
 )
 QUARTER_RE = re.compile(r"([1-4])\s*분기")
+EXPLICIT_YEAR_MONTH_RE = re.compile(r"(20\d{2})\s*년\s*(1[0-2]|[1-9])\s*월")
+MONTH_RE = re.compile(r"(?<!\d)(1[0-2]|[1-9])\s*월")
+HALF_RE = re.compile(r"(상|하)반기")
 
 
 def detect_comparison_mode(claim_text):
@@ -124,6 +129,67 @@ def parse_years(year_str):
     return []
 
 
+def shift_month(year, month, delta):
+    month_index = year * 12 + (month - 1) + delta
+    return month_index // 12, month_index % 12 + 1
+
+
+def infer_target_period(row, prd_se):
+    """기사 날짜와 상대·명시 시점 표현으로 KOSIS PRD_DE 목표값을 만든다."""
+    text = row.get("claim_text", "") or ""
+    article_date = None
+    try:
+        article_date = datetime.strptime((row.get("date") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        pass
+
+    explicit_year_month = EXPLICIT_YEAR_MONTH_RE.search(text)
+    years = parse_years(row.get("year", ""))
+    contextual_years = years or infer_year_from_context(row)
+
+    if prd_se == "M":
+        if explicit_year_month:
+            return f"{int(explicit_year_month.group(1)):04d}{int(explicit_year_month.group(2)):02d}"
+        month_match = MONTH_RE.search(text)
+        if month_match:
+            month = int(month_match.group(1))
+            if article_date:
+                if re.search(r"지난해|작년|전년", text):
+                    year = article_date.year - 1
+                else:
+                    year = article_date.year - 1 if month > article_date.month else article_date.year
+            elif contextual_years:
+                year = contextual_years[0]
+            else:
+                return None
+            return f"{year:04d}{month:02d}"
+        if article_date and re.search(r"지난달|전월|전달", text):
+            year, month = shift_month(article_date.year, article_date.month, -1)
+            return f"{year:04d}{month:02d}"
+        if article_date and re.search(r"이달|이번\s*달|당월", text):
+            return f"{article_date.year:04d}{article_date.month:02d}"
+        return None
+
+    target_year = contextual_years[0] if contextual_years else None
+    if target_year is None and article_date:
+        target_year = article_date.year
+
+    if prd_se == "Q":
+        quarter = detect_target_quarter(text)
+        return f"{target_year:04d}Q{quarter}" if target_year and quarter else None
+
+    if prd_se == "H":
+        half_match = HALF_RE.search(text)
+        if target_year and half_match:
+            half = 1 if half_match.group(1) == "상" else 2
+            return f"{target_year:04d}H{half}"
+        return None
+
+    if prd_se == "Y" and target_year:
+        return f"{target_year:04d}"
+    return None
+
+
 def _to_float(value):
     if value is None:
         return None
@@ -133,7 +199,14 @@ def _to_float(value):
         return None
 
 
-def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mode=None, prd_se="Y"):
+def pick_best_match(
+    data_rows,
+    target_years,
+    target_period=None,
+    target_quarter=None,
+    comparison_mode=None,
+    prd_se="Y",
+):
     """
     KOSIS API 응답(data_rows, 각 row에 PRD_DE=기간, DT=값)에서
     target_years(+가능하면 target_quarter)에 해당하는 시점을 우선 채택.
@@ -154,9 +227,35 @@ def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mod
         s = str(prd_de)
         return int(s[:4]) if s[:4].isdigit() else None
 
+    def period_key(prd_de):
+        value = str(prd_de)
+        year = year_of(value)
+        digits = re.sub(r"\D", "", value)
+        if prd_se == "M" and len(digits) >= 6:
+            return digits[:6]
+        if prd_se == "Q" and year:
+            quarter = quarter_of(value)
+            return f"{year:04d}Q{quarter}" if quarter else None
+        if prd_se == "H" and year:
+            match = re.search(r"(?:H|0?)([12])$", value, re.IGNORECASE)
+            return f"{year:04d}H{int(match.group(1))}" if match else None
+        if prd_se == "Y" and year:
+            return f"{year:04d}"
+        return None
+
     sorted_rows = sorted(data_rows, key=lambda r: str(r.get("PRD_DE", "")))
 
     idx = None
+    if target_period:
+        exact_matches = [
+            i for i, row in enumerate(sorted_rows)
+            if period_key(row.get("PRD_DE", "")) == target_period
+        ]
+        if exact_matches:
+            idx = exact_matches[-1]
+        else:
+            return None, target_period, None, None
+
     if target_years:
         year_matches = [i for i, row in enumerate(sorted_rows) if year_of(row.get("PRD_DE", "")) in target_years]
         if year_matches and target_quarter and prd_se == "Q":
@@ -164,7 +263,7 @@ def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mod
             if quarter_matches:
                 idx = quarter_matches[0]
         if idx is None and year_matches:
-            idx = year_matches[0]
+            idx = year_matches[-1]
 
     if idx is None:
         idx = len(sorted_rows) - 1  # 매칭 실패 -> 가장 최근 시점
@@ -185,35 +284,55 @@ def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mod
     )
 
 
-def load_cache():
+def load_cache(output_path):
     try:
-        with open(OUT_PATH, encoding="utf-8-sig") as f:
+        with open(output_path, encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
         return {r["claim_id"]: r for r in rows}
     except FileNotFoundError:
         return {}
 
 
-def main(limit=None):
-    with open(SRC_PATH, encoding="utf-8-sig") as f:
+def main(
+    input_path=SRC_PATH,
+    output_path=OUT_PATH,
+    limit=None,
+    sleep_sec=SLEEP_SEC,
+    require_complete=False,
+):
+    with open(input_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         src_rows = list(reader)
         fieldnames = list(reader.fieldnames)
 
     print(f"전체 행: {len(src_rows)}")
 
-    targets = [r for r in src_rows if r.get("org_id", "").strip() and r.get("tbl_id", "").strip()]
-    print(f"org_id/tbl_id 확정된 행: {len(targets)}")
+    required_fields = ("org_id", "tbl_id", "obj_l1", "itm_id")
+    if require_complete:
+        targets = [
+            row
+            for row in src_rows
+            if all((row.get(field) or "").strip() for field in required_fields)
+        ]
+        print(f"주요 ID 4종 확정된 행: {len(targets)}")
+    else:
+        targets = [
+            row
+            for row in src_rows
+            if (row.get("org_id") or "").strip() and (row.get("tbl_id") or "").strip()
+        ]
+        print(f"org_id/tbl_id 확정된 행: {len(targets)}")
 
-    cache = load_cache()
-    print(f"기존 캐시(table_claim_mapping.csv)에 이미 처리된 행: {len(cache)}")
+    cache = load_cache(output_path)
+    print(f"기존 캐시({output_path})에 이미 처리된 행: {len(cache)}")
 
-    out_fieldnames = fieldnames + [
+    added_fields = [
         "actual_value", "actual_period",
         "actual_prev_value", "actual_prev_period",
         "actual_change_pct", "actual_change_point",
         "api_error",
     ]
+    out_fieldnames = fieldnames + [field for field in added_fields if field not in fieldnames]
     out_rows = []
 
     processed = 0
@@ -254,8 +373,9 @@ def main(limit=None):
             claim_text = r.get("claim_text", "")
             comparison_mode = detect_comparison_mode(claim_text)
             target_quarter = detect_target_quarter(claim_text)
+            target_period = infer_target_period(r, prd_se)
             value, period, prev_value, prev_period = pick_best_match(
-                data, years, target_quarter=target_quarter,
+                data, years, target_period=target_period, target_quarter=target_quarter,
                 comparison_mode=comparison_mode, prd_se=prd_se,
             )
 
@@ -290,28 +410,44 @@ def main(limit=None):
             errors += 1
 
         out_rows.append(out_row)
-        time.sleep(SLEEP_SEC)
+        time.sleep(sleep_sec)
 
         if processed % 20 == 0:
             print(f"  진행: {processed}/{len(targets)} (성공 {fetched}, 실패/미매칭 {errors}, 캐시재사용 {skipped_cached})")
             # 중간 저장 (끊겨도 이어서 할 수 있도록)
-            with open(OUT_PATH, "w", newline="", encoding="utf-8-sig") as f:
-                w = csv.DictWriter(f, fieldnames=out_fieldnames)
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=out_fieldnames, lineterminator="\n")
                 w.writeheader()
                 w.writerows(out_rows)
 
-    with open(OUT_PATH, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=out_fieldnames)
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=out_fieldnames, lineterminator="\n")
         w.writeheader()
         w.writerows(out_rows)
 
-    print(f"\n완료 -> {OUT_PATH}")
+    print(f"\n완료 -> {output_path}")
     print(f"처리: {processed}건 | 성공: {fetched}건 | 실패/미매칭: {errors}건 | 캐시재사용: {skipped_cached}건")
     print("이제 'python verify_claim.py --input table_claim_mapping.csv --output verified_claims.csv' 실행 가능")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--input", default=SRC_PATH, help="검토 완료 CSV 경로")
+    ap.add_argument("--output", default=OUT_PATH, help="KOSIS 실제값을 추가할 CSV 경로")
     ap.add_argument("--limit", type=int, default=None, help="테스트용으로 앞에서 N건만 처리")
+    ap.add_argument("--sleep", type=float, default=SLEEP_SEC, help="API 호출 사이 대기 초")
+    ap.add_argument(
+        "--require-complete",
+        action="store_true",
+        help="org_id/tbl_id/obj_l1/itm_id가 모두 채워진 행만 처리",
+    )
     args = ap.parse_args()
-    main(limit=args.limit)
+    main(
+        input_path=args.input,
+        output_path=args.output,
+        limit=args.limit,
+        sleep_sec=args.sleep,
+        require_complete=args.require_complete,
+    )

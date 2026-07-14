@@ -260,6 +260,10 @@ def get_actual_value(row, claim_type="LEVEL"):
                 label += " (주의: 증감 계산값이 없어 수준값 자체와 비교 - 부정확할 수 있음)"
             return actual_number, label
 
+    api_error = (row.get("api_error") or "").strip()
+    if api_error:
+        return None, f"KOSIS 사전 조회 실패: {api_error}"
+
     org_id = row.get("org_id") or row.get("ORG_ID")
     tbl_id = row.get("tbl_id") or row.get("TBL_ID")
     obj_l1 = row.get("obj_l1") or row.get("objL1")
@@ -370,7 +374,7 @@ def verify_file(input_path, output_path):
             fieldnames.append(column)
 
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(verified_rows)
 

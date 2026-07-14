@@ -71,6 +71,7 @@ A팀이 전달하는 claim 데이터는 아래 컬럼이 있어야 한다.
 - `outputs/bteam_review/bteam_kosis_review_filled.csv`
   - `tbl_id`가 자동으로 채워진 2,001건
   - 이 중 1,998건은 `obj_l1`, `itm_id` 자동 후보까지 입력
+  - 주요 ID 완성은 의미 매핑 확정을 뜻하지 않으며, 표본 검증 후 재검토 큐로 분리
 - `outputs/bteam_review/bteam_kosis_review_manual_todo.csv`
   - 수동검토가 필요한 4,403건
 - `outputs/bteam_review/bteam_kosis_tbl_meta_candidates.csv`
@@ -79,6 +80,13 @@ A팀이 전달하는 claim 데이터는 아래 컬럼이 있어야 한다.
   - 품목별 수출입/소매판매 등 세부 코드 확인용 코드북
 - `outputs/bteam_review/bteam_kosis_review_summary.csv`
   - metric별/사유별 처리 요약
+
+검증 준비/재검토 산출물:
+- `outputs/bteam_verification/bteam_kosis_review_ready.csv`: 주요 ID 4종이 채워진 1,998건
+- `outputs/bteam_verification/bteam_kosis_review_unresolved.csv`: 메타데이터 확인 후 판단불가로 분리한 3건
+- `outputs/bteam_verification/bteam_kosis_mapping_recheck_1998.csv`: 의미 매핑 재검토 우선순위 큐
+- `outputs/bteam_verification/bteam_kosis_review_manual_prioritized_4403.csv`: 4,403건 수동검토 우선순위 큐
+- `outputs/bteam_verification/bteam_kosis_review_manual_batch_001.csv`: P0부터 뽑은 1차 100건
 
 ## 3. KOSIS 후보표 검색
 
@@ -179,6 +187,19 @@ A팀이 전달하는 claim 데이터는 아래 컬럼이 있어야 한다.
 - `table_claim_mapping.csv`: 197건
 - `verified_claims.csv`: 일치 5건, 불일치 131건, 판단불가 61건
 - 이 결과는 실전1 핵심 제출물이 아니라 후속 검증 파이프라인의 실행 예시로 사용한다.
+
+1,998건 확대 전 표본 품질 확인(2026-07-14):
+- 서로 다른 통계표와 수록주기를 섞은 24건 표본 실행
+- KOSIS 값 조회 성공 14건, 실패·미매칭 10건
+- 자동 판정: 일치 1건, 불일치 13건, 판단불가 10건
+- 세율·설문·수출 claim이 무관한 통계표에 연결되는 의미 오매핑을 확인했으므로 전체 실행은 보류
+- 기사 날짜와 `지난달`, 명시 월/분기/반기를 이용한 목표 기간 선택을 추가했고, 목표 기간이 없을 때 최신값으로 대체하지 않도록 수정
+
+전체 실행 조건:
+1. 표본 오매핑 23건의 통계표·분류·항목·단위·기간을 수동 수정
+2. P0 수동검토 큐 139건 중 1차 100건 검토
+3. 표본 재실행에서 API 성공 여부와 의미 매핑 품질을 함께 확인
+4. 품질 게이트 통과 후 1,998건 전체 실행
 
 ## 8. A팀에 요청할 점
 
