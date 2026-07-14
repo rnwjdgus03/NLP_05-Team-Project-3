@@ -193,7 +193,7 @@ def judge(claim_number, actual_number, claim_type):
 
 def final_status(verdict, row, claim_type, actual_reason):
     if verdict == "일치":
-        return "검증완료_일치"
+        return "수동확인필요_일치후보"
     if verdict == "판단불가":
         if "미확정" in (row.get("reviewer_note", "") + row.get("api_error", "")):
             return "판단불가_파라미터미확정"

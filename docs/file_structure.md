@@ -25,11 +25,13 @@ A팀이 준 최신 claim 데이터와 B팀 필터링 입력 파일.
 B팀 KOSIS 매칭/검토 산출물.
 
 - `bteam_kosis_review_filled.csv`: `tbl_id`가 자동 매칭된 2,001건 원본 입력
-- `final_verified_filled_2001_refined_v3.csv`: 시점/단위 후처리까지 반영한 2,001건 최종 검증 상세 파일
-- `final_verified_filled_2001_refined_v3_summary.csv`: 최종 검증 결과 요약
-- `submission_verified_matches.csv`: 바로 제출 가능한 일치 70건
-- `submission_recheck_needed.csv`: 표/항목/시점/단위 재검토 필요 1,621건
-- `submission_unverifiable.csv`: API/파라미터/증감 계산 문제로 판단불가 310건
+- `final_verified_filled_2001_refined_v3.csv`: 원격 자동 실행 2,001건 진단 자료
+- `final_verified_filled_2001_audited_v4.csv`: 70건 정확시점 재실행과 의미 감사를 반영한 2,001건 상세 파일
+- `match_candidates_audit_70.csv`: 기존 자동 일치 70건의 기간·전망·매핑·재실행 감사 결과
+- `submission_legacy_auto_matches_70.csv`: 원격에서 일치로 분류한 70건 보존본(최종 일치로 사용 금지)
+- `submission_match_candidates.csv`: 수치상 일치하지만 매핑 수동 확정이 남은 33건
+- `submission_recheck_needed.csv`: 표/항목/시점/단위 재검토 필요 1,643건
+- `submission_unverifiable.csv`: API/파라미터/증감 계산/전망 문제로 판단불가 325건
 - `submission_recheck_cause_analysis.csv`: 재검토/판단불가 행별 원인 라벨
 - `submission_recheck_cause_summary.csv`: 재검토/판단불가 원인 요약
 - `submission_bteam_status_report.md`: A팀/팀 공유용 제출 상태 보고서
@@ -43,6 +45,11 @@ B팀 표본 검증과 후속 수동검토 산출물.
 - `bteam_kosis_review_sample.csv`: 수록주기/통계표를 섞은 24건 표본
 - `bteam_kosis_claim_mapping_sample.csv`: 표본 KOSIS 실제값 조회 결과
 - `bteam_kosis_verified_sample.csv`: 표본 자동 판정 결과
+- `bteam_kosis_actual_sample_exact.csv`: 정확 시점 로직으로 다시 조회한 24건 표본
+- `bteam_kosis_verified_sample_exact.csv`: 수준값 대체를 금지한 표본 재판정 결과
+- `bteam_kosis_match_candidates_actual_exact.csv`: 기존 자동 일치 70건 정확 시점 재조회 결과
+- `bteam_kosis_match_candidates_verified_exact.csv`: 70건 정확 시점 재판정 결과
+- `bteam_kosis_match_candidates_exact_summary.csv`: 70건 조회·판정·오류 집계
 - `bteam_kosis_mapping_recheck_1998.csv`: 1,998건 의미 매핑 재검토 큐
 - `bteam_kosis_review_manual_prioritized_4403.csv`: 4,403건 수동검토 우선순위 큐
 - `bteam_kosis_review_manual_batch_001.csv`: 수동검토 1차 100건

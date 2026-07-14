@@ -132,12 +132,14 @@ python merge_table_summaries.py kosis_table_summary.csv kosis_table_summary.csv 
   - 대표 검증 배치 197건 실행 완료(verified_claims.csv: 일치 5건, 불일치 131건, 판단불가 61건). 실전1 범위에서는 부가 성과로 기록.
   - 1,998건 확대 전 품질 확인용 표본 24건을 실행했다. KOSIS 값 조회 성공 14건/실패·미매칭 10건, 자동 판정은 일치 1건/불일치 13건/판단불가 10건이었다.
   - 표본에서 세율·설문·수출 claim이 무관한 표와 연결되는 등 의미 오매핑이 확인되어 1,998건 전체 실행은 보류했다. 기간이 없을 때 최신값으로 대체하던 동작도 제거했다.
+  - 원격의 2,001건 자동 실행 결과는 진단 자료로 병합했다. 기존 자동 일치 70건을 정확한 시점 로직으로 재실행한 결과는 일치 35건/불일치 26건/판단불가 9건이다.
+  - 전망문장과 매핑 미확정을 반영한 최종 제출 큐는 수동확인 일치 후보 33건/재검토 1,643건/판단불가 325건이며, 표·항목·단위·의미까지 확정된 최종 일치는 0건이다.
 - **다음 할 일**:
-  1. `outputs/bteam_verification/bteam_kosis_mapping_recheck_1998.csv`의 P0 표본 오매핑 23건부터 통계표·분류·항목·단위·기간을 다시 확인한다.
-  2. `outputs/bteam_verification/bteam_kosis_review_manual_batch_001.csv`의 P0 수동검토 100건을 확인한다.
-  3. 표본을 다시 실행해 API 성공 여부뿐 아니라 의미 매핑 품질까지 통과하면 1,998건 전체 검증을 실행한다.
-  4. 이후 P2 58건 후보를 선택하고 P4 4,206건의 기관·통계표를 탐색한다.
-  5. A팀에 `time`(구조화된 시점), 개별기업/해외기업 claim 제외 등 추가 정제 요청을 검토한다.
+  1. `outputs/bteam_review/submission_match_candidates.csv`의 33건을 통계표·항목·단위·의미 기준으로 수동 확정한다.
+  2. 정확시점 재실행 불일치 22건과 `bteam_kosis_mapping_recheck_1998.csv`의 P0 오매핑을 우선 수정한다.
+  3. `outputs/bteam_verification/bteam_kosis_review_manual_batch_001.csv`의 P0 수동검토 100건을 확인한다.
+  4. 표본 의미 매핑 품질이 통과한 뒤에만 1,998건 전체를 새 로직으로 실행한다.
+  5. 이후 P2 58건 후보를 선택하고 P4 4,206건의 기관·통계표를 탐색한다.
 
 ## 실전1 제출 기준 정리
 

@@ -230,7 +230,7 @@ def get_actual_value(row, claim_type="LEVEL"):
     """
     실제 KOSIS 값을 가져온다. claim_type에 따라 어떤 컬럼을 볼지 우선순위가 다르다:
       - CHANGE_RATE(%) -> actual_change_pct (fetch_kosis_actual_values.py가 전기 대비
-        증감률을 미리 계산해둔 값) 우선, 없으면 actual_value(수준값) 자체를 최후 수단으로 사용
+        증감률을 미리 계산해둔 값) 사용. 없으면 판단불가
       - POINT_CHANGE(포인트/%p, 예: CSI) -> actual_change_point 우선
       - LEVEL/ABS_TO_ABS -> actual_value(수준값) 그대로 사용
 
@@ -252,15 +252,17 @@ def get_actual_value(row, claim_type="LEVEL"):
         if actual_number is not None:
             return actual_number, f"{column} 컬럼 사용(전기대비 계산값)"
 
+    api_error = (row.get("api_error") or "").strip()
+    if claim_type in ("CHANGE_RATE", "POINT_CHANGE"):
+        if api_error:
+            return None, f"KOSIS 사전 조회 실패: {api_error}"
+        return None, "증감/포인트 계산값이 없어 수준값과 대신 비교하지 않음"
+
     for column in ACTUAL_VALUE_COLUMNS:
         actual_number = parse_number(row.get(column))
         if actual_number is not None:
-            label = f"{column} 컬럼 사용"
-            if claim_type in ("CHANGE_RATE", "POINT_CHANGE"):
-                label += " (주의: 증감 계산값이 없어 수준값 자체와 비교 - 부정확할 수 있음)"
-            return actual_number, label
+            return actual_number, f"{column} 컬럼 사용"
 
-    api_error = (row.get("api_error") or "").strip()
     if api_error:
         return None, f"KOSIS 사전 조회 실패: {api_error}"
 

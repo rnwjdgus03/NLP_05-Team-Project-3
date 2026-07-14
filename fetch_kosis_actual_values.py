@@ -53,8 +53,10 @@ SEQUENTIAL_RE = re.compile(
 )
 QUARTER_RE = re.compile(r"([1-4])\s*분기")
 EXPLICIT_YEAR_MONTH_RE = re.compile(r"(20\d{2})\s*년\s*(1[0-2]|[1-9])\s*월")
+EXPLICIT_YEAR_RE = re.compile(r"(20\d{2})\s*년")
 MONTH_RE = re.compile(r"(?<!\d)(1[0-2]|[1-9])\s*월")
 HALF_RE = re.compile(r"(상|하)반기")
+FORECAST_RE = re.compile(r"전망|예측|목표|것으로\s*예상|예측한다|전망했다")
 
 
 def detect_comparison_mode(claim_text):
@@ -145,7 +147,8 @@ def infer_target_period(row, prd_se):
 
     explicit_year_month = EXPLICIT_YEAR_MONTH_RE.search(text)
     years = parse_years(row.get("year", ""))
-    contextual_years = years or infer_year_from_context(row)
+    explicit_years = [int(year) for year in EXPLICIT_YEAR_RE.findall(text)]
+    contextual_years = years or explicit_years or infer_year_from_context(row)
 
     if prd_se == "M":
         if explicit_year_month:
@@ -188,6 +191,33 @@ def infer_target_period(row, prd_se):
     if prd_se == "Y" and target_year:
         return f"{target_year:04d}"
     return None
+
+
+def target_period_is_future(row, target_period, prd_se):
+    """기사 게재일보다 뒤의 월/분기/반기/연도는 실적값으로 검증하지 않는다."""
+    try:
+        article_date = datetime.strptime((row.get("date") or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return False
+    if not target_period:
+        return False
+
+    match = re.match(r"(20\d{2})(?:(\d{2})|Q([1-4])|H([12]))?$", target_period)
+    if not match:
+        return False
+
+    year = int(match.group(1))
+    if prd_se == "Y":
+        return year > article_date.year
+    if match.group(2):
+        month = int(match.group(2))
+    elif match.group(3):
+        month = int(match.group(3)) * 3
+    elif match.group(4):
+        month = int(match.group(4)) * 6
+    else:
+        return year > article_date.year
+    return (year, month) > (article_date.year, article_date.month)
 
 
 def _to_float(value):
@@ -366,15 +396,22 @@ def main(
 
         out_row = dict(r)
         try:
-            data = get_stat_data(
-                org_id=org_id, tbl_id=tbl_id, obj_l1=obj_l1, itm_id=itm_id,
-                prd_se=prd_se, new_est_prd_cnt=period_count,
-            )
             years = parse_years(r.get("year", "")) or infer_year_from_context(r)
             claim_text = r.get("claim_text", "")
             comparison_mode = detect_comparison_mode(claim_text)
             target_quarter = detect_target_quarter(claim_text)
             target_period = infer_target_period(r, prd_se)
+            if FORECAST_RE.search(claim_text):
+                raise ValueError("비검증성 문장: 전망/예측/목표는 현재 실적값과 비교하지 않음")
+            if prd_se in {"M", "Q", "H"} and not target_period:
+                raise ValueError("목표 시점 미확정: 월/분기/반기 표현을 확인해야 함")
+            if target_period_is_future(r, target_period, prd_se):
+                raise ValueError("목표 시점이 기사일 이후임: 전망/예측 문장 가능성")
+
+            data = get_stat_data(
+                org_id=org_id, tbl_id=tbl_id, obj_l1=obj_l1, itm_id=itm_id,
+                prd_se=prd_se, new_est_prd_cnt=period_count,
+            )
             value, period, prev_value, prev_period = pick_best_match(
                 data, years, target_period=target_period, target_quarter=target_quarter,
                 comparison_mode=comparison_mode, prd_se=prd_se,
