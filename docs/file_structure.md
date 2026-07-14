@@ -8,6 +8,8 @@
 - `kosis_table_summary.csv`: KOSIS 통계표 전체 인덱스
 - `kosis_metadata_summary.csv`: 주요 통계표 메타정보 요약
 - `integrate_enriched_audit.py`: 원격 enriched 2,001건과 로컬 수동 감사를 통합하는 최종 감사 스크립트
+- `build_kosis_holdout2_evaluation.py`: 확정된 두 번째 독립 홀드아웃 골드를 검증하고 공식 지표·오류·백로그·보고서를 재생성하는 스크립트
+- `kosis_codebook_v3.py`: 동결 v2를 보존하면서 두 번째 홀드아웃 P0 3건을 우선 보정하는 코드북 v3 후보
 
 ## `data/`
 
@@ -56,10 +58,17 @@ B팀 KOSIS 매칭/검토 산출물.
 ## `outputs/bteam_holdout2/`
 
 - `holdout2_100_selection.csv`: 골드100·첫 홀드아웃100과 claim·기사 중복이 없는 새 100건
-- `holdout2_100_review.csv`: 동결 코드북 v2 자동 예측과 비어 있는 수동 `gold_*` 입력 컬럼
+- `holdout2_100_review.csv`: 동결 코드북 v2 자동 예측과 사람이 100/100건 확정한 `gold_*` 기준 파일
 - `holdout2_100_review_report.md`: 표본 구성, 자동 결정 분포, 수동 확정 절차
+- `holdout2_100_evaluation.csv`: 자동 예측과 골드의 행별 비교 및 오류 플래그
+- `holdout2_100_metrics.csv`: 전체 공식 지표
+- `holdout2_100_metrics_by_domain.csv`: 물가·고용·무역·인구·소매 분야별 지표
+- `holdout2_100_error_analysis.csv`: 엄격 평가 오류 68건과 원인
+- `holdout2_100_improvement_backlog.csv`: P0~P2 개선 우선순위
+- `holdout2_100_report.md`: 팀 공유·발표용 결과 해석
+- `B팀_KOSIS_독립홀드아웃2_평가.xlsx`: 요약·지표·100건 검토·오류·백로그·원본을 모은 보고용 엑셀
 
-새 표본은 아직 수동 골드가 완성되지 않아 독립 품질 점수를 계산하지 않는다.
+두 번째 독립 평가 결과는 자동결정 커버리지 35.0%, 결정구간 정확도 91.4%, 항목·시점 결합 엄격 정확도 11.4%(4/35)다. 독립 80% 품질 게이트에 실패했으므로 1,281건 자동 확정 확대는 보류한다.
 
 ## `outputs/archive/bteam_poc_20260714/`
 
