@@ -24,12 +24,15 @@ A팀이 준 최신 claim 데이터와 B팀 필터링 입력 파일.
 
 B팀 KOSIS 매칭/검토 산출물.
 
-- `bteam_kosis_review_all.csv`: 전체 6,404건 작업 파일
-- `bteam_kosis_review_filled.csv`: `tbl_id`가 자동 매칭된 2,001건
-- `bteam_kosis_review_manual_todo.csv`: 후보표 확정이 어려운 4,403건
-- `bteam_kosis_review_summary.csv`: 처리 현황 요약
-- `bteam_kosis_tbl_meta_candidates.csv`: 자동 매칭 표의 메타정보
-- `bteam_kosis_codebook_needed.csv`: 세부 코드 확인용 코드북
+- `bteam_kosis_review_filled.csv`: `tbl_id`가 자동 매칭된 2,001건 원본 입력
+- `final_verified_filled_2001_refined_v3.csv`: 시점/단위 후처리까지 반영한 2,001건 최종 검증 상세 파일
+- `final_verified_filled_2001_refined_v3_summary.csv`: 최종 검증 결과 요약
+- `submission_verified_matches.csv`: 바로 제출 가능한 일치 70건
+- `submission_recheck_needed.csv`: 표/항목/시점/단위 재검토 필요 1,621건
+- `submission_unverifiable.csv`: API/파라미터/증감 계산 문제로 판단불가 310건
+- `submission_recheck_cause_analysis.csv`: 재검토/판단불가 행별 원인 라벨
+- `submission_recheck_cause_summary.csv`: 재검토/판단불가 원인 요약
+- `submission_bteam_status_report.md`: A팀/팀 공유용 제출 상태 보고서
 
 ## `data/archive/`
 

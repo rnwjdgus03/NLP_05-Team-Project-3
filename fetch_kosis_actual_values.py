@@ -34,9 +34,9 @@ import time
 
 from kosis_api_test import get_stat_data
 
-SRC_PATH = "outputs/bteam_review/bteam_kosis_review_manual_todo.csv"
-OUT_PATH = "table_claim_mapping.csv"
-SLEEP_SEC = 0.3  # API 과호출 방지용 딜레이
+DEFAULT_SRC_PATH = "outputs/bteam_review/bteam_kosis_review_manual_todo.csv"
+DEFAULT_OUT_PATH = "table_claim_mapping.csv"
+DEFAULT_SLEEP_SEC = 0.3  # API 과호출 방지용 딜레이
 
 csv.field_size_limit(sys.maxsize)
 
@@ -50,6 +50,8 @@ SEQUENTIAL_RE = re.compile(
     r"직전\s*달|직전\s*분기|직전\s*월|전달비"
 )
 QUARTER_RE = re.compile(r"([1-4])\s*분기")
+MONTH_RE = re.compile(r"(\d{1,2})\s*월")
+MONTH_RANGE_RE = re.compile(r"(\d{1,2})\s*[~∼\-]\s*(\d{1,2})\s*월")
 
 
 def detect_comparison_mode(claim_text):
@@ -81,6 +83,12 @@ def infer_year_from_context(row):
         return [article_year - 1]
     if "올해" in text or "금년" in text:
         return [article_year]
+    if "지난달" in text or "전월" in text:
+        article_month = int(date_str[5:7]) if len(date_str) >= 7 and date_str[5:7].isdigit() else None
+        if article_month == 1:
+            return [article_year - 1]
+        if article_month:
+            return [article_year]
     return []
 
 
@@ -90,6 +98,32 @@ def detect_target_quarter(claim_text):
         return None
     m = QUARTER_RE.search(claim_text)
     return int(m.group(1)) if m else None
+
+
+def detect_target_month(row):
+    """
+    claim_text에서 월을 추정한다.
+    - "1~9월"처럼 범위가 있으면 끝 월(9월)을 대표 월로 사용
+    - "12월"처럼 단일 월이 있으면 그 월 사용
+    - "지난달"은 기사 날짜 기준 전월로 추정
+    """
+    text = row.get("claim_text", "") or ""
+    m = MONTH_RANGE_RE.search(text)
+    if m:
+        month = int(m.group(2))
+        return month if 1 <= month <= 12 else None
+
+    months = [int(x) for x in MONTH_RE.findall(text) if 1 <= int(x) <= 12]
+    if months:
+        return months[-1]
+
+    if "지난달" in text or "전월" in text:
+        date_str = (row.get("date") or "").strip()
+        m = re.match(r"(\d{4})-(\d{1,2})", date_str)
+        if m:
+            article_month = int(m.group(2))
+            return 12 if article_month == 1 else article_month - 1
+    return None
 
 
 def quarter_of(prd_de):
@@ -133,7 +167,19 @@ def _to_float(value):
         return None
 
 
-def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mode=None, prd_se="Y"):
+def month_of(prd_de):
+    """PRD_DE 문자열에서 월(1~12)을 추출. 예: 202501 -> 1."""
+    s = str(prd_de)
+    if len(s) >= 6 and s[:6].isdigit():
+        month = int(s[4:6])
+        return month if 1 <= month <= 12 else None
+    return None
+
+
+def pick_best_match(
+    data_rows, target_years, target_quarter=None, target_month=None,
+    comparison_mode=None, prd_se="Y"
+):
     """
     KOSIS API 응답(data_rows, 각 row에 PRD_DE=기간, DT=값)에서
     target_years(+가능하면 target_quarter)에 해당하는 시점을 우선 채택.
@@ -158,13 +204,22 @@ def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mod
 
     idx = None
     if target_years:
-        year_matches = [i for i, row in enumerate(sorted_rows) if year_of(row.get("PRD_DE", "")) in target_years]
-        if year_matches and target_quarter and prd_se == "Q":
+        # 한 문장에 2024년/2023년처럼 여러 연도가 같이 나오면 보통 최신 연도가
+        # 검증 대상이다. 예전 로직은 정렬상 가장 앞선 2023년 값을 먼저 집어서
+        # 실제값 시점이 틀어지는 문제가 있었다.
+        target_year = max(target_years)
+        year_matches = [i for i, row in enumerate(sorted_rows) if year_of(row.get("PRD_DE", "")) == target_year]
+        if year_matches and target_month and prd_se == "M":
+            month_matches = [i for i in year_matches if month_of(sorted_rows[i].get("PRD_DE", "")) == target_month]
+            if month_matches:
+                idx = month_matches[-1]
+        if idx is None and year_matches and target_quarter and prd_se == "Q":
             quarter_matches = [i for i in year_matches if quarter_of(sorted_rows[i].get("PRD_DE", "")) == target_quarter]
             if quarter_matches:
-                idx = quarter_matches[0]
+                idx = quarter_matches[-1]
         if idx is None and year_matches:
-            idx = year_matches[0]
+            # 월/분기/연간 모두 해당 연도의 가장 마지막 시점을 우선 사용
+            idx = year_matches[-1]
 
     if idx is None:
         idx = len(sorted_rows) - 1  # 매칭 실패 -> 가장 최근 시점
@@ -185,17 +240,24 @@ def pick_best_match(data_rows, target_years, target_quarter=None, comparison_mod
     )
 
 
-def load_cache():
+def load_cache(out_path):
     try:
-        with open(OUT_PATH, encoding="utf-8-sig") as f:
+        with open(out_path, encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
         return {r["claim_id"]: r for r in rows}
     except FileNotFoundError:
         return {}
 
 
-def main(limit=None):
-    with open(SRC_PATH, encoding="utf-8-sig") as f:
+def main(
+    src_path=DEFAULT_SRC_PATH,
+    out_path=DEFAULT_OUT_PATH,
+    limit=None,
+    sleep_sec=DEFAULT_SLEEP_SEC,
+    require_full_params=False,
+    period_count=30,
+):
+    with open(src_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         src_rows = list(reader)
         fieldnames = list(reader.fieldnames)
@@ -205,8 +267,8 @@ def main(limit=None):
     targets = [r for r in src_rows if r.get("org_id", "").strip() and r.get("tbl_id", "").strip()]
     print(f"org_id/tbl_id 확정된 행: {len(targets)}")
 
-    cache = load_cache()
-    print(f"기존 캐시(table_claim_mapping.csv)에 이미 처리된 행: {len(cache)}")
+    cache = load_cache(out_path)
+    print(f"기존 캐시({out_path})에 이미 처리된 행: {len(cache)}")
 
     out_fieldnames = fieldnames + [
         "actual_value", "actual_period",
@@ -240,22 +302,40 @@ def main(limit=None):
 
         org_id = r["org_id"].strip()
         tbl_id = r["tbl_id"].strip()
-        obj_l1 = r.get("obj_l1", "").strip() or "ALL"
-        itm_id = r.get("itm_id", "").strip() or "ALL"
+        raw_obj_l1 = r.get("obj_l1", "").strip()
+        raw_itm_id = r.get("itm_id", "").strip()
+        obj_l1 = raw_obj_l1 or "ALL"
+        itm_id = raw_itm_id or "ALL"
         prd_se = r.get("prd_se", "").strip() or "Y"
 
         out_row = dict(r)
+        if require_full_params and (not raw_obj_l1 or not raw_itm_id):
+            out_row["actual_value"] = ""
+            out_row["actual_period"] = ""
+            out_row["actual_prev_value"] = ""
+            out_row["actual_prev_period"] = ""
+            out_row["actual_change_point"] = ""
+            out_row["actual_change_pct"] = ""
+            out_row["api_error"] = "obj_l1/itm_id 미확정으로 API 조회 보류"
+            out_rows.append(out_row)
+            errors += 1
+            continue
+
         try:
             data = get_stat_data(
                 org_id=org_id, tbl_id=tbl_id, obj_l1=obj_l1, itm_id=itm_id,
-                prd_se=prd_se, new_est_prd_cnt=30,
+                prd_se=prd_se, new_est_prd_cnt=period_count,
             )
-            years = parse_years(r.get("year", "")) or infer_year_from_context(r)
+            # "작년/지난달" 같은 상대 시점이 있으면 기사 날짜 기준 추정 연도를 우선한다.
+            # A팀 year 컬럼에는 "2023년에 비해"처럼 비교 기준 연도만 들어가는 경우가 있어
+            # 그대로 쓰면 검증 대상 시점이 전년으로 밀린다.
+            years = infer_year_from_context(r) or parse_years(r.get("year", ""))
             claim_text = r.get("claim_text", "")
             comparison_mode = detect_comparison_mode(claim_text)
             target_quarter = detect_target_quarter(claim_text)
+            target_month = detect_target_month(r)
             value, period, prev_value, prev_period = pick_best_match(
-                data, years, target_quarter=target_quarter,
+                data, years, target_quarter=target_quarter, target_month=target_month,
                 comparison_mode=comparison_mode, prd_se=prd_se,
             )
 
@@ -290,28 +370,44 @@ def main(limit=None):
             errors += 1
 
         out_rows.append(out_row)
-        time.sleep(SLEEP_SEC)
+        time.sleep(sleep_sec)
 
         if processed % 20 == 0:
             print(f"  진행: {processed}/{len(targets)} (성공 {fetched}, 실패/미매칭 {errors}, 캐시재사용 {skipped_cached})")
             # 중간 저장 (끊겨도 이어서 할 수 있도록)
-            with open(OUT_PATH, "w", newline="", encoding="utf-8-sig") as f:
+            with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
                 w = csv.DictWriter(f, fieldnames=out_fieldnames)
                 w.writeheader()
                 w.writerows(out_rows)
 
-    with open(OUT_PATH, "w", newline="", encoding="utf-8-sig") as f:
+    with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=out_fieldnames)
         w.writeheader()
         w.writerows(out_rows)
 
-    print(f"\n완료 -> {OUT_PATH}")
+    print(f"\n완료 -> {out_path}")
     print(f"처리: {processed}건 | 성공: {fetched}건 | 실패/미매칭: {errors}건 | 캐시재사용: {skipped_cached}건")
     print("이제 'python verify_claim.py --input table_claim_mapping.csv --output verified_claims.csv' 실행 가능")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--input", default=DEFAULT_SRC_PATH, help="입력 CSV")
+    ap.add_argument("--output", default=DEFAULT_OUT_PATH, help="출력 CSV")
     ap.add_argument("--limit", type=int, default=None, help="테스트용으로 앞에서 N건만 처리")
+    ap.add_argument("--sleep", type=float, default=DEFAULT_SLEEP_SEC, help="API 호출 간격(초)")
+    ap.add_argument("--period-count", type=int, default=30, help="KOSIS에서 가져올 최근 시점 개수")
+    ap.add_argument(
+        "--require-full-params",
+        action="store_true",
+        help="obj_l1/itm_id가 비어 있으면 ALL 조회하지 않고 판단불가로 남김",
+    )
     args = ap.parse_args()
-    main(limit=args.limit)
+    main(
+        src_path=args.input,
+        out_path=args.output,
+        limit=args.limit,
+        sleep_sec=args.sleep,
+        require_full_params=args.require_full_params,
+        period_count=args.period_count,
+    )

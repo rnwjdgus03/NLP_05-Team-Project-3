@@ -364,3 +364,122 @@
 - 삭제 근거:
   - `__pycache__`는 Python 실행 시 자동 생성되는 캐시라 보관할 필요가 없음.
   - 데이터 파일은 삭제하지 않고 폴더로 이동해 추적 가능하게 유지함.
+
+## 22. 2,001건 filled 검증 산출물 정리
+
+- 상황: `bteam_kosis_review_filled.csv` 2,001건에 대해 KOSIS 실제값 조회와 `verify_claim.py` 판정을 수행한 뒤, 최종 제출 파일과 중간 산출물이 함께 섞여 있었음.
+- 최종 제출용으로 남긴 파일:
+  - `outputs/bteam_review/final_verified_filled_2001.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_summary.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_review_samples.csv`
+- 중간 산출물로 이동한 파일:
+  - `outputs/bteam_review/archive_intermediate/table_claim_mapping_filled_2001.csv`
+  - `outputs/bteam_review/archive_intermediate/verified_claims_filled_2001.csv`
+  - `outputs/bteam_review/archive_intermediate/table_claim_mapping_manual_todo_197.csv`
+  - `outputs/bteam_review/archive_intermediate/verified_claims_manual_todo_197.csv`
+- 삭제한 파일:
+  - `__pycache__/`
+- 정리 기준:
+  - 최종 제출/검토에는 `final_verified_filled_2001.csv`를 사용함.
+  - `table_claim_mapping_*`, `verified_claims_*`는 재현과 디버깅용 중간 파일이므로 archive로 보관함.
+
+## 23. 2,001건 제출용 검증 보정 및 원인분석
+
+- 상황:
+  - `bteam_kosis_review_filled.csv` 2,001건을 KOSIS API로 조회한 뒤 `verify_claim.py`를 돌렸으나, 불일치가 1,600건 이상으로 과도하게 많았음.
+  - 샘플 확인 결과, 뉴스가 틀렸다는 의미가 아니라 자동 검증 로직의 단위/시점/항목 매칭 한계가 많이 섞여 있었음.
+- 확인한 주요 오류:
+  - 무역 통계는 KOSIS 값이 `천달러` 단위인데, 기사 claim은 `억달러` 단위로 표현되어 직접 비교 시 전부 불일치처럼 보임.
+  - `작년`, `지난달` 같은 상대 시점이 있는데 A팀 `year` 컬럼에는 비교 기준 연도만 들어가 검증 대상 시점이 밀리는 경우가 있었음.
+  - 월별/분기별 증감률 claim은 최근 30개 시점만 가져오면 전년동월/전년동기 비교값이 부족할 수 있었음.
+  - 반도체/자동차/화장품 등 품목별 수출 claim이 전체 수출입 항목으로 비교되는 경우가 많았음.
+  - 전망/목표/예상 문장, 개별 가격 문장처럼 KOSIS 공식 통계와 직접 비교하기 어려운 claim이 섞여 있었음.
+- 처리:
+  - `fetch_kosis_actual_values.py` 수정:
+    - `--period-count` 옵션 추가.
+    - 월/분기/상대 시점(`작년`, `지난달`) 추정 로직 추가.
+    - 한 문장에 여러 연도가 있을 때 최신 검증 대상 연도를 우선하도록 보정.
+  - `refine_filled_verification.py` 추가:
+    - 무역 `천달러 -> 억달러/만달러` 단위 변환.
+    - 증감률 claim인데 `actual_change_pct`가 없으면 수준값과 억지 비교하지 않고 판단불가 처리.
+    - claim 문장에서 단위가 붙은 숫자를 우선 선택하도록 보정.
+  - `build_bteam_submission_package.py` 추가:
+    - 전체 2,001건을 `일치`, `재검토 필요`, `판단불가` 제출 큐로 분리.
+  - `analyze_refined_recheck_causes.py` 추가:
+    - 재검토/판단불가 행에 원인 라벨을 붙여 A팀/B팀 공유가 가능하게 함.
+- 최종 결과:
+  - 전체: 2,001건
+  - 바로 제출 가능한 일치: 70건
+  - 재검토 필요: 1,621건
+  - 판단불가: 310건
+- 재검토 원인 상위:
+  - 기타 수동확인 필요: 710건
+  - 시점 기준 재확인(증감률): 372건
+  - 무역 세부품목 코드 불일치 가능성: 251건
+  - API 조회 실패: 184건
+  - 전망/정책 문장: 163건
+  - 증감 계산값 없음: 123건
+  - 개별 가격 문장: 117건
+- 최종 산출물:
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3.csv`
+  - `outputs/bteam_review/submission_verified_matches.csv`
+  - `outputs/bteam_review/submission_recheck_needed.csv`
+  - `outputs/bteam_review/submission_unverifiable.csv`
+  - `outputs/bteam_review/submission_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_recheck_cause_summary.csv`
+  - `outputs/bteam_review/submission_bteam_status_report.md`
+- 판단:
+  - 2,001건 전체를 최종 정답으로 제출하는 것은 위험함.
+  - 현재 제출 가능한 것은 `submission_verified_matches.csv` 70건이며, 나머지는 재검토 큐와 원인분석 파일로 함께 제출하는 것이 안전함.
+
+## 24. 제출용 파일 최종 정리
+
+- 상황:
+  - v1, refined v1, refined v2, mismatch 원인분석 등 중간 실험 파일이 `outputs/bteam_review/`에 함께 있어 제출 파일이 잘 안 보였음.
+- 처리:
+  - 최종 제출 기준은 `refined_v3`와 `submission_*` 파일로 고정함.
+  - v3 이전 실험 파일은 삭제하지 않고 `outputs/bteam_review/archive_intermediate/`로 이동함.
+- 최종적으로 직접 보면 되는 파일:
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3_summary.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3_review_samples.csv`
+  - `outputs/bteam_review/submission_verified_matches.csv`
+  - `outputs/bteam_review/submission_recheck_needed.csv`
+  - `outputs/bteam_review/submission_unverifiable.csv`
+  - `outputs/bteam_review/submission_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_recheck_cause_summary.csv`
+  - `outputs/bteam_review/submission_bteam_status_report.md`
+- 정리 근거:
+  - `refined_v3`는 KOSIS 실제값 재조회, 상대 시점 보정, 무역 단위 보정, 재검토 원인 라벨링까지 반영한 최신 결과임.
+  - 이전 파일은 결과 비교와 재현을 위해 보관하되, 제출 기준으로 혼동되지 않게 archive에 둠.
+
+## 25. 제출용 외 산출물 삭제
+
+- 상황:
+  - 사용자가 "딱 필요한 것만 놔두고 다 지워달라"고 요청함.
+  - `outputs/bteam_review/` 안에 이전 작업 파일과 중간 실험 파일이 많아 최종 제출 파일 식별이 어려웠음.
+- 삭제한 항목:
+  - `__pycache__/`
+  - `outputs/bteam_review/archive_intermediate/`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3_review_samples.csv`
+  - `outputs/bteam_review/manual_selection_summary.csv`
+  - `outputs/bteam_review/oversized_candidates_filtered.csv`
+  - `outputs/bteam_review/bteam_kosis_codebook_needed.csv`
+  - `outputs/bteam_review/bteam_kosis_review_all.csv`
+  - `outputs/bteam_review/bteam_kosis_review_manual_todo.csv`
+  - `outputs/bteam_review/bteam_kosis_review_summary.csv`
+  - `outputs/bteam_review/bteam_kosis_tbl_meta_candidates.csv`
+- 남긴 항목:
+  - `outputs/bteam_review/bteam_kosis_review_filled.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3_summary.csv`
+  - `outputs/bteam_review/submission_verified_matches.csv`
+  - `outputs/bteam_review/submission_recheck_needed.csv`
+  - `outputs/bteam_review/submission_unverifiable.csv`
+  - `outputs/bteam_review/submission_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_recheck_cause_summary.csv`
+  - `outputs/bteam_review/submission_bteam_status_report.md`
+- 삭제 근거:
+  - 최종 제출/공유에는 `submission_*` 파일과 `final_verified_filled_2001_refined_v3.csv`만 필요함.
+  - `bteam_kosis_review_filled.csv`는 최종 결과를 재생성할 때 필요한 원본 입력이라 보존함.
+  - 나머지는 이전 실험 결과, 수동검토 보류 파일, 샘플/임시 파일이므로 현재 제출 기준에서는 제외함.
