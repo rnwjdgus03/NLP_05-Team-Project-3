@@ -7,6 +7,7 @@
 - `.env`: KOSIS API key 보관 파일, GitHub에 올리면 안 됨
 - `kosis_table_summary.csv`: KOSIS 통계표 전체 인덱스
 - `kosis_metadata_summary.csv`: 주요 통계표 메타정보 요약
+- `integrate_enriched_audit.py`: 원격 enriched 2,001건과 로컬 수동 감사를 통합하는 최종 감사 스크립트
 
 ## `data/`
 
@@ -24,36 +25,36 @@ A팀이 준 최신 claim 데이터와 B팀 필터링 입력 파일.
 
 B팀 KOSIS 매칭/검토 산출물.
 
-- `bteam_kosis_review_filled.csv`: `tbl_id`가 자동 매칭된 2,001건 원본 입력
-- `final_verified_filled_2001_refined_v3.csv`: 원격 자동 실행 2,001건 진단 자료
-- `final_verified_filled_2001_audited_v4.csv`: 70건 정확시점 재실행과 의미 감사를 반영한 2,001건 상세 파일
-- `match_candidates_audit_70.csv`: 기존 자동 일치 70건의 기간·전망·매핑·재실행 감사 결과
-- `submission_legacy_auto_matches_70.csv`: 원격에서 일치로 분류한 70건 보존본(최종 일치로 사용 금지)
-- `submission_match_candidates.csv`: 수치상 일치하지만 매핑 수동 확정이 남은 33건
-- `submission_recheck_needed.csv`: 표/항목/시점/단위 재검토 필요 1,643건
-- `submission_unverifiable.csv`: API/파라미터/증감 계산/전망 문제로 판단불가 325건
-- `submission_recheck_cause_analysis.csv`: 재검토/판단불가 행별 원인 라벨
-- `submission_recheck_cause_summary.csv`: 재검토/판단불가 원인 요약
-- `submission_bteam_status_report.md`: A팀/팀 공유용 제출 상태 보고서
+- `bteam_kosis_review_enriched.csv`: `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`이 보강된 2,001건 기준 입력
+- `final_verified_enriched.csv`: 원격 enriched 자동 실행 기준 파일. 통합 감사의 입력이며 최종 제출 판정이 아님
+- `final_verified_enriched_summary.csv`: 원격 enriched 자동 실행 요약
+- `submission_enriched_auto_match_candidates_117.csv`: 원격 자동 수치 일치 후보 117건. 수동 확정으로 간주하지 않음
+- `submission_enriched_recheck_needed.csv`: 원격 enriched 기준 재검토 1,393건
+- `submission_enriched_unverifiable.csv`: 원격 enriched 기준 판단불가 491건
+- `submission_enriched_recheck_cause_analysis.csv`: enriched 기준 재검토/판단불가 원인 라벨
+- `submission_enriched_recheck_cause_summary.csv`: enriched 기준 재검토/판단불가 원인 요약
+- `submission_enriched_bteam_status_report.md`: 통합 감사 전 원격 자동 실행 참고 보고서
 
-## `outputs/bteam_verification/`
+통합 감사 후 현재 기준 산출물.
 
-B팀 표본 검증과 후속 수동검토 산출물.
+- `final_verified_enriched_audited.csv`: 원격 enriched와 로컬 엄격 감사를 합친 2,001건 전체 기준 파일
+- `submission_integrated_verified_matches.csv`: 표·항목·단위·시점·값을 수동 확정한 21건
+- `submission_integrated_recheck_needed.csv`: 자동 일치 후보를 포함한 재검토 1,462건
+- `submission_integrated_unverifiable.csv`: KOSIS 직접검증 판단불가 518건
+- `submission_integrated_local_manual_recovered_4.csv`: 원격 후보에서 빠졌으나 근거를 재확인한 수동 확정 4건
+- `submission_integrated_summary.csv`: 통합 전후 건수 요약
+- `submission_integrated_bteam_status_report.md`: 현재 팀 공유·발표 기준 보고서
 
-- `bteam_kosis_review_ready.csv`: 주요 ID 4종이 채워진 1,998건
-- `bteam_kosis_review_unresolved.csv`: 메타데이터 확인 후 판단불가 처리한 3건
-- `bteam_kosis_review_sample.csv`: 수록주기/통계표를 섞은 24건 표본
-- `bteam_kosis_claim_mapping_sample.csv`: 표본 KOSIS 실제값 조회 결과
-- `bteam_kosis_verified_sample.csv`: 표본 자동 판정 결과
-- `bteam_kosis_actual_sample_exact.csv`: 정확 시점 로직으로 다시 조회한 24건 표본
-- `bteam_kosis_verified_sample_exact.csv`: 수준값 대체를 금지한 표본 재판정 결과
-- `bteam_kosis_match_candidates_actual_exact.csv`: 기존 자동 일치 70건 정확 시점 재조회 결과
-- `bteam_kosis_match_candidates_verified_exact.csv`: 70건 정확 시점 재판정 결과
-- `bteam_kosis_match_candidates_exact_summary.csv`: 70건 조회·판정·오류 집계
-- `bteam_kosis_mapping_recheck_1998.csv`: 1,998건 의미 매핑 재검토 큐
-- `bteam_kosis_review_manual_prioritized_4403.csv`: 4,403건 수동검토 우선순위 큐
-- `bteam_kosis_review_manual_batch_001.csv`: 수동검토 1차 100건
-- `B팀_KOSIS_검증_진행현황.xlsx`: 판정 근거, 표본 결과, 다음 작업 요약
+## `outputs/bteam_gold/`, `outputs/bteam_holdout/`
+
+- `outputs/bteam_gold/`: 개발용 골드 100건, 코드북, 1,643건 확대 적용 결과
+- `outputs/bteam_holdout/`: 개발 데이터와 겹치지 않는 독립 홀드아웃 100건과 최초 평가 결과
+
+독립 평가의 자동 결정 구간 정확도는 96.2%(25/26)지만, 보류를 포함한 항목·시점 엄격 정확도는 18.2%(6/33)다. 80% 품질 게이트를 통과하기 전에는 자동 후보를 최종 확정하지 않는다.
+
+## `outputs/archive/bteam_poc_20260714/`
+
+초기 197건 PoC, 과거 표본 검증, 4,403건 검토 큐, enriched 통합 전 제출 파일을 보존한다. 현재 제출 기준으로 사용하지 않는다.
 
 ## `data/archive/`
 

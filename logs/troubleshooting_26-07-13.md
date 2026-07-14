@@ -483,3 +483,117 @@
   - 최종 제출/공유에는 `submission_*` 파일과 `final_verified_filled_2001_refined_v3.csv`만 필요함.
   - `bteam_kosis_review_filled.csv`는 최종 결과를 재생성할 때 필요한 원본 입력이라 보존함.
   - 나머지는 이전 실험 결과, 수동검토 보류 파일, 샘플/임시 파일이므로 현재 제출 기준에서는 제외함.
+
+## 26. target 컬럼 보강 파일 추가
+
+- 상황:
+  - `/Users/gu/Downloads/bteam_kosis_review_enriched.csv` 파일을 전달받음.
+  - 기존 `bteam_kosis_review_filled.csv`에 부족했던 검증 대상 숫자/단위/시점/검증 가능 여부/claim 유형 컬럼이 반영된 파일임.
+- 추가 위치:
+  - `outputs/bteam_review/bteam_kosis_review_enriched.csv`
+- 확인 결과:
+  - 전체 행 수: 2,001건
+  - 전체 컬럼 수: 30개
+  - 추가 확인한 핵심 컬럼:
+    - `target_number`
+    - `target_unit`
+    - `time_basis`
+    - `verifiable`
+    - `claim_type`
+  - `target_number`, `target_unit`은 1,985건 채워져 있고 16건은 비어 있음.
+  - `time_basis`, `verifiable`, `claim_type`은 2,001건 모두 채워져 있음.
+- 판단:
+  - 앞으로 재검증을 돌릴 때는 `bteam_kosis_review_filled.csv`보다 `bteam_kosis_review_enriched.csv`를 우선 입력으로 사용하는 것이 좋음.
+  - 16건의 target 값 공백은 판단불가 또는 수동보완 대상으로 처리하면 됨.
+
+## 27. 기존 filled 입력 파일 삭제
+
+- 상황:
+  - `bteam_kosis_review_enriched.csv`가 기존 `bteam_kosis_review_filled.csv`와 같은 2,001건을 포함하면서, 추가로 `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`까지 보강함.
+- 처리:
+  - `outputs/bteam_review/bteam_kosis_review_filled.csv` 삭제.
+- 삭제 근거:
+  - enriched 파일이 filled 파일의 상위 버전이므로 두 파일을 동시에 두면 이후 검증 입력 파일을 헷갈릴 수 있음.
+  - 앞으로 기준 입력은 `outputs/bteam_review/bteam_kosis_review_enriched.csv`로 통일함.
+
+## 28. enriched 기준 재검증
+
+- 상황:
+  - `bteam_kosis_review_enriched.csv`에는 `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`이 보강되어 있음.
+  - 기존 검증 스크립트는 한국어 `claim_type`(`수준값`, `증감률`, `전망·예측`, `순위`, `개별상품가격`)을 그대로 내부 타입으로 해석하지 못했음.
+- 처리:
+  - `verify_claim.py` 수정:
+    - 한국어 `claim_type`을 내부 타입(`LEVEL`, `CHANGE_RATE`, `UNVERIFIABLE`)으로 변환.
+    - `verifiable=False` 또는 비검증 타입은 억지 비교하지 않고 판단불가 처리.
+  - `refine_filled_verification.py` 수정:
+    - `target_number`를 우선 사용.
+    - `target_unit` 기준으로 무역 통계 단위 변환(`천달러 -> 달러/억달러/만달러`) 처리.
+    - `전망·예측`, `순위`, `개별상품가격`은 `판단불가_검증대상아님`으로 분리.
+  - `build_bteam_submission_package.py`, `analyze_refined_recheck_causes.py` 수정:
+    - `--input`, `--prefix` 옵션을 추가해 enriched 결과를 별도 파일명으로 생성 가능하게 함.
+- 실제값 처리:
+  - `fetch_kosis_actual_values.py`로 `table_claim_mapping_enriched.csv`를 이어받아 조회했으나 중간 파일이 1,440건으로 저장되어 누락 발생.
+  - 해결: 기존 2,001건 실제값 조회 결과를 `bteam_kosis_review_enriched.csv`에 `claim_id` 기준으로 병합해 enriched 기준 검증 파일을 생성.
+- enriched 최종 결과:
+  - 전체: 2,001건
+  - `검증완료_일치`: 117건
+  - `재검토필요_증감률불일치`: 1,345건
+  - `재검토필요_수준값불일치`: 48건
+  - `판단불가_증감계산값없음`: 240건
+  - `판단불가_검증대상아님`: 217건
+  - `판단불가_API조회실패`: 31건
+  - `판단불가_파라미터미확정`: 3건
+- 해석:
+  - enriched 결과는 `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`을 반영한 현재 기준 결과임.
+  - 기존에는 수준값/날짜 숫자 혼동이 있었고, enriched에서는 대부분이 증감률 claim으로 명확히 분류되어 `증감률 기준 재검토`를 별도 라벨로 분리함.
+  - `검증대상아님` 217건이 분리된 것은 개선임. 전망/예측/순위/개별상품가격은 KOSIS 실제값과 직접 비교하면 안 됨.
+- 최종 enriched 산출물:
+  - `outputs/bteam_review/final_verified_enriched.csv`
+  - `outputs/bteam_review/final_verified_enriched_summary.csv`
+  - `outputs/bteam_review/submission_enriched_verified_matches.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_needed.csv`
+  - `outputs/bteam_review/submission_enriched_unverifiable.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_cause_summary.csv`
+  - `outputs/bteam_review/submission_enriched_bteam_status_report.md`
+- 정리:
+  - 중간에 생성된 `table_claim_mapping_enriched.csv`, `verified_claims_enriched.csv`는 1,440건짜리 불완전 파일이라 삭제함.
+  - 이후 AI 모델/제출 기준은 `outputs/bteam_review/final_verified_enriched.csv`로 통일함.
+
+## 29. AI 모델 입력 기준 파일 정리
+
+- 상황:
+  - 이후 AI 모델에는 300건 샘플이 아니라 2,001건 전체 파일을 넣기로 함.
+  - 따라서 `submission_enriched_probable_matches_300.csv`, timefix 실험 파일, old filled 기준 산출물, 중간 full 파일은 현재 기준에서 불필요함.
+- 삭제한 항목:
+  - `outputs/bteam_review/submission_enriched_probable_matches_300.csv`
+  - `outputs/bteam_review/submission_enriched_comparison_report.md`
+  - `outputs/bteam_review/final_verified_enriched_timefix.csv`
+  - `outputs/bteam_review/final_verified_enriched_timefix_review_samples.csv`
+  - `outputs/bteam_review/final_verified_enriched_timefix_summary.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3.csv`
+  - `outputs/bteam_review/final_verified_filled_2001_refined_v3_summary.csv`
+  - `outputs/bteam_review/submission_bteam_status_report.md`
+  - `outputs/bteam_review/submission_verified_matches.csv`
+  - `outputs/bteam_review/submission_recheck_needed.csv`
+  - `outputs/bteam_review/submission_unverifiable.csv`
+  - `outputs/bteam_review/submission_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_recheck_cause_summary.csv`
+  - `outputs/bteam_review/table_claim_mapping_enriched_full.csv`
+  - `outputs/bteam_review/table_claim_mapping_enriched_timefix.csv`
+  - `outputs/bteam_review/verified_claims_enriched_full.csv`
+  - `outputs/bteam_review/verified_claims_enriched_timefix.csv`
+  - 루트의 불완전 중간 파일 `table_claim_mapping_enriched.csv`
+- 남긴 기준 파일:
+  - `outputs/bteam_review/bteam_kosis_review_enriched.csv`
+  - `outputs/bteam_review/final_verified_enriched.csv`
+  - `outputs/bteam_review/final_verified_enriched_summary.csv`
+  - `outputs/bteam_review/submission_enriched_verified_matches.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_needed.csv`
+  - `outputs/bteam_review/submission_enriched_unverifiable.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_cause_analysis.csv`
+  - `outputs/bteam_review/submission_enriched_recheck_cause_summary.csv`
+  - `outputs/bteam_review/submission_enriched_bteam_status_report.md`
+- 판단:
+  - AI 모델 메인 입력은 `final_verified_enriched.csv`로 통일함.
+  - split 파일들은 학습/평가 보조용으로 유지함.

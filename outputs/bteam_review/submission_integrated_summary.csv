@@ -1,0 +1,10 @@
+﻿section,label,count,note
+source,원격 enriched 전체,2001,새 기준 입력
+remote_candidate_audit,원격 자동 일치 후보,117,확정 일치가 아님
+remote_candidate_audit,수동 확정,17,로컬 수동 근거와 중복
+remote_candidate_audit,재검토,83,수동 확정 근거 없음
+remote_candidate_audit,판단불가,17,해외·정보부족·API/매핑 문제
+manual_recovery,원격에서 빠진 로컬 수동 확정,4,근거 재확인 후 복원
+integrated_final,검증완료,21,수동 확정만 포함
+integrated_final,재검토,1462,자동 일치 후보 포함
+integrated_final,판단불가,518,원격 491 + 로컬 수동/후보 감사 반영

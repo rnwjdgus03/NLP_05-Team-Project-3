@@ -203,7 +203,7 @@ A팀이 전달하는 claim 데이터는 아래 컬럼이 있어야 한다.
 - 전망문장·매핑 미확정 반영 후: 수동확인 일치 후보 33건, 정확시점 불일치 22건, 정확시점 조회실패 7건, 전망문장 8건
 - 일치 후보 33건 수동 대조 결과: 확정 일치 15건, 재매핑 필요 8건, KOSIS 직접검증 불가 10건
 - 재매핑 8건 처리 결과: 확정 일치 전환 6건, KOSIS 직접검증 불가 2건
-- 2,001건 최신 제출 큐: 확정 일치 21건, 재검토 1,643건, 판단불가 337건
+- 원격 enriched 통합 전 로컬 제출 큐: 확정 일치 21건, 재검토 1,643건, 판단불가 337건
 - 상세 판정: `outputs/bteam_review/submission_recheck_8_report.md`
 
 100건 골드셋 평가와 코드북 확대(2026-07-14):
@@ -233,6 +233,16 @@ A팀이 전달하는 claim 데이터는 아래 컬럼이 있어야 한다.
 - 골드 API 성공률은 87.9%(29/33)다. 최신 출생 시점 4건은 현재 선택한 KOSIS 표에 값이 없어 API 갱신 지연으로 분리했다.
 - 오류는 검증 가능 보류 26건, 검증 불가 보류 48건, 검증 가능 대상을 검증 불가로 과배제한 1건(`C20191`)이다.
 - 상세 결과: `outputs/bteam_holdout/holdout100_report.md`, `outputs/bteam_holdout/holdout100_evaluation.csv`, `outputs/bteam_holdout/B팀_KOSIS_독립홀드아웃_평가.xlsx`
+
+원격 enriched + 로컬 엄격 감사 통합(2026-07-14):
+- 원격 `final_verified_enriched.csv`의 2,001개 `claim_id`를 새 기준 입력으로 채택했다.
+- 원격 `검증완료_일치` 117건은 자동 수치 일치 후보로 재명명하고 로컬 수동 감사와 대조했다.
+- 117건 재감사 결과는 수동 확정 17건, 재검토 83건, 판단불가 17건이다.
+- 원격 후보에서 빠진 로컬 수동 확정 4건(`C00381`, `C02892`, `C15304`, `C20235`)을 복원했다.
+- 통합 기준 전체 결과는 검증완료 21건, 재검토 1,462건, 판단불가 518건이다.
+- 자동 일치 후보와 코드북 일치 후보는 독립 80% 품질 게이트 통과 전까지 최종 확정하지 않는다.
+- 전체 기준: `outputs/bteam_review/final_verified_enriched_audited.csv`
+- 분할 결과와 보고: `outputs/bteam_review/submission_integrated_*.csv`, `outputs/bteam_review/submission_integrated_bteam_status_report.md`
 
 다음 품질 조건:
 1. `C20191` 과배제 규칙을 수정하고 명시적 통계 지표 매핑을 민간·정책 키워드 배제보다 먼저 적용한다.

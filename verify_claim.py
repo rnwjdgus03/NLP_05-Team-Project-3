@@ -64,6 +64,29 @@ ACTUAL_VALUE_COLUMNS = (
 CHANGE_PCT_COLUMNS = ("actual_change_pct",)
 CHANGE_POINT_COLUMNS = ("actual_change_point",)
 
+CLAIM_TYPE_MAP = {
+    "수준값": "LEVEL",
+    "증감률": "CHANGE_RATE",
+    "증감": "CHANGE_RATE",
+    "포인트": "POINT_CHANGE",
+    "전망·예측": "UNVERIFIABLE",
+    "전망/예측": "UNVERIFIABLE",
+    "전망": "UNVERIFIABLE",
+    "예측": "UNVERIFIABLE",
+    "순위": "UNVERIFIABLE",
+    "개별상품가격": "UNVERIFIABLE",
+}
+
+
+def normalize_claim_type(value, claim_text="", numbers=None):
+    """A팀/수동 라벨의 한국어 claim_type을 내부 판정 타입으로 변환."""
+    text = str(value or "").strip()
+    if text in CLAIM_TYPE_MAP:
+        return CLAIM_TYPE_MAP[text]
+    if text in ("LEVEL", "CHANGE_RATE", "POINT_CHANGE", "ABS_TO_ABS", "UNVERIFIABLE"):
+        return text
+    return classify_claim_type(claim_text, numbers or [])
+
 
 def classify_claim_type(claim_text, numbers):
     """
@@ -330,11 +353,13 @@ def verify_row(row):
     """CSV 한 줄을 판정 결과가 붙은 dict로 변환."""
     claim_text = row.get("claim_text", "")
     numbers = parse_numbers_cell(row)
-    claim_type = row.get("claim_type") or classify_claim_type(claim_text, numbers)
+    claim_type = normalize_claim_type(row.get("claim_type"), claim_text, numbers)
     claim_number = pick_claim_number(row, numbers, claim_type)
     actual_number, actual_source = get_actual_value(row, claim_type)
 
-    if claim_number is None:
+    if str(row.get("verifiable", "")).strip().lower() == "false" or claim_type == "UNVERIFIABLE":
+        verdict, diff, note = "판단불가", None, "KOSIS 직접 검증 대상 아님(verifiable=False 또는 비검증 claim_type)"
+    elif claim_number is None:
         verdict, diff, note = "판단불가", None, "claim에서 비교할 숫자를 고르지 못함"
     else:
         verdict, diff, note = judge(claim_number, actual_number, claim_type)

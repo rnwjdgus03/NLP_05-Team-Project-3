@@ -44,12 +44,43 @@ TRADE_TBLS = {
     "DT_1R11006_FRM101",  # 무역수지/수출입 관련
 }
 
+# 값 자체가 이미 비율/등락률인 표. 이런 표는 actual_change_pct를 다시 계산하면
+# "등락률의 등락률"이 되어 claim과 어긋난다.
+RATE_VALUE_TBLS = {
+    "DT_1J22042",  # 월별 소비자물가 등락률
+    "DT_1J22041",  # 연도별 소비자물가 등락률
+}
+
+DECREASE_RE = re.compile(r"감소|줄었|줄어|줄며|하락|내렸|떨어|급감|축소|마이너스|적자")
+
 TOLERANCE = {
     "CHANGE_RATE": 0.3,
     "POINT_CHANGE": 0.3,
     "LEVEL": 0.05,
     "ABS_TO_ABS": 0.02,
 }
+
+CLAIM_TYPE_MAP = {
+    "수준값": "LEVEL",
+    "증감률": "CHANGE_RATE",
+    "증감": "CHANGE_RATE",
+    "포인트": "POINT_CHANGE",
+    "전망·예측": "UNVERIFIABLE",
+    "전망/예측": "UNVERIFIABLE",
+    "전망": "UNVERIFIABLE",
+    "예측": "UNVERIFIABLE",
+    "순위": "UNVERIFIABLE",
+    "개별상품가격": "UNVERIFIABLE",
+}
+
+
+def normalize_claim_type(value, text):
+    raw = str(value or "").strip()
+    if raw in CLAIM_TYPE_MAP:
+        return CLAIM_TYPE_MAP[raw]
+    if raw in {"LEVEL", "CHANGE_RATE", "POINT_CHANGE", "ABS_TO_ABS", "UNVERIFIABLE"}:
+        return raw
+    return classify(text)
 
 
 def to_float(value):
@@ -101,8 +132,15 @@ def last_number_before_unit(text, unit_pattern):
     return to_float(matches[-1])
 
 
-def pick_claim_number(text, claim_type):
+def pick_claim_number(text, claim_type, row=None):
     """기사 문장에서 실제 검증 대상 숫자 하나를 고른다."""
+    row = row or {}
+    target = to_float(row.get("target_number"))
+    if target is not None:
+        if claim_type in {"CHANGE_RATE", "POINT_CHANGE"} and target > 0 and DECREASE_RE.search(text):
+            return -target, "target_number 컬럼 사용 + 감소/하락 문맥으로 음수 보정"
+        return target, "target_number 컬럼 사용"
+
     if claim_type in {"CHANGE_RATE", "POINT_CHANGE"}:
         point = last_number_before_unit(text, r"(?:%p|포인트|p\b)")
         if point is not None:
@@ -144,11 +182,32 @@ def actual_for_claim(row, claim_type):
     """claim 유형/단위에 맞춰 KOSIS 실제값을 선택하고 필요하면 단위 변환한다."""
     text = row.get("claim_text", "")
     tbl_id = row.get("tbl_id", "")
+    target_unit = str(row.get("target_unit", "")).strip()
+
+    if str(row.get("verifiable", "")).strip().lower() == "false" or claim_type == "UNVERIFIABLE":
+        return None, "KOSIS 직접 검증 대상 아님"
 
     if claim_type == "CHANGE_RATE":
+        # 등락률/비율 표는 actual_value 자체가 이미 claim과 비교할 값인 경우가 있다.
+        if tbl_id in RATE_VALUE_TBLS:
+            val = to_float(row.get("actual_value"))
+            if val is not None:
+                return val, "actual_value 사용(등락률 표)"
+
         val = to_float(row.get("actual_change_pct"))
         if val is None:
             return None, "증감률 claim인데 actual_change_pct 없음"
+        actual_value = to_float(row.get("actual_value"))
+        target = to_float(row.get("target_number"))
+
+        # KOSIS 표/항목에 따라 actual_value 자체가 이미 % 값인 경우가 있다.
+        # 둘 중 claim target에 더 가까운 값을 택하되, actual_value가 비율로 보기 어려운
+        # 큰 수이면 제외한다.
+        if target is not None and actual_value is not None and abs(actual_value) <= 100:
+            signed_target = -target if target > 0 and DECREASE_RE.search(text) else target
+            if abs(actual_value - signed_target) < abs(val - signed_target):
+                return actual_value, "actual_value 사용(비율값이 target에 더 가까움)"
+
         return val, "actual_change_pct 사용"
 
     if claim_type == "POINT_CHANGE":
@@ -161,13 +220,16 @@ def actual_for_claim(row, claim_type):
     if actual is None:
         return None, row.get("api_error") or "actual_value 없음"
 
-    # KOSIS 무역표는 보통 천달러 단위, 기사는 억달러로 쓰는 경우가 많음.
+    # KOSIS 무역표는 보통 천달러 단위, target_unit에 맞춰 변환한다.
+    if tbl_id in TRADE_TBLS and target_unit == "달러":
+        return actual * 1000, "무역 천달러 -> 달러 변환"
+
     # 천달러 -> 억달러: 100,000으로 나눔.
-    if tbl_id in TRADE_TBLS and re.search(r"억\s*달러", text):
+    if tbl_id in TRADE_TBLS and (target_unit == "억달러" or re.search(r"억\s*달러", text)):
         return actual / 100000, "무역 천달러 -> 억달러 변환"
 
     # 천달러 -> 만달러: 10으로 나눔.
-    if tbl_id in TRADE_TBLS and re.search(r"만\s*달러", text):
+    if tbl_id in TRADE_TBLS and (target_unit == "만달러" or re.search(r"만\s*달러", text)):
         return actual / 10, "무역 천달러 -> 만달러 변환"
 
     return actual, "actual_value 사용"
@@ -195,6 +257,8 @@ def final_status(verdict, row, claim_type, actual_reason):
     if verdict == "일치":
         return "수동확인필요_일치후보"
     if verdict == "판단불가":
+        if str(row.get("verifiable", "")).strip().lower() == "false" or claim_type == "UNVERIFIABLE":
+            return "판단불가_검증대상아님"
         if "미확정" in (row.get("reviewer_note", "") + row.get("api_error", "")):
             return "판단불가_파라미터미확정"
         if "actual_change" in actual_reason or "증감률" in actual_reason or "포인트" in actual_reason:
@@ -217,13 +281,13 @@ def main(input_path=DEFAULT_INPUT_PATH, output_path=DEFAULT_OUTPUT_PATH):
     out_rows = []
     for row in rows:
         text = row.get("claim_text", "")
-        claim_type = row.get("claim_type") or classify(text)
+        claim_type = normalize_claim_type(row.get("claim_type"), text)
         # 기존 판정이 LEVEL인데 문장상 변화 표현이 있으면 재분류한다.
         inferred_type = classify(text)
-        if inferred_type != "LEVEL" and claim_type == "LEVEL":
+        if inferred_type != "LEVEL" and claim_type == "LEVEL" and not row.get("target_number"):
             claim_type = inferred_type
 
-        claim_number, claim_reason = pick_claim_number(text, claim_type)
+        claim_number, claim_reason = pick_claim_number(text, claim_type, row)
         actual_number, actual_reason = actual_for_claim(row, claim_type)
         verdict, diff, note = judge(claim_number, actual_number, claim_type)
 

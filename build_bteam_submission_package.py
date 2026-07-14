@@ -1,37 +1,23 @@
-"""
-B팀 2,001건 검증 결과를 제출하기 쉬운 형태로 분리한다.
+"""Split the enriched automatic run into pre-audit review queues.
 
-입력:
-- outputs/bteam_review/final_verified_filled_2001_audited_v4.csv
-
-출력:
-- outputs/bteam_review/submission_match_candidates.csv
-- outputs/bteam_review/submission_recheck_needed.csv
-- outputs/bteam_review/submission_unverifiable.csv
-- outputs/bteam_review/submission_bteam_status_report.md
+The numeric matches produced here are candidates, not manually verified claims.
+Use integrate_enriched_audit.py to build the final submission queues.
 """
 
+import argparse
 import csv
 from collections import Counter
 from pathlib import Path
 
 BASE = Path("outputs/bteam_review")
-INPUT = BASE / "final_verified_filled_2001_audited_v4.csv"
-CANDIDATES = BASE / "submission_match_candidates.csv"
-RECHECK = BASE / "submission_recheck_needed.csv"
-UNVERIFIABLE = BASE / "submission_unverifiable.csv"
-REPORT = BASE / "submission_bteam_status_report.md"
+DEFAULT_INPUT = BASE / "final_verified_enriched.csv"
 
 
 def write_rows(path, rows, fieldnames):
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-
-
-def verdict_summary(counter):
-    return ", ".join(f"{key} {counter.get(key, 0)}건" for key in ("일치", "불일치", "판단불가"))
 
 
 def compact_row(row):
@@ -54,31 +40,34 @@ def compact_row(row):
         "claim_number": row.get("refined_claim_number", ""),
         "actual_number": row.get("refined_actual_number", ""),
         "verdict": row.get("refined_verdict", ""),
-        "final_status": row.get("audit_status") or row.get("refined_final_status", ""),
-        "audit_reason": row.get("audit_reason", ""),
-        "rerun_verdict": row.get("rerun_verdict", ""),
+        "final_status": row.get("refined_final_status", ""),
         "judge_note": row.get("refined_judge_note", ""),
         "reviewer_note": row.get("reviewer_note", ""),
     }
 
 
-def main():
-    with open(INPUT, encoding="utf-8-sig", newline="") as f:
+def main(input_path=DEFAULT_INPUT, output_prefix="submission"):
+    input_path = Path(input_path)
+    matches_path = BASE / f"{output_prefix}_auto_match_candidates.csv"
+    recheck_path = BASE / f"{output_prefix}_recheck_needed.csv"
+    unverifiable_path = BASE / f"{output_prefix}_unverifiable.csv"
+    report_path = BASE / f"{output_prefix}_bteam_status_report.md"
+
+    with open(input_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
     compact = [compact_row(row) for row in rows]
-    candidates = [row for row in compact if row["final_status"].startswith("수동확인필요")]
+    matches = [row for row in compact if row["final_status"] == "검증완료_일치"]
     unverifiable = [row for row in compact if row["final_status"].startswith("판단불가")]
     recheck = [row for row in compact if row["final_status"].startswith("재검토필요")]
 
     fields = list(compact[0].keys())
-    write_rows(CANDIDATES, candidates, fields)
-    write_rows(RECHECK, recheck, fields)
-    write_rows(UNVERIFIABLE, unverifiable, fields)
+    write_rows(matches_path, matches, fields)
+    write_rows(recheck_path, recheck, fields)
+    write_rows(unverifiable_path, unverifiable, fields)
 
     status_counts = Counter(row["final_status"] for row in compact)
     verdict_counts = Counter(row["verdict"] for row in compact)
-    rerun_counts = Counter(row["rerun_verdict"] for row in compact if row["rerun_verdict"])
     metric_counts = Counter(row["metric"] for row in compact)
 
     report = [
@@ -86,11 +75,10 @@ def main():
         "",
         "## 결론",
         "",
-        "- 원격의 2,001건 자동 실행 결과는 최종 사실판정이 아닌 단위/시점/증감률 오류 진단 자료로 사용했다.",
-        "- 24건 표본의 의미 매핑 품질 게이트가 실패해 1,998건 전체를 새 로직으로 재실행하지 않았다.",
-        "- 기존 자동 일치 70건을 다시 감사해 미래시점·전망문장·수동확인 후보로 재분류했다.",
-        f"- 70건 정확시점 재실행 자동 판정: {verdict_summary(rerun_counts)}.",
-        "- 현재 표·항목·단위·의미 매핑까지 확정된 최종 일치는 0건이다.",
+        "- 2,001건 전체에 대해 KOSIS API 실제값 조회 및 자동 검증을 수행했다.",
+        "- 자동 검증 결과를 그대로 최종 사실판정으로 쓰지 않고, 단위/시점/증감률 오류를 후처리해 제출 큐를 분리했다.",
+        f"- 자동 수치 일치 후보는 {len(matches)}건이며 수동 확정 결과가 아니다.",
+        "- 최종 제출 큐는 integrate_enriched_audit.py의 통합 감사 결과를 사용한다.",
         "- 나머지는 뉴스가 틀렸다는 뜻이 아니라, 표/항목/시점/단위 기준 재검토가 필요한 건으로 분리했다.",
         "",
         "## 결과 요약",
@@ -99,16 +87,8 @@ def main():
         "| --- | ---: | --- |",
     ]
     for key, count in status_counts.most_common():
-        if key == "수동확인필요_일치후보":
-            meaning = "수치 오차는 범위 이내지만 표/항목/단위/의미 매핑 수동 확정 필요"
-        elif key == "재검토필요_미래시점":
-            meaning = "기사일 이후 통계 시점을 사용한 기존 자동 일치"
-        elif key == "재검토필요_정확시점불일치":
-            meaning = "정확한 목표 시점으로 재조회한 KOSIS 값과 주장 수치가 다름"
-        elif key == "판단불가_전망문장":
-            meaning = "전망/예상/목표 문장으로 현재 실적값 검증 대상이 아님"
-        elif key == "판단불가_정확시점조회실패":
-            meaning = "정확한 목표 시점의 KOSIS 값을 조회하거나 증감을 계산하지 못함"
+        if key == "검증완료_일치":
+            meaning = "자동 계산상 수치 일치 후보. 표·항목·국가·시점 수동 감사 필요"
         elif key == "재검토필요_증감률불일치":
             meaning = "증감률 claim과 KOSIS 계산값이 다름. 항목/시점/전년대비 기준 재확인 필요"
         elif key == "재검토필요_수준값불일치":
@@ -127,10 +107,10 @@ def main():
         "",
         "## 산출 파일",
         "",
-        f"- `{CANDIDATES.as_posix()}`: 수치상 일치하지만 매핑 수동 확정이 남은 claim",
-        f"- `{RECHECK.as_posix()}`: 표/항목/시점/단위 재검토 필요 claim",
-        f"- `{UNVERIFIABLE.as_posix()}`: API/파라미터/증감 계산 문제로 판단불가 claim",
-        f"- `{INPUT.as_posix()}`: 전체 2,001건 상세 검증 결과",
+        f"- `{matches_path}`: 수동 감사 전 자동 수치 일치 후보",
+        f"- `{recheck_path}`: 표/항목/시점/단위 재검토 필요 claim",
+        f"- `{unverifiable_path}`: API/파라미터/증감 계산 문제로 판단불가 claim",
+        f"- `{input_path}`: 전체 2,001건 상세 검증 결과",
         "",
         "## A팀에 요청할 점",
         "",
@@ -146,19 +126,22 @@ def main():
         "",
         "## 참고 카운트",
         "",
-        f"- 기존 원격 자동 verdict(진단용): {dict(verdict_counts)}",
-        f"- 70건 정확시점 재실행 verdict: {verdict_summary(rerun_counts)}",
+        f"- verdict: {dict(verdict_counts)}",
         f"- metric 상위: {dict(metric_counts.most_common(10))}",
         "",
     ])
 
-    REPORT.write_text("\n".join(report), encoding="utf-8")
+    report_path.write_text("\n".join(report), encoding="utf-8")
 
-    print(f"완료 -> {REPORT}")
-    print(f"수동확인 일치 후보: {len(candidates)}")
+    print(f"완료 -> {report_path}")
+    print(f"자동 수치 일치 후보: {len(matches)}")
     print(f"재검토 필요: {len(recheck)}")
     print(f"판단불가: {len(unverifiable)}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", default=str(DEFAULT_INPUT), help="enriched 자동 실행 결과 CSV")
+    parser.add_argument("--prefix", default="submission_enriched_base", help="출력 파일 prefix")
+    args = parser.parse_args()
+    main(args.input, args.prefix)
