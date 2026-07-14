@@ -11,16 +11,13 @@ B팀 2,001건 검증 결과를 제출하기 쉬운 형태로 분리한다.
 - outputs/bteam_review/submission_bteam_status_report.md
 """
 
+import argparse
 import csv
 from collections import Counter
 from pathlib import Path
 
 BASE = Path("outputs/bteam_review")
-INPUT = BASE / "final_verified_filled_2001_refined_v3.csv"
-MATCHES = BASE / "submission_verified_matches.csv"
-RECHECK = BASE / "submission_recheck_needed.csv"
-UNVERIFIABLE = BASE / "submission_unverifiable.csv"
-REPORT = BASE / "submission_bteam_status_report.md"
+DEFAULT_INPUT = BASE / "final_verified_filled_2001_refined_v3.csv"
 
 
 def write_rows(path, rows, fieldnames):
@@ -56,8 +53,14 @@ def compact_row(row):
     }
 
 
-def main():
-    with open(INPUT, encoding="utf-8-sig", newline="") as f:
+def main(input_path=DEFAULT_INPUT, output_prefix="submission"):
+    input_path = Path(input_path)
+    matches_path = BASE / f"{output_prefix}_verified_matches.csv"
+    recheck_path = BASE / f"{output_prefix}_recheck_needed.csv"
+    unverifiable_path = BASE / f"{output_prefix}_unverifiable.csv"
+    report_path = BASE / f"{output_prefix}_bteam_status_report.md"
+
+    with open(input_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
     compact = [compact_row(row) for row in rows]
@@ -66,9 +69,9 @@ def main():
     recheck = [row for row in compact if row["final_status"].startswith("재검토필요")]
 
     fields = list(compact[0].keys())
-    write_rows(MATCHES, matches, fields)
-    write_rows(RECHECK, recheck, fields)
-    write_rows(UNVERIFIABLE, unverifiable, fields)
+    write_rows(matches_path, matches, fields)
+    write_rows(recheck_path, recheck, fields)
+    write_rows(unverifiable_path, unverifiable, fields)
 
     status_counts = Counter(row["final_status"] for row in compact)
     verdict_counts = Counter(row["verdict"] for row in compact)
@@ -110,10 +113,10 @@ def main():
         "",
         "## 산출 파일",
         "",
-        f"- `{MATCHES}`: 바로 제출 가능한 일치 claim",
-        f"- `{RECHECK}`: 표/항목/시점/단위 재검토 필요 claim",
-        f"- `{UNVERIFIABLE}`: API/파라미터/증감 계산 문제로 판단불가 claim",
-        f"- `{INPUT}`: 전체 2,001건 상세 검증 결과",
+        f"- `{matches_path}`: 바로 제출 가능한 일치 claim",
+        f"- `{recheck_path}`: 표/항목/시점/단위 재검토 필요 claim",
+        f"- `{unverifiable_path}`: API/파라미터/증감 계산 문제로 판단불가 claim",
+        f"- `{input_path}`: 전체 2,001건 상세 검증 결과",
         "",
         "## A팀에 요청할 점",
         "",
@@ -134,13 +137,17 @@ def main():
         "",
     ])
 
-    REPORT.write_text("\n".join(report), encoding="utf-8")
+    report_path.write_text("\n".join(report), encoding="utf-8")
 
-    print(f"완료 -> {REPORT}")
+    print(f"완료 -> {report_path}")
     print(f"일치 제출 가능: {len(matches)}")
     print(f"재검토 필요: {len(recheck)}")
     print(f"판단불가: {len(unverifiable)}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", default=str(DEFAULT_INPUT), help="refine_filled_verification.py 결과 CSV")
+    parser.add_argument("--prefix", default="submission", help="출력 파일 prefix")
+    args = parser.parse_args()
+    main(args.input, args.prefix)

@@ -65,6 +65,16 @@ def detect_comparison_mode(claim_text):
     return None
 
 
+def comparison_mode_from_row(row):
+    """time_basis 컬럼이 있으면 우선 사용하고, 없으면 claim_text에서 추정."""
+    basis = str(row.get("time_basis", "")).strip()
+    if basis in {"전년동월대비", "전년동기대비", "전년대비"}:
+        return "YOY"
+    if basis in {"전월대비", "전분기대비"}:
+        return "SEQUENTIAL"
+    return detect_comparison_mode(row.get("claim_text", "") or "")
+
+
 def infer_year_from_context(row):
     """
     'year' 컬럼이 비어있는 경우가 많다 - "작년 4분기", "올해 성장률"처럼 명시적 연도
@@ -89,6 +99,17 @@ def infer_year_from_context(row):
             return [article_year - 1]
         if article_month:
             return [article_year]
+    # 월간/전년동월대비 claim인데 year가 비어 있으면 기사 날짜를 기준으로 삼는다.
+    # 예: 2025-02 기사에서 "지난 1월 물가" -> 2025년 1월.
+    basis = str(row.get("time_basis", "")).strip()
+    target_month = detect_target_month(row)
+    if basis in {"월간", "전년동월대비", "전월대비"} and target_month:
+        article_month = int(date_str[5:7]) if len(date_str) >= 7 and date_str[5:7].isdigit() else None
+        if article_month and target_month > article_month:
+            return [article_year - 1]
+        return [article_year]
+    if basis == "연간":
+        return [article_year - 1 if ("지난해" in text or "작년" in text) else article_year]
     return []
 
 
@@ -118,6 +139,13 @@ def detect_target_month(row):
         return months[-1]
 
     if "지난달" in text or "전월" in text:
+        date_str = (row.get("date") or "").strip()
+        m = re.match(r"(\d{4})-(\d{1,2})", date_str)
+        if m:
+            article_month = int(m.group(2))
+            return 12 if article_month == 1 else article_month - 1
+    basis = str(row.get("time_basis", "")).strip()
+    if basis in {"월간", "전년동월대비", "전월대비"}:
         date_str = (row.get("date") or "").strip()
         m = re.match(r"(\d{4})-(\d{1,2})", date_str)
         if m:
@@ -331,7 +359,7 @@ def main(
             # 그대로 쓰면 검증 대상 시점이 전년으로 밀린다.
             years = infer_year_from_context(r) or parse_years(r.get("year", ""))
             claim_text = r.get("claim_text", "")
-            comparison_mode = detect_comparison_mode(claim_text)
+            comparison_mode = comparison_mode_from_row(r)
             target_quarter = detect_target_quarter(claim_text)
             target_month = detect_target_month(r)
             value, period, prev_value, prev_period = pick_best_match(

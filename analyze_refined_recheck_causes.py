@@ -6,15 +6,14 @@ refined_v3 결과의 재검토/판단불가 행에 원인 라벨을 붙인다.
 - outputs/bteam_review/submission_recheck_cause_summary.csv
 """
 
+import argparse
 import csv
 import re
 from collections import Counter
 from pathlib import Path
 
 BASE = Path("outputs/bteam_review")
-INPUT = BASE / "final_verified_filled_2001_refined_v3.csv"
-OUT = BASE / "submission_recheck_cause_analysis.csv"
-SUMMARY = BASE / "submission_recheck_cause_summary.csv"
+DEFAULT_INPUT = BASE / "final_verified_filled_2001_refined_v3.csv"
 
 ITEM_KEYWORDS = re.compile(
     r"반도체|자동차|선박|화장품|바이오|의약품|농수산|식품|석유|철강|고등어|닭고기|품목"
@@ -33,6 +32,8 @@ def label(row):
 
     if status == "검증완료_일치":
         return "검증완료", "허용오차 안에서 일치"
+    if status == "판단불가_검증대상아님":
+        return "검증대상아님", "verifiable=False 또는 전망/순위/개별상품가격 등 비검증 claim_type"
     if status == "판단불가_파라미터미확정":
         return "파라미터미확정", "obj_l1/itm_id 등 필수 코드가 비어 있음"
     if status == "판단불가_API조회실패":
@@ -55,8 +56,12 @@ def label(row):
     return "기타_수동확인필요", "표/항목/단위/시점 중 어느 축이 다른지 수동 확인 필요"
 
 
-def main():
-    with open(INPUT, encoding="utf-8-sig", newline="") as f:
+def main(input_path=DEFAULT_INPUT, output_prefix="submission"):
+    input_path = Path(input_path)
+    out_path = BASE / f"{output_prefix}_recheck_cause_analysis.csv"
+    summary_path = BASE / f"{output_prefix}_recheck_cause_summary.csv"
+
+    with open(input_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
     out_rows = []
@@ -80,21 +85,25 @@ def main():
         })
 
     fields = list(out_rows[0].keys())
-    with open(OUT, "w", encoding="utf-8-sig", newline="") as f:
+    with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         writer.writerows(out_rows)
 
     counter = Counter(row["cause_label"] for row in out_rows)
-    with open(SUMMARY, "w", encoding="utf-8-sig", newline="") as f:
+    with open(summary_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["cause_label", "count"])
         writer.writeheader()
         for key, count in counter.most_common():
             writer.writerow({"cause_label": key, "count": count})
 
-    print(f"완료 -> {OUT}")
+    print(f"완료 -> {out_path}")
     print(counter)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", default=str(DEFAULT_INPUT), help="refine_filled_verification.py 결과 CSV")
+    parser.add_argument("--prefix", default="submission", help="출력 파일 prefix")
+    args = parser.parse_args()
+    main(args.input, args.prefix)

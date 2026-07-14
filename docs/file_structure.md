@@ -24,15 +24,15 @@ A팀이 준 최신 claim 데이터와 B팀 필터링 입력 파일.
 
 B팀 KOSIS 매칭/검토 산출물.
 
-- `bteam_kosis_review_filled.csv`: `tbl_id`가 자동 매칭된 2,001건 원본 입력
-- `final_verified_filled_2001_refined_v3.csv`: 시점/단위 후처리까지 반영한 2,001건 최종 검증 상세 파일
-- `final_verified_filled_2001_refined_v3_summary.csv`: 최종 검증 결과 요약
-- `submission_verified_matches.csv`: 바로 제출 가능한 일치 70건
-- `submission_recheck_needed.csv`: 표/항목/시점/단위 재검토 필요 1,621건
-- `submission_unverifiable.csv`: API/파라미터/증감 계산 문제로 판단불가 310건
-- `submission_recheck_cause_analysis.csv`: 재검토/판단불가 행별 원인 라벨
-- `submission_recheck_cause_summary.csv`: 재검토/판단불가 원인 요약
-- `submission_bteam_status_report.md`: A팀/팀 공유용 제출 상태 보고서
+- `bteam_kosis_review_enriched.csv`: `target_number`, `target_unit`, `time_basis`, `verifiable`, `claim_type`이 보강된 2,001건 기준 입력
+- `final_verified_enriched.csv`: enriched 입력 기준 최종 검증 상세 파일
+- `final_verified_enriched_summary.csv`: enriched 입력 기준 최종 검증 요약
+- `submission_enriched_verified_matches.csv`: enriched 기준 바로 제출 가능한 엄격 일치 117건
+- `submission_enriched_recheck_needed.csv`: enriched 기준 재검토 필요 1,393건
+- `submission_enriched_unverifiable.csv`: enriched 기준 판단불가 491건
+- `submission_enriched_recheck_cause_analysis.csv`: enriched 기준 재검토/판단불가 원인 라벨
+- `submission_enriched_recheck_cause_summary.csv`: enriched 기준 재검토/판단불가 원인 요약
+- `submission_enriched_bteam_status_report.md`: enriched 기준 팀 공유용 제출 상태 보고서
 
 ## `data/archive/`
 
