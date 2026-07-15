@@ -1,0 +1,115 @@
+﻿group,key,count
+verdict,판단불가,106
+verdict,일치,12
+verdict,불일치,4
+verifiable_kosis,N,72
+verifiable_kosis,Y,50
+metric_domain,고용,24
+metric_domain,물가,23
+metric_domain,인구,15
+metric_domain,금융·금리,12
+metric_domain,무역,10
+metric_domain,소매·소비,8
+metric_domain,-,5
+metric_domain,기타,5
+metric_domain,부동산,5
+metric_domain,소득·임금,4
+metric_domain,생산·산업,3
+metric_domain,소비자·서비스,2
+metric_domain,가격,1
+metric_domain,연금,1
+metric_domain,성장률,1
+metric_domain,농업,1
+metric_domain,경제성장률,1
+metric_domain,정치적 안정도,1
+indicator,-,11
+indicator,출생아 수,5
+indicator,실업률,3
+indicator,법적 정년 이후 주된 일자리 퇴사자 수,3
+indicator,외식 물가 상승률,3
+indicator,고용률,2
+indicator,고령층 고용률,2
+indicator,취업자 수,2
+indicator,소비자물가지수,2
+indicator,물가상승률,2
+indicator,생활 물가와 소비자물가 차이,2
+indicator,소비자물가 상승률,2
+indicator,합계출산율,2
+indicator,합계 출산율,2
+indicator,관세율,2
+indicator,연근해 오징어 생산량,2
+indicator,기준금리,2
+indicator,소비자심리지수(CCSI),2
+indicator,도소매 취업자 수,2
+indicator,어가 인구,2
+indicator,제조업 취업자 수,2
+indicator,취업자수,2
+indicator,건설업 취업자 수,2
+indicator,외국인 주민 수,2
+indicator,올 1분기 매출,1
+indicator,롤렉스 가격 인상액 및 인상률,1
+indicator,ID.4 판매량,1
+indicator,전기차 판매량,1
+indicator,구조조정 대상 인력 비율,1
+indicator,청년층 신규 채용 감소,1
+indicator,20대 실업률,1
+indicator,고령 인구 부양 비용,1
+indicator,여윳돈,1
+indicator,"보험료율, 소득대체율",1
+indicator,단순 노무직 비중,1
+indicator,DSR 규제 비율,1
+indicator,생활물가지수,1
+indicator,"축산물 가격 상승률, 수산물 가격 상승률, 가공식품 가격 상승률, 외식 가격 상승률",1
+indicator,소비자 물가 상승률,1
+indicator,생산자 물가 상승률,1
+indicator,"축산물가격변화, 음식료품가격변화, 음식점및숙박가격변화",1
+indicator,집값 비율,1
+indicator,고위험 가구 비율 차이,1
+indicator,집값 격차,1
+indicator,토지거래허가구역 내 아파트 보유 비율,1
+indicator,집값 상승률,1
+indicator,"내수 성장률 기여도, 순수출 성장률 기여도",1
+indicator,무역적자,1
+indicator,"노트북과 태블릿 가격 상승률, 스마트폰 가격 상승률",1
+indicator,전국 송이 생산량 중 영덕과 청송 비중,1
+indicator,국산 승용차 판매량 감소율,1
+indicator,저율 관세 적용 물량,1
+indicator,대미 수출 감소율,1
+indicator,금리 동결 확률,1
+indicator,기준금리 차이,1
+indicator,미국 물가 상승,1
+indicator,국채 10년물의 가치 변동,1
+indicator,혼인 건수,1
+indicator,수익효과,1
+indicator,사과 가격,1
+indicator,수입 SUV 및 수입 세단 판매량 변화율,1
+indicator,연 20만대 증설 가능성,1
+indicator,미국 증시와 국내 증시 선호도,1
+indicator,생산연령인구,1
+indicator,한국 성장률,1
+indicator,미국 내 현대차 판매량,1
+indicator,고가 수입차 구매자 수,1
+indicator,코스피지수,1
+indicator,글로벌 전기차 판매량 중 중국 비율,1
+indicator,수출액,1
+indicator,코스피 하락,1
+indicator,주가 변동률,1
+indicator,외환보유액 순위,1
+indicator,축산물 소비자물가,1
+indicator,적자 비율,1
+indicator,생산자물가지수,1
+indicator,미국의 단기 인플레이션 상승폭,1
+indicator,대만의 대중국 수출,1
+indicator,매출 비율,1
+indicator,누적 판매량,1
+indicator,정치적 불안정성 순위,1
+indicator,판매량 비중,1
+indicator,소비자물가상승률,1
+tbl_id,,100
+tbl_id,DT_1DA7001S,7
+tbl_id,DT_1J22042,6
+tbl_id,DT_1DA7002S,2
+tbl_id,DT_1J22003,2
+tbl_id,DT_404Y014,2
+tbl_id,DT_1B8000G,2
+tbl_id,DT_1B8000F,1
