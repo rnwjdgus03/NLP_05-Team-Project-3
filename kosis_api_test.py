@@ -18,10 +18,14 @@ from dotenv import load_dotenv
 load_dotenv()  # 같은 폴더(또는 상위 폴더)의 .env 파일을 읽어서 환경변수로 등록
 
 API_KEY = os.environ.get("KOSIS_API_KEY")
-if not API_KEY:
-    raise RuntimeError(
-        "KOSIS_API_KEY가 없음. .env 파일에 KOSIS_API_KEY=발급받은키 형태로 추가하세요."
-    )
+
+
+def _require_api_key():
+    if not API_KEY:
+        raise RuntimeError(
+            "KOSIS_API_KEY가 없음. .env 파일에 KOSIS_API_KEY=발급받은키 형태로 추가하세요."
+        )
+    return API_KEY
 
 LIST_URL = "https://kosis.kr/openapi/statisticsList.do"
 DATA_URL = "https://kosis.kr/openapi/Param/statisticsParameterData.do"
@@ -54,7 +58,7 @@ def get_list(vw_cd="MT_ZTITLE", parent_id=""):
     """
     params = {
         "method": "getList",
-        "apiKey": API_KEY,
+        "apiKey": _require_api_key(),
         "vwCd": vw_cd,
         # 개발가이드 본문엔 parentId 라고 나오지만, 실제 서버가 받는 파라미터명은
         # parentListId 다. parentId로 보내면 무시되고 항상 최상위 목록만 돌아온다.
@@ -77,7 +81,7 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
     """
     params = {
         "method": "getList",
-        "apiKey": API_KEY,
+        "apiKey": _require_api_key(),
         "orgId": org_id,
         "tblId": tbl_id,
         "objL1": obj_l1,
@@ -103,7 +107,7 @@ def get_meta(org_id, tbl_id, meta_type="ITM"):
     params = {
         "method": "getMeta",
         "type": meta_type,
-        "apiKey": API_KEY,
+        "apiKey": _require_api_key(),
         "orgId": org_id,
         "tblId": tbl_id,
         "format": "json",
