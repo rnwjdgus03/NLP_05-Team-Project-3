@@ -335,6 +335,9 @@ def score_table(row, tokens, claim):
     focused_text = compact(
         f"{norm_claim.get('indicator', '')} {norm_claim.get('industry_or_item', '')}"
     )
+    claim_scope_text = compact(
+        f"{focused_text} {norm_claim.get('claim_text', '')}"
+    )
     is_trade_claim = any(
         token in indicator_text for token in ("수출", "수입", "무역수지")
     )
@@ -343,6 +346,13 @@ def score_table(row, tokens, claim):
     # mismatches that semantic similarity must never promote to rank 1.
     if is_trade_claim and "기업혁신조사" in table_text:
         return -10**9, []
+    if is_trade_claim:
+        table_is_partial = re.search(r"상위\d+", table_text)
+        claim_requests_partial = re.search(r"상위\d+", claim_scope_text)
+        if table_is_partial and not claim_requests_partial:
+            return -10**9, []
+        if "평균" in table_text and "평균" not in claim_scope_text:
+            return -10**9, []
     if is_trade_claim and "바이오헬스" in focused_text:
         domestic_or_import_only = (
             any(token in table_text for token in ("국내매출", "유지보수매출"))
@@ -355,6 +365,17 @@ def score_table(row, tokens, claim):
         for token in ("무역수지", "품목별수출액", "품목별수입액", "국제수지")
     ):
         return -10**9, []
+    generic_trade_balance = (
+        "무역수지" in indicator_text
+        and compact(norm_claim.get("industry_or_item")) in {"", "-"}
+    )
+    if generic_trade_balance:
+        narrow_scopes = ("지식재산권", "의약품", "우주산업", "항공제조", "기업체")
+        if any(
+            scope in table_text and scope not in claim_scope_text
+            for scope in narrow_scopes
+        ):
+            return -10**9, []
     if any(token in indicator_text for token in ("국제선여객", "LCC", "대형항공사")):
         if any(token in table_text for token in ("지역간통행량", "국가교통조사")):
             return -10**9, []
@@ -1028,7 +1049,19 @@ def main():
             table_score = candidate["score"]
             table_hits = candidate["hits"]
             table = candidate["table"]
-            runner_up_score = ranked[1]["score"] if rank == 1 and len(ranked) > 1 else None
+            runner_up_score = None
+            if rank == 1:
+                eligibility = candidate.get("lexical_eligible", True)
+                runner_up = next(
+                    (
+                        other
+                        for other in ranked[1:]
+                        if other.get("lexical_eligible", True) == eligibility
+                    ),
+                    None,
+                )
+                if runner_up is not None:
+                    runner_up_score = runner_up["score"]
             table_meta_rows = meta_by_table.get((table["org_id"], table["tbl_id"]), [])
             structured_meta = select_structured_meta(table_meta_rows, norm_claim, tokens)
             candidate_status, candidate_status_code, candidate_status_reason = candidate_decision(

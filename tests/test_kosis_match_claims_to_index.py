@@ -96,6 +96,61 @@ def test_trade_population_and_metric_mismatches_are_hard_rejected():
     assert score_table(domestic_sales, claim_tokens(biohealth), biohealth)[0] <= -10**8
 
 
+def test_aggregate_trade_claim_rejects_partial_and_average_tables():
+    cosmetics = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="화장품 수출액",
+            measurement_item="화장품",
+            value_type="수준값",
+            measurement_role="현재값",
+            claim_text="2024년 화장품 수출액은 102억 달러였다.",
+        )
+    )
+    top_ten = table(
+        "DT_COSMETICS_TOP10",
+        "화장품 수출액 상위 10개국 현황",
+        "화장품산업현황 > 화장품 수출입 현황",
+    )
+    assert score_table(top_ten, claim_tokens(cosmetics), cosmetics)[0] <= -10**8
+
+    agriculture = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="농수산식품 수출액",
+            measurement_item="농수산식품",
+            value_type="수준값",
+            measurement_role="현재값",
+            claim_text="농수산식품 수출액은 117억 달러였다.",
+        )
+    )
+    average = table(
+        "DT_AGRI_AVG",
+        "품목별 수출액(평균)",
+        "농촌융복합산업실태조사",
+    )
+    assert score_table(average, claim_tokens(agriculture), agriculture)[0] <= -10**8
+
+
+def test_generic_trade_balance_rejects_narrow_domain_balance():
+    claim = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="무역수지",
+            measurement_item="-",
+            value_type="수준값",
+            measurement_role="현재값",
+            claim_text="전체 무역수지는 697억 달러 흑자였다.",
+        )
+    )
+    intellectual_property = table(
+        "DT_IP_BALANCE",
+        "지식재산권 무역수지(유형별)",
+        "국제수지통계 > 지식재산권 무역수지",
+    )
+    generic = table("DT_TRADE", "품목별 수출액, 수입액", "SITC에의한무역통계")
+
+    assert score_table(intellectual_property, claim_tokens(claim), claim)[0] <= -10**8
+    assert score_table(generic, claim_tokens(claim), claim)[0] > 0
+
+
 def test_air_passenger_and_mechanic_population_mismatches_are_hard_rejected():
     passengers = normalized_claim_row(
         ready_claim(

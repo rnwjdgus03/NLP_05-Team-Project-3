@@ -59,6 +59,8 @@ def build_claim_query(claim):
                 "개별 기업 설문, 기업혁신조사, 전망지수 제외",
             ]
         )
+        if not any(token in compact_focused for token in ("상위", "평균")):
+            scope_hints.append("전체 합계 기준, 상위 N개와 평균값 표 제외")
     if any(token in compact_focused for token in ("국제선여객", "LCC", "대형항공사")):
         scope_hints.extend(
             [
