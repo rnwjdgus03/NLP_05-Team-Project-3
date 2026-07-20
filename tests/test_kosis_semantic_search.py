@@ -84,6 +84,8 @@ def test_query_and_table_documents_keep_mapping_semantics():
     )
     assert "지표: 반도체 수출액" in query
     assert "단위: 달러" in query
+    assert "대한민국 전체 품목별 수출입 공식통계" in query
+    assert "기업혁신조사" in query
     assert "통계표: 품목별 수출액" in document
     assert "분류경로: 무역통계" in document
 

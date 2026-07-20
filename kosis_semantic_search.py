@@ -46,6 +46,33 @@ def build_table_document(row):
 
 
 def build_claim_query(claim):
+    focused = " ".join(
+        str(claim.get(key, "") or "")
+        for key in ("indicator", "industry_or_item", "claim_text")
+    )
+    compact_focused = "".join(focused.split())
+    scope_hints = []
+    if any(token in compact_focused for token in ("수출", "수입", "무역수지")):
+        scope_hints.extend(
+            [
+                "대한민국 전체 품목별 수출입 공식통계",
+                "개별 기업 설문, 기업혁신조사, 전망지수 제외",
+            ]
+        )
+    if any(token in compact_focused for token in ("국제선여객", "LCC", "대형항공사")):
+        scope_hints.extend(
+            [
+                "항공사 또는 국제선 여객 운송 실적",
+                "지역 간 전체 교통 통행량 제외",
+            ]
+        )
+    if "정비사" in compact_focused:
+        scope_hints.extend(
+            [
+                "항공 정비사 재직 인원",
+                "부족 인원과 부족률 제외",
+            ]
+        )
     fields = [
         ("지표", claim.get("indicator", "")),
         ("대상", claim.get("industry_or_item", "")),
@@ -55,6 +82,7 @@ def build_claim_query(claim):
         ("대상유형", claim.get("entity_type", "")),
         ("기간", claim.get("period", "")),
         ("주기", claim.get("prd_se", "")),
+        ("검색범위", "; ".join(scope_hints)),
         ("문장", claim.get("claim_text", "")),
     ]
     return " | ".join(

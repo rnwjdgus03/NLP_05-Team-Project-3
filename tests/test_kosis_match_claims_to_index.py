@@ -73,6 +73,63 @@ def test_generic_trade_table_beats_wrong_product_and_archive():
     assert archived_score < 0
 
 
+def test_trade_population_and_metric_mismatches_are_hard_rejected():
+    semiconductor = normalized_claim_row(ready_claim())
+    innovation = table(
+        "DT_INNOVATION",
+        "매출액 및 수출액 수준",
+        "한국기업혁신조사 > 제조업 기업혁신조사",
+    )
+    assert score_table(innovation, claim_tokens(semiconductor), semiconductor)[0] <= -10**8
+
+    biohealth = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="바이오헬스 수출 증가율",
+            measurement_item="바이오헬스",
+        )
+    )
+    domestic_sales = table(
+        "DT_MEDICAL_SALES",
+        "국내 매출액 및 수입판매액 및 유지보수 매출액",
+        "의료기기산업통계",
+    )
+    assert score_table(domestic_sales, claim_tokens(biohealth), biohealth)[0] <= -10**8
+
+
+def test_air_passenger_and_mechanic_population_mismatches_are_hard_rejected():
+    passengers = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="국제선 여객수",
+            measurement_item="LCC",
+            unit="명",
+            value_type="수준값",
+            measurement_role="현재값",
+        )
+    )
+    regional_travel = table(
+        "DT_REGIONAL_TRAVEL",
+        "지역 간 통행량(승용차, 버스, 철도, 항공, 해운)",
+        "국가교통조사",
+    )
+    assert score_table(regional_travel, claim_tokens(passengers), passengers)[0] <= -10**8
+
+    mechanics = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="LCC 정비사 수",
+            measurement_item="항공 정비사",
+            unit="명",
+            value_type="수준값",
+            measurement_role="현재값",
+        )
+    )
+    shortage = table(
+        "DT_SHORTAGE",
+        "직무별 부족인원 및 부족률",
+        "항공산업실태조사",
+    )
+    assert score_table(shortage, claim_tokens(mechanics), mechanics)[0] <= -10**8
+
+
 def test_candidate_decision_keeps_ambiguity_and_formula_explicit():
     structured = {
         "selected_itm_id": "T1",
@@ -167,3 +224,36 @@ def test_hybrid_retrieval_uses_reranker_without_bypassing_rules():
     assert ranked[0]["retrieval_backend"] == "hybrid+reranker"
     assert ranked[0]["reranker_score"] == 0.98
     assert ranked[0]["semantic_score"] == 0.88
+
+
+class OverconfidentSemanticRuntime:
+    def search(self, query, top_k):
+        return [
+            SemanticHit("1", "DT_SALES", 0.99, 1),
+            SemanticHit("1", "DT_TRADE", 0.70, 2),
+        ][:top_k]
+
+    def rerank(self, query, table_rows):
+        scores = {"DT_SALES": 0.999, "DT_TRADE": 0.10}
+        return [scores[row["tbl_id"]] for row in table_rows]
+
+
+def test_semantic_only_candidate_cannot_override_rule_eligible_candidate():
+    claim = normalized_claim_row(ready_claim())
+    tables = [
+        table("DT_TRADE", "품목별 수출액, 수입액", "SITC에의한무역통계"),
+        table("DT_SALES", "산업별 매출액", "기업경영통계"),
+    ]
+    ranked = rank_table_candidates(
+        tables,
+        claim,
+        min_score=2,
+        top_tables=2,
+        semantic_runtime=OverconfidentSemanticRuntime(),
+        semantic_top_k=2,
+        rerank_top_k=2,
+    )
+
+    assert ranked[0]["table"]["tbl_id"] == "DT_TRADE"
+    assert ranked[0]["lexical_eligible"] is True
+    assert ranked[1]["lexical_eligible"] is False

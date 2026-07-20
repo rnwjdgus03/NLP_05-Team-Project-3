@@ -332,6 +332,37 @@ def score_table(row, tokens, claim):
 
     semantic = norm_claim.get("semantic_type", "")
     indicator_text = compact(norm_claim.get("indicator"))
+    focused_text = compact(
+        f"{norm_claim.get('indicator', '')} {norm_claim.get('industry_or_item', '')}"
+    )
+    is_trade_claim = any(
+        token in indicator_text for token in ("수출", "수입", "무역수지")
+    )
+
+    # Dense retrieval is intentionally broad. These are population/metric
+    # mismatches that semantic similarity must never promote to rank 1.
+    if is_trade_claim and "기업혁신조사" in table_text:
+        return -10**9, []
+    if is_trade_claim and "바이오헬스" in focused_text:
+        domestic_or_import_only = (
+            any(token in table_text for token in ("국내매출", "유지보수매출"))
+            or ("수입" in table_text and "수출" not in table_text)
+        )
+        if domestic_or_import_only:
+            return -10**9, []
+    if "무역수지" in indicator_text and not any(
+        token in table_text
+        for token in ("무역수지", "품목별수출액", "품목별수입액", "국제수지")
+    ):
+        return -10**9, []
+    if any(token in indicator_text for token in ("국제선여객", "LCC", "대형항공사")):
+        if any(token in table_text for token in ("지역간통행량", "국가교통조사")):
+            return -10**9, []
+    if "정비사" in indicator_text and any(
+        token in table_text for token in ("부족인원", "부족률")
+    ):
+        return -10**9, []
+
     period_match = re.search(r"(?:19|20)\d{2}", str(norm_claim.get("period") or ""))
     archived_match = re.search(r"_((?:19|20)\d{2})$", row.get("tbl_id", ""))
     if period_match and archived_match:
@@ -753,6 +784,7 @@ def rank_table_candidates(
                 "table": table,
                 "retrieval_backend": "lexical",
                 "lexical_score": score,
+                "lexical_eligible": True,
                 "semantic_score": None,
                 "reranker_score": None,
                 "fusion_score": None,
@@ -798,6 +830,7 @@ def rank_table_candidates(
                 "table": table,
                 "hits": hits,
                 "lexical_score": lexical_score,
+                "lexical_eligible": lexical_score >= min_score,
                 "semantic_score": semantic_evidence["score"] if semantic_evidence else None,
                 "fusion_score": fusion,
                 "reranker_score": None,
@@ -805,6 +838,7 @@ def rank_table_candidates(
         )
     fused.sort(
         key=lambda item: (
+            -int(item["lexical_eligible"]),
             -item["fusion_score"],
             -item["lexical_score"],
             item["table"]["tbl_name"],
@@ -825,12 +859,13 @@ def rank_table_candidates(
             final = item["fusion_score"]
             backend = "hybrid"
         else:
-            final = 0.8 * item["reranker_score"] + 0.2 * item["fusion_score"]
+            final = 0.35 * item["reranker_score"] + 0.65 * item["fusion_score"]
             backend = "hybrid+reranker"
         item["score"] = int(round(final * 1000))
         item["retrieval_backend"] = backend
     fused.sort(
         key=lambda item: (
+            -int(item["lexical_eligible"]),
             -item["score"],
             -item["fusion_score"],
             -item["lexical_score"],
@@ -859,20 +894,30 @@ def load_precomputed_rankings(path, table_rows):
         table = table_lookup.get((row.get("org_id", ""), row.get("tbl_id", "")))
         if not measurement_key or table is None:
             continue
+        lexical_score = _float_or_none(row.get("lexical_score"))
+        raw_eligible = str(row.get("lexical_eligible", "")).upper()
+        lexical_eligible = (
+            raw_eligible not in {"N", "FALSE", "0"}
+            if raw_eligible
+            else lexical_score is not None and lexical_score >= 2
+        )
         grouped[measurement_key].append(
             {
                 "score": int(float(row.get("candidate_score") or 0)),
                 "hits": [hit for hit in row.get("candidate_hits", "").split(",") if hit],
                 "table": table,
                 "retrieval_backend": row.get("retrieval_backend") or "lexical",
-                "lexical_score": _float_or_none(row.get("lexical_score")),
+                "lexical_score": lexical_score,
+                "lexical_eligible": lexical_eligible,
                 "semantic_score": _float_or_none(row.get("semantic_score")),
                 "reranker_score": _float_or_none(row.get("reranker_score")),
                 "fusion_score": _float_or_none(row.get("fusion_score")),
             }
         )
     for candidates in grouped.values():
-        candidates.sort(key=lambda item: -item["score"])
+        candidates.sort(
+            key=lambda item: (-int(item["lexical_eligible"]), -item["score"])
+        )
     return grouped
 
 
@@ -1031,6 +1076,7 @@ def main():
                 "candidate_hits": ",".join(list(dict.fromkeys(table_hits))[:20]),
                 "retrieval_backend": candidate.get("retrieval_backend", retrieval_mode),
                 "lexical_score": candidate.get("lexical_score") if candidate.get("lexical_score") is not None else "",
+                "lexical_eligible": "Y" if candidate.get("lexical_eligible", True) else "N",
                 "semantic_score": candidate.get("semantic_score") if candidate.get("semantic_score") is not None else "",
                 "reranker_score": candidate.get("reranker_score") if candidate.get("reranker_score") is not None else "",
                 "fusion_score": candidate.get("fusion_score") if candidate.get("fusion_score") is not None else "",
@@ -1050,7 +1096,7 @@ def main():
         "value_type", "measurement_role", "measurement_usage", "period", "prd_se", "change_base", "comparison_period",
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
-        "retrieval_backend", "lexical_score", "semantic_score", "reranker_score", "fusion_score",
+        "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
         "org_id", "tbl_id", "tbl_name", "stat_id", "category_path",
         "meta_candidates",
         "selected_itm_id", "selected_itm_name", "selected_itm_unit", "selected_itm_score",
