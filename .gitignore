@@ -18,3 +18,10 @@ venv/
 # 대용량 원본 데이터 (노션에만 보관, 깃허브 용량 제한 때문에 제외)
 chosun_full.csv
 kosis_table_summary_*.csv
+
+# 로컬 파이프라인 입력/실행 결과
+data/inputs/*.csv
+data/indexes/
+outputs/runs/*.csv
+outputs/runs/*.json
+outputs/runs/**

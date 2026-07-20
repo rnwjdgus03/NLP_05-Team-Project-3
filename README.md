@@ -1,363 +1,422 @@
 # NLP_05-Team-Project-3
 
-AI 기반 뉴스 사실검증 시스템 (멋쟁이사자처럼 AI/NLP 5기 클라비 기업 프로젝트)
+AI 기반 뉴스 수치 주장 추출 및 KOSIS 사실검증 PoC입니다.
 
-뉴스 기사 내 수치 기반 주장을 탐지하고, KOSIS(국가데이터처) 공식 통계와 비교하여 사실 여부를 검증하는 AI 시스템 PoC.
+발표 이후 실전2에서는 전달받은 정제 문장 파일을 시작점으로 사용하지 않고, **뉴스 기사 원문 CSV부터 동일한 결과를 다시 생성하는 코드 기반 파이프라인**으로 전환했습니다.
 
 ## 팀 구성
 
-- **A팀 (2명)** — 조선일보 데이터셋(노션 페이지로 제공) 기반 뉴스 주장 추출
-- **B팀 (2명, 김진성/구정현)** — KOSIS API 연동 + 통계표 구조 분석 + claim-통계표 매칭/검증
+- A팀: 조선일보 뉴스 데이터 기반 주장 추출
+- B팀(김진성, 구정현): KOSIS 통계표 탐색, 메타 분석, claim 매핑 및 검증
 
-두 팀의 접점은 `claim_id` 기준으로 연결되는 주장↔통계표 매핑 스키마입니다.
+두 영역은 `claim_id`와 측정값별 `claim_measurement_id`로 연결됩니다.
 
-## 폴더 구조
+## 현행 파이프라인
 
-파일이 많아져서 폴더로 정리했습니다. 상세 설명은 [`docs/file_structure.md`](./docs/file_structure.md) 참고.
+```text
+뉴스 기사 원문 데이터
+↓
+기사 본문 정제 및 문장 분리
+↓
+각 문장에 article_id / claim_id 부여
+↓
+정제 문장 CSV 생성
+↓
+HCX-007 is_claim 판정
+↓
+is_claim=True 문장만 measurement-first 구조화
+↓
+측정값별 claim_measurement_id 행 분리
+↓
+KOSIS 후보 선별
+↓
+코드북 / 메타 / API로 tbl_id, obj, itm, period, unit 확정
+↓
+actual_value 비교 및 verdict 생성
+```
 
-- 루트: 실행 스크립트(`*.py`), `kosis_table_summary.csv`(통계표 인덱스), `kosis_metadata_summary.csv`(메타 요약)
-- `data/claims/`: A팀이 준 최신 claim 데이터 (v2)
-- `data/archive/`: 더 이상 직접 작업하지 않는 예전 입력/산출물 (v1 배치 포함)
-- `outputs/bteam_review/`: B팀 KOSIS 매칭/검토 산출물 (현재 작업 중인 파일들)
-- `outputs/bteam_verification/`: 수동 판정, 표본 검증, 매핑 재검토 큐 산출물
-- `outputs/bteam_gold/`: 100건 골드셋, 정확도 지표, 반복 지표 코드북, 1,643건 확대 배치, 337건 사유 분류
-- `outputs/bteam_holdout/`: 개발용 골드와 중복 없는 독립 홀드아웃 100건, 동결 코드북 평가, 오류 분석, Excel 대시보드
-- `docs/`: 파이프라인 설명, KOSIS API 파라미터 가이드, 템플릿
-- `logs/`: 작업 기록, 트러블슈팅 로그
+| 단계 | 스크립트 | 입력 → 출력 |
+|---|---|---|
+| 1. 기사 정제 | `preprocess_news.py` | 기사 원문 CSV → 정제 문장 CSV |
+| 2. KOSIS 후보 1차 판정 | `is_claim_filter_hcx.py` | 정제 문장 → is_claim True/False |
+| 3. 측정값 추출 | `extract_hcx.py` | is_claim=True → 측정값별 구조화 CSV |
+| 4. 회귀 감사 | `measurement_regression.py` | 구 누락 표본 + 현행 결과 → PASS/REVIEW/FAIL |
+| 5. KOSIS 매핑·검증 | `run_kosis_measurement_pipeline.py` | 구조화 CSV → 후보·메타·실제값·verdict CSV |
 
-B팀 전체 파이프라인(입력 → 필터링 → 매칭 → 메타 확인 → 검증)에 대한 자세한 설명은 [`docs/docs_bteam_pipeline.md`](./docs/docs_bteam_pipeline.md)에 정리되어 있습니다.
+## 빠른 시작
 
-## HCX 파이프라인 (실전2 · 현행 4단계)
+### 설치
 
-발표 이후, 뉴스 정제부터 검증까지 전 구간을 **재현 가능한 코드로 재구성**한 현행 파이프라인입니다. 초기의 Claude 대화 기반 수작업은 재현성 문제로 전부 코드로 대체했습니다. 실행 순서대로:
-
-| 단계 | 스크립트 | 역할 | 입력 → 출력 |
-|---|---|---|---|
-| ① 정제 | (은결님 정제 산출물 `뉴스_데이터_정제문장.csv`) | 노이즈 제거 + 문장 분리 + claim_id 부여 (규칙 기반 Python) | 기사 → 정제 문장 |
-| ② is_claim | `is_claim_filter_hcx.py` | HCX-007 + Structured Outputs로 KOSIS 검증 가능 문장 판별 (프롬프트 v1.2) | 정제 문장 → is_claim True/False |
-| ③ 추출 | `extract_hcx.py` | v3 스키마 43컬럼 구조화 추출 (게이트·지표·분류축·시점·수치), measurement 행 분리 (프롬프트 v1.2) | is_claim=True → claim 스키마 CSV |
-| ④ 매핑·검증 | `map_verify_kosis.py` | 코드북(CSV)으로 tbl_id·obj·itm 매핑 → KOSIS 실값 조회 → 일치/불일치/판단불가 판정 | 추출 CSV → verdict CSV |
-
-- 매핑 규칙은 코드가 아니라 **`data/claims/kosis_mapping_codebook_v1.csv`** 에 외부화되어 있어, 규칙 추가는 CSV에 행만 추가하면 됩니다(코드 수정 불필요).
-- `llm_auto_mapping_prototype.py` = 코드북 밖 지표를 위한 LLM 후보 선택 프로토타입. `verify_claim_schema_v3_pilot.py` = ④의 구(舊) 하드코딩 버전(코드북 외부화로 대체됨).
-- 각 스크립트는 `.env`의 `CLOVA_API_KEY`(HCX) 또는 `KOSIS_API_KEY`(KOSIS)를 사용하며, 중단 후 재실행 시 이어받기를 지원합니다.
-- 독립 홀드아웃 재현·개발용 코드북은 루트 모듈로 관리합니다.
-  - `expand_kosis_codebook.py`: v1 코드북/확대 검증 기반 함수
-  - `kosis_codebook_v2.py`: 첫 홀드아웃 오류를 반영한 동결 코드북
-  - `kosis_codebook_v3.py`: 두 번째 홀드아웃 P0 오류를 반영한 현행 개발 코드북 후보
-  - `build_kosis_holdout2_evaluation.py`: 두 번째 독립 홀드아웃 공식 지표·오류·백로그 재생성
-- 회귀 테스트는 루트에서 `pytest`로 실행합니다.
-
-### 파일 정리 규칙 (실전2 이후)
-
-루트에 실행 스크립트·표본·결과·데이터가 뒤섞여 있어, 아래 규칙으로 정리합니다.
-
-- **실행 스크립트(`*.py`)는 루트 유지**, 데이터·결과는 폴더로 분리.
-- **입력 표본** `hcx_input_*.csv` → `data/inputs/` 로 이동 예정.
-- **실행 결과** `hcx_extracted_*.csv`, `is_claim_2*.csv`, `my_mapped_*.csv` 등 → `outputs/runs/` 로 이동 예정.
-- **원본 데이터** `뉴스_데이터_정제문장.csv` → `data/raw/`.
-- **결과 파일 명명 규칙**: `{단계}_{표본}_{프롬프트버전}.csv` (예: `extract_hcx_input200_v12.csv`). 버전·표본이 파일명에 드러나야 신·구 실행이 섞이지 않습니다.
-- 중단·롤백된 실행 결과(`is_claim_200.csv`, `hcx_extracted_200_v13.csv` 등)는 `outputs/archive/` 로 보존.
-
-> 파일 이동은 팀원 명령어 습관·코드 내 경로에 영향을 주므로, 별도 정리 커밋으로 합의 후 일괄 반영합니다. 본 README는 그 규칙과 현행 파이프라인 카탈로그를 먼저 기록합니다.
-
-### legacy/ — 실전1 산출 스크립트 (2026-07 정리)
-
-루트를 정리하며, 실전1에서 사용하고 현재는 직접 실행하지 않는 스크립트들을 `legacy/`로 이동했습니다. 구 홀드아웃 평가(`build_kosis_holdout.py` 계열 중 현행 평가 재현에 쓰지 않는 파일), 표본 선택(`select_kosis_*`), 구 매칭·검증(`match_claims_to_tables.py`, `verify_claim.py`, `fill_obj_itm*`) 등이 여기 속합니다.
-
-- **루트에는 현행 HCX 파이프라인(4개), KOSIS 공용 도구(`kosis_api_test.py` 등), 그리고 현재 회귀 테스트가 참조하는 코드북/평가 모듈을 둡니다.**
-- `kosis_codebook_v2.py`, `kosis_codebook_v3.py`, `build_kosis_holdout2_evaluation.py`는 현행 개발·재현 대상이므로 `legacy/`가 아니라 루트에서 관리합니다.
-- `kosis_api_test.py`는 여러 스크립트가 공유하는 공용 모듈이라 루트에 유지합니다. legacy 스크립트가 이를 import하는 경우, legacy는 이미 실행 완료된 산출물이라 재실행 시에만 경로 처리가 필요합니다(`sys.path`에 루트 추가).
-- legacy 스크립트의 이력은 `git mv`로 이동해 보존됩니다.
-
-## 참고: 방법론·참고문헌
-
-`docs_참고문헌_방법론.md` — statistical claim verification 관련 선행 연구(FEVER, Scrutinizer, BLINK 등)와 추출·매칭 단계의 대안 방법론, 적용 로드맵 정리.
-
-## 환경 설정
-
-```bash
+```powershell
 git clone https://github.com/rnwjdgus03/NLP_05-Team-Project-3.git
 cd NLP_05-Team-Project-3
-pip install requests python-dotenv
+pip install requests python-dotenv pytest
+# 선택: 더 정교한 한국어 문장 분리
+pip install kss
 ```
 
-`.env.example`을 복사해서 `.env`를 만들고, 본인이 발급받은 KOSIS 인증키를 넣으세요.
+KOSIS 통계표 임베딩 검색과 리랭커를 사용할 때만 ML 의존성을 추가합니다.
 
-```bash
-cp .env.example .env
+```powershell
+pip install -r requirements-ml.txt
 ```
 
-```
-# .env
-KOSIS_API_KEY=발급받은_실제_인증키
-```
+기본 모델은 한국어를 포함한 다국어 검색을 지원하는 `BAAI/bge-m3`와
+`BAAI/bge-reranker-v2-m3`입니다. 두 모델은 최초 실행 시 내려받으므로 GPU 환경을
+권장합니다. 모델이 필요 없는 기존 규칙 검색은 계속 사용할 수 있습니다.
 
-`.env`는 절대 커밋하지 마세요 (`.gitignore`에 이미 등록되어 있음).
+프로젝트 루트의 `.env`에 API 키를 설정합니다.
 
-## 스크립트 사용법
-
-### `kosis_api_test.py` — KOSIS API 호출 기본 테스트
-
-통계목록 API로 카테고리를 탐색하고, 통계자료 API로 실제 수치를 조회하는 예제입니다.
-
-```bash
-python kosis_api_test.py
+```text
+CLOVA_API_KEY=발급받은_실제_키
+KOSIS_API_KEY=발급받은_실제_키
 ```
 
-### `kosis_table_search.py` — 후보 통계표 검색
+`.env`는 Git에 커밋하지 않습니다. `kss`가 설치되어 있으면 전처리 단계에서 사용하고, 없으면 내장 정규식 문장 분리기를 사용합니다.
 
-통계목록 API에는 키워드 검색 기능이 없어서, 카테고리 트리를 재귀적으로 크롤링해 로컬 인덱스(`kosis_table_summary.csv`)를 만들고, 그 인덱스에서 키워드로 후보 통계표를 찾는 방식입니다.
+### 폴더 구조
 
-```bash
-python kosis_table_search.py
+```text
+data/raw/           원본 기사 CSV
+data/inputs/        전처리·HCX 입력 CSV(로컬 생성)
+data/claims/        코드북과 기존 claim 기준 데이터
+data/archive/       실전1 입력 및 과거 데이터
+outputs/runs/       실전2 API 실행·감사 결과(로컬 생성)
+outputs/archive/    회귀 기준 및 중단·롤백 산출물
+outputs/bteam_*/    실전1 골드·홀드아웃·검증 결과
+docs/               KOSIS 파라미터 가이드와 보고서
+legacy/             실전1 완료 스크립트
+tests/              현행 회귀 테스트
 ```
 
-현재 `kosis_table_summary.csv`에는 30개 최상위 카테고리 크롤링 결과와 추가 병합분이 반영되어, 총 107,138개 통계표가 인덱싱되어 있습니다.
+`data/inputs/*.csv`, `outputs/runs/*.csv`, `outputs/runs/*.json`은 `.gitignore` 대상입니다. 실행 코드는 루트에 두고, 재현에 필요한 코드·테스트·작은 회귀 기준만 Git으로 관리합니다.
 
-### `kosis_metadata_summary.py` — 표별 분류/항목/단위 조회
+## 실행 방법
 
-통계표설명(메타정보) API(`method=getMeta&type=ITM`)를 이용해, 실제 데이터를 조회하지 않고도 표의 분류 코드 전체 + 항목 코드 전체를 확인합니다.
+아래 명령은 Windows PowerShell 기준입니다. HCX API를 전체 데이터에 호출하기 전에 `--limit 20`으로 먼저 확인합니다.
 
-```bash
-python kosis_metadata_summary.py
+### 1. 기사 원문 전처리
+
+```powershell
+python preprocess_news.py `
+  --input "data\raw\chosun_full.csv" `
+  --output "data\inputs\news_sentences.csv" `
+  --overwrite
 ```
 
-### `match_claims_to_tables.py` — claim 후보 자동 매칭
+`preprocess_news.py`는 다음 작업을 수행합니다.
 
-A팀 claim 데이터(claim_id, claim_text 등 컬럼 포함 csv)를 읽어서, 각 주장마다 `kosis_table_summary.csv`에서 후보 통계표를 검색(TF-IDF 식 키워드 가중치)하고 메타정보 힌트까지 붙여 매핑 초안 csv를 생성합니다.
+- HTML, 바이라인, 입력·수정 시각, 댓글·추천·꼬리말 제거
+- 한국어 문장 분리
+- 기사별 `article_id` 생성: `A0001`
+- 문장별 `claim_id` 생성: `A0001-C001`
+- 이전·다음 문장 문맥 보존
 
-```bash
-python match_claims_to_tables.py <입력.csv> <출력.csv>
+본문·제목·날짜·URL 컬럼은 일반적인 한국어·영어 별칭으로 자동 인식합니다. 자동 인식이 안 되면 `--body-col`, `--title-col`, `--date-col`, `--url-col`로 지정합니다.
+
+출력 컬럼은 다음과 같습니다.
+
+```text
+claim_id, article_id, title, date, url,
+claim_text, prev_sentence, next_sentence
 ```
 
-완전 자동 검증은 아니고 1차 초안이라, 후보 표 중 실제로 맞는 표를 고르고 `org_id`/`tbl_id`/`obj_l1`/`itm_id`/`prd_se`는 KOSIS 메타 API로 직접 확인해서 채워야 합니다.
+### 2. is_claim 1차 판정
 
-### `fill_obj_itm.py` — obj_l1/itm_id 자동 후보 채우기
-
-`org_id`/`tbl_id`가 확정된 행에 대해 KOSIS 메타 API로 분류축/항목 코드를 조회해 자동으로 채우거나(단일 코드/합계 코드인 경우), 후보가 여러 개면 `obj_l1_candidates`/`itm_id_candidates` 컬럼에 후보 목록을 저장합니다. **반드시 KOSIS API 접속 가능한 로컬 환경에서 실행**해야 합니다.
-
-### `verify_claim.py` — 최종 검증
-
-`org_id`/`tbl_id`/`obj_l1`/`itm_id`/`prd_se`가 채워진 매핑 파일을 읽어 KOSIS 실제 값을 조회하고, 뉴스 claim과 비교해 일치/불일치/판단불가를 판정합니다.
-
-```bash
-python verify_claim.py --input <매핑.csv> --output verified_claims.csv
+```powershell
+python is_claim_filter_hcx.py `
+  --input "data\inputs\news_sentences.csv" `
+  --output "outputs\runs\is_claim.csv" `
+  --model HCX-007 `
+  --limit 20
 ```
 
-### `crawl_more_categories.py` / `merge_table_summaries.py` — 팀원과 나눠서 카테고리 크롤링
+결과를 확인한 뒤 `--limit` 없이 같은 명령을 실행하면 완료된 `claim_id` 다음부터 이어받습니다. 추출 단계에는 True 행만 전달합니다.
 
-팀원이 동시에 다른 카테고리를 크롤링할 때는 같은 파일을 동시에 건드리면 git 충돌이 나므로, `--out`으로 각자 다른 파일에 저장한 뒤 병합합니다.
-
-```bash
-# 팀원 A: 인구/노동
-python crawl_more_categories.py A D
-
-# 팀원 B: 각자 다른 파일명으로
-python crawl_more_categories.py --out kosis_table_summary_이름.csv P2 B
-
-# 병합 (한 명이 최종적으로)
-python merge_table_summaries.py kosis_table_summary.csv kosis_table_summary.csv kosis_table_summary_이름.csv
+```powershell
+Import-Csv "outputs\runs\is_claim.csv" |
+  Where-Object { $_.is_claim -eq "True" } |
+  Export-Csv "data\inputs\is_claim_true.csv" -NoTypeInformation -Encoding UTF8
 ```
 
-## 알아두면 좋은 KOSIS API 주의사항
+`is_claim=True`는 HCX v1.2의 **KOSIS 후보 1차 판정**이지 최종 매핑 가능 판정이 아닙니다. 실제 실행에서는 최저임금·육아휴직 급여 같은 정책값도 True로 들어올 수 있습니다. 따라서 3단계에서 측정값을 보존한 뒤 4단계의 `measurement_usage + claim_domain_scope` 조건으로 최종 KOSIS 후보를 다시 선별합니다.
 
-- 개발가이드 문서엔 `parentId`라고 나오지만, 실제로는 `parentListId` 파라미터여야 동작합니다.
-- `format=json`이라 해도 응답이 표준 JSON이 아니라 key에 따옴표가 없는 형식이라, 그냥 `res.json()`을 쓰면 에러가 납니다. `kosis_api_test.py`의 `_parse_kosis_json()`으로 전처리해서 씁니다.
-- 응답이 1건뿐이면 배열이 아니라 객체 하나로 오는 경우가 있어, 항상 리스트로 감싸는 처리가 필요합니다.
-- 통계표설명(메타정보) API로 실제 데이터 없이 분류/항목 코드를 먼저 확인할 수 있습니다 (`method=getMeta&type=ITM`).
-- 파라미터 상세 내용은 [`docs/kosis_param_guide.md`](./docs/kosis_param_guide.md) 참고.
+### 3. measurement-first 구조화 추출
 
-## 현재 진행 상황 (2026.07.14 기준)
+```powershell
+python extract_hcx.py `
+  --input "data\inputs\is_claim_true.csv" `
+  --output "outputs\runs\hcx_extracted_v15.csv" `
+  --model HCX-007
+```
 
-- **KOSIS 인덱스/메타 조회**: 107,138개 통계표 인덱싱 완료(최신 병합본 기준), 메타정보 조회 스크립트 완료.
-- **A팀 데이터**: 조선일보 원본 코퍼스(2,706건) → `claim_df_with_metric_v2.csv`(20,486건, 문장 단위)로 가공 완료. `is_claim`(실제 검증 대상 여부)과 `population`(대상 집단) 필드가 추가되어, `is_claim=True` 7,385건 확보.
-- **B팀 1차 필터링/매칭**: `is_claim=True` 중 KOSIS 검증 가능성이 낮은 metric(날짜·시간/증시지표/기업실적/정책·제도/환율/인명피해)을 제외한 6,404건을 KOSIS 매칭 대상으로 확정.
-  - 이 중 2,001건은 `tbl_id`까지, 1,998건은 `obj_l1`/`itm_id`까지 자동/반자동으로 채워짐 (`outputs/bteam_review/bteam_kosis_review_filled.csv`). 주요 ID가 채워졌다는 뜻이며, 통계표와 주장의 의미가 최종 확인됐다는 뜻은 아니다.
-  - 남은 3건은 KOSIS 메타데이터를 수동 확인한 결과 선택 통계표의 지표·단위·분류축이 claim과 달라 `판단불가`로 기록했다.
-  - 나머지 4,403건은 우선순위 큐로 정리했다. P0 139건(주요 ID 완성), P2 58건(후보 선택 필요), P4 4,206건(기관·통계표부터 재선택)이다.
-- **v1 배치(초기 422건, `claim_candidates.csv` 기반)**: TF-IDF 키워드 매칭으로 초안 생성 후 김진성/구정현 반반 검토, 김진성 몫 42건 수동 obj_l1/itm_id 선택 완료. v2 파이프라인으로 대체되어 `data/archive/`에 보관 중.
-- **verify_claim.py**: 골격 완성, `CHANGE_RATE`/`LEVEL`/`ABS_TO_ABS` 판정 로직 구현됨. `obj_l1`/`itm_id`/`prd_se`가 채워진 매핑에 대해 실제 KOSIS 값 조회 후 일치/불일치 판정 가능.
-  - 대표 검증 배치 197건 실행 완료(verified_claims.csv: 일치 5건, 불일치 131건, 판단불가 61건). 실전1 범위에서는 부가 성과로 기록.
-  - 1,998건 확대 전 품질 확인용 표본 24건을 실행했다. KOSIS 값 조회 성공 14건/실패·미매칭 10건, 자동 판정은 일치 1건/불일치 13건/판단불가 10건이었다.
-  - 표본에서 세율·설문·수출 claim이 무관한 표와 연결되는 등 의미 오매핑이 확인되어 1,998건 전체 실행은 보류했다. 기간이 없을 때 최신값으로 대체하던 동작도 제거했다.
-  - 원격의 2,001건 자동 실행 결과는 진단 자료로 병합했다. 기존 자동 일치 70건을 정확한 시점 로직으로 재실행한 결과는 일치 35건/불일치 26건/판단불가 9건이다.
-  - 일치 후보 33건을 KOSIS 메타데이터와 실제값으로 수동 대조한 결과, 확정 일치 15건/재매핑 필요 8건/KOSIS 직접검증 불가 10건으로 판정했다.
-  - 재매핑 필요 8건을 다시 조회해 6건을 확정 일치로 전환했다. 동남아 수출 1건은 KOSIS 집계코드가 없고, 가공식품 기여도 1건은 상승률만 확인되고 기여도 표가 없어 판단불가로 분리했다.
-  - 원격 enriched 통합 전 로컬 엄격 감사 상태는 확정 일치 21건/재검토 1,643건/판단불가 337건이다. 상세 근거는 `outputs/bteam_review/submission_recheck_8_report.md`에 기록했다.
-  - 물가·고용·무역·인구·소매 각 20건으로 개발용 골드셋 100건을 만들고, 기존 정확시점 불일치 22건을 전부 포함해 사람이 검증 가능 여부·통계표·항목·시점·최종 판정을 확정했다.
-  - 기존 시스템 기준 성능은 검증 가능 여부 61.0%, 통계표 60.8%, 항목 47.1%, 시점 58.8%, 항목·시점 결합 41.2%, 최종 판정 43.0%였다. API 기술 성공률 94.1%만으로는 의미 매핑 품질을 보장할 수 없음을 확인했다.
-  - 수동 확정 코드북으로 직접 검증 가능한 51건을 재조회해 51/51 API 성공을 확인했다. 이 수치는 개발용 골드셋의 확정 매핑 완성도이며 독립 자동 정확도가 아니다.
-  - 코드북을 재검토 1,643건에 200건 단위 9개 배치로 적용했다. 엄격 규칙을 통과한 자동조회 후보는 33건이고, API 판정 완료 30건은 일치 28건/불일치 2건이다. 최신 출생 통계 3건은 값 미제공으로 재검토를 유지했다.
-  - 나머지 재검토 건은 수동검토 유지 1,281건, 비검증 사유 분류 329건이다. 기존 판단불가 337건은 KOSIS 미제공 273건/정보 부족 32건/지역·분류 불일치 31건/기여도 미제공 1건으로 분류했다.
-  - 전체 결과와 근거는 `outputs/bteam_gold/B팀_KOSIS_골드셋_및_확대검증.xlsx` 및 `outputs/bteam_gold/gold100_report.md`, `outputs/bteam_gold/expansion_report.md`에 정리했다.
-  - 개발용 골드와 `claim_id`·`article_id`가 모두 겹치지 않는 독립 홀드아웃 100건을 물가·고용·무역·인구·소매 각 20건으로 만들었다. 수동 골드는 검증 가능 33건, 검증 불가 67건이다.
-  - 기존 코드북을 수정하지 않고 평가한 결과 자동 결정 커버리지는 26.0%(26/100), 자동 결정 구간 정확도는 96.2%(25/26)였다. 자동으로 검증 가능하다고 매핑한 6건의 통계표·항목·시점 정밀도는 100.0%였다.
-  - 보류를 오답으로 포함한 항목·시점 결합 엄격 정확도는 18.2%(6/33)로 80% 품질 게이트에 실패했다. 골드 매핑 API 성공률은 87.9%(29/33)이며, 최신 출생 시점 4건은 현재 선택 표에서 조회되지 않았다.
-  - 오류는 검증 가능 보류 26건, 검증 불가 보류 48건, 검증 가능 대상을 검증 불가로 과배제한 1건(`C20191`)으로 나뉜다. 결과와 근거는 `outputs/bteam_holdout/B팀_KOSIS_독립홀드아웃_평가.xlsx`와 `holdout100_report.md`에 정리했다.
-  - `fetch_kosis_actual_values.py`는 품목성질별 CPI처럼 분류축이 여러 개인 표를 위해 `obj_l2`~`obj_l8`을 KOSIS `objL2`~`objL8` 파라미터로 전달한다.
-- **원격 enriched + 로컬 감사 통합**:
-  - 원격 `final_verified_enriched.csv` 2,001건을 새 기준 입력으로 채택했다.
-  - 원격 자동 수치 일치 117건은 확정 결과가 아니라 감사 후보로 재분류했다. 로컬 감사와 대조한 결과 수동 확정 17건/재검토 83건/판단불가 17건이다.
-  - 원격 후보에서 빠진 로컬 수동 확정 4건(`C00381`, `C02892`, `C15304`, `C20235`)을 근거 재확인 후 복원했다.
-  - 현재 통합 기준은 검증완료 21건/재검토 1,462건/판단불가 518건이다.
-  - 전체 기준 파일은 `outputs/bteam_review/final_verified_enriched_audited.csv`, 팀 공유 보고서는 `outputs/bteam_review/submission_integrated_bteam_status_report.md`다.
-  - 초기 197건 PoC와 과거 표본·제출 파일은 `outputs/archive/bteam_poc_20260714/`에 보존한다.
-- **코드북 v2 개발 및 두 번째 독립 평가**:
-  - 첫 홀드아웃 오류를 개발 자료로 전환해 `%포인트` 고용률, 총수출 전년동월비, 소비자·근원·생활·가공식품 물가, 월·분기 소매판매, 월별 혼인·출생 규칙을 보강했다.
-  - 개발셋 재평가에서 자동결정 커버리지 51.0%, 결정구간 정확도 100.0%, 항목·시점 결합 엄격 정확도 84.8%(28/33), 자동매핑 정밀도 100.0%(28/28), API 성공률 89.3%(25/28)를 확인했다.
-  - 이 수치는 기존 홀드아웃을 보고 수정한 개발 성능이며 독립 품질 게이트 통과로 보고하지 않는다.
-  - 골드100과 첫 홀드아웃100의 claim_id·article_id 중복이 없는 새 표본 100건을 만들었다. 2,001건 기준 53건과 후속 4,403건 큐 47건으로 구성했다.
-  - 동결 코드북 v2의 새 표본 자동 결과는 검증가능 6건(API 6/6 성공), 검증불가 29건, 보류 65건이다.
-  - 사람 골드는 100/100건 확정했으며 검증가능 35건, 검증불가 65건(KOSIS 미제공 52건/정보 부족 13건)이다. 검증가능 claim의 최종 판정은 일치 31건/불일치 4건이다.
-  - 검증 가능 여부는 자동결정 35건 중 32건이 맞아 결정구간 정확도 91.4%지만, 보류를 오답으로 포함한 엄격 정확도는 32.0%다.
-  - 검증가능 35건 중 표·항목·시점을 모두 맞힌 것은 4건(11.4%)이고 자동 검증가능 6건의 완전 매핑 정밀도는 66.7%(4/6)다. API 성공률 100%(6/6)는 기술 연결 성능이며 의미 매핑 정확도와 다르다.
-  - 독립 80% 품질 게이트는 실패했다. 오류는 검증가능 과배제 1건(`C12152`), 검증불가 과매핑 2건(`C20289`, `C14971`), 검증가능 보류 30건이다.
-  - 공식 결과는 `outputs/bteam_holdout2/holdout2_100_report.md`와 `outputs/bteam_holdout2/B팀_KOSIS_독립홀드아웃2_평가.xlsx`에 정리했다.
-- **코드북 v3 후보 착수**:
-  - 독립 평가 재현용 `kosis_codebook_v2.py`는 동결하고 `kosis_codebook_v3.py`에서 P0 규칙을 분리했다.
-  - `C12152`는 국내 석유류지수(B05)로 매핑하고, `C20289`는 다중 월·다중 물가 수치로 정보 부족 처리하며, `C14971`은 개별 중고차 기업 실적으로 KOSIS 미제공 처리한다.
-  - P0 3건 및 v2 위임 회귀 테스트를 추가했으며 전체 19개 테스트가 통과한다.
-- **다음 할 일**:
-  1. 검증가능 보류 30건을 분야별 반복 지표로 묶어 코드북 v3 후보 규칙을 만든다.
-  2. 검증불가 보류 35건을 KOSIS 미제공/정보 부족 사유별 자동 분류 규칙으로 분리한다.
-  3. 코드북 v3 전체 회귀 테스트와 개발셋 재평가를 수행하되 독립 성능으로 보고하지 않는다.
-  4. 코드북 v3를 동결한 뒤 기존 골드·홀드아웃 300건과 겹치지 않는 세 번째 독립 표본 100건에서 80% 게이트를 측정한다.
-  5. 새 독립 평가가 80%를 통과할 때까지 수동검토 유지 1,281건의 자동 확정 확대는 보류한다.
-  6. 통과 후 P2 58건 후보를 선택하고 P4 4,206건의 기관·통계표를 탐색한다.
+추출 순서는 다음과 같습니다.
 
-## 실전1 제출 기준 정리
+1. 규칙으로 문장 안 숫자·단위 후보를 먼저 수집합니다.
+2. HCX-007 Structured Outputs로 claim 의미와 measurements를 추출합니다.
+3. 후보가 빠졌으면 HCX에 한 번 재요청합니다.
+4. 그래도 빠진 후보는 `measurement_source=rule_fallback`, `needs_review=Y`로 보존합니다.
+5. 측정값이 여러 개면 한 measurement당 한 행으로 분리합니다.
+6. 각 measurement에 지표·품목·기간·주기를 따로 연결합니다.
+7. 기사 날짜나 멀리 떨어진 배경 연도를 측정 기간으로 추정하지 않고, 문장 근거가 없는 기간은 `-`로 남깁니다.
 
-- 핵심 제출물: `docs/templates/통계표_관찰_템플릿.xlsx`의 통계표 관찰 기록, API 파라미터 참고, 탐색 경로 예시, 인덱스 EDA 요약.
-- 최신 EDA 기준: `kosis_table_summary.csv` 107,138건.
-- 검증 파일(`table_claim_mapping.csv`, `verified_claims.csv`)은 후속 검증 파이프라인의 대표 실행 성과로만 짧게 언급한다.
-- 따라서 실전1의 KOSIS API 연동·통계표 관찰·EDA 요약 범위는 완료됐다.
-- 남은 4,403건 수동 검토, 코드북 v2 개발과 새 독립 재평가는 실전2·종합 단계의 후속 과제로 둔다.
+예를 들어 아래 문장은 3행으로 분리됩니다.
+
+```text
+최저임금 시간당 1만30원  → 현재값 → 10030원
+최저임금 시간당 9860원   → 이전값 → 9860원
+1.7%                     → 증감률 → 1.7%
+```
+
+주요 measurement 컬럼은 다음과 같습니다.
+
+```text
+claim_measurement_id, measurement_text, measurement_usage,
+measurement_role, value, unit, value_type,
+direction, change_base, measurement_source,
+measurement_indicator, measurement_item,
+measurement_period, measurement_prd_se,
+measurement_binding_source
+```
+
+`measurement_binding_source=hcx`는 HCX가 해당 측정값의 의미와 기간을 직접 연결했다는 뜻입니다. `claim_fallback` 또는 `rule_fallback`은 검토 대상으로 보존하되 KOSIS 자동매핑에는 넣지 않습니다.
+
+`measurement_usage`는 다음 네 종류입니다.
+
+- `KOSIS_VALUE`: KOSIS 통계값 후보
+- `POLICY_VALUE`: 최저임금·급여·지원금 등 정책 기준값
+- `CONDITION`: 나이·근로시간·소득기준 등 조건값
+- `CONTEXT`: 기간·연속 개월 등 보조 문맥값
+
+추출 CSV에는 `verifiable_kosis`와 `unverifiable_reason`을 저장하지 않습니다. KOSIS 검색 전에 검증 가능 여부를 단정하면 실제 통계표 탐색 결과와 순환 관계가 생기기 때문입니다.
+
+### 4. KOSIS 매핑·검증
+
+#### 통계표 임베딩 인덱스 최초 1회 생성
+
+`kosis_table_summary.csv`가 바뀌지 않는 동안 인덱스는 다시 만들 필요가 없습니다.
+
+```powershell
+python kosis_build_embedding_index.py `
+  --table-index "kosis_table_summary.csv" `
+  --out-dir "data\indexes\kosis_bge_m3" `
+  --embedding-model "BAAI/bge-m3" `
+  --device cuda
+```
+
+현재 통계표 약 10만 건을 1024차원 float32로 저장하면 임베딩 행렬만 약 420 MiB입니다.
+GPU가 없으면 `--device cpu`로 생성할 수 있지만 시간이 오래 걸립니다. 생성물은 로컬
+캐시이므로 `data/indexes/` 아래에 저장하며 Git에는 커밋하지 않습니다.
+
+Colab Pro+에서는 [`notebooks/kosis_bge_colab.ipynb`](notebooks/kosis_bge_colab.ipynb)를
+순서대로 실행합니다. 인덱스는 Google Drive에 직접 저장되며, 세션이 끊겨도 같은 셀을
+다시 실행하면 `progress.json`에 기록된 완료 행부터 재개합니다. 최종 산출물은 아래
+세 파일입니다.
+
+```text
+embeddings.npy
+tables.csv
+manifest.json
+```
+
+`manifest.json`에는 사용 모델, 행 수, 차원, 원본 통계표 SHA-256이 기록됩니다. 현재
+`kosis_table_summary.csv`와 해시나 행 수가 다르면 파이프라인은 오래된 인덱스를
+사용하지 않고 재생성을 요구합니다.
+
+#### 하이브리드 검색과 검증
+
+```powershell
+python run_kosis_measurement_pipeline.py `
+  --input "outputs\runs\hcx_extracted_handoff_100_v15.csv" `
+  --table-index "kosis_table_summary.csv" `
+  --out-dir "outputs\runs\kosis_v2" `
+  --retrieval-mode hybrid `
+  --semantic-index "data\indexes\kosis_bge_m3" `
+  --semantic-top-k 50 `
+  --rerank-top-k 20
+```
+
+후보 검색 순서는 다음과 같습니다.
+
+```text
+measurement 입력 게이트
+→ 기존 토큰·도메인 규칙 Top-K
+→ BGE-M3 dense retrieval Top-K
+→ reciprocal rank fusion으로 후보 합치기
+→ BGE multilingual cross-encoder rerank
+→ 상위 표 메타 API 조회
+→ ITEM·OBJ·단위·기간 엄격 검증
+→ READY만 실제값 API 호출
+```
+
+임베딩과 리랭커는 후보를 추천할 뿐 `READY`를 직접 결정하지 않습니다. 기존의 단위,
+기간, 의미 유형, 모집단, 코드셋 안전장치가 최종 승인권을 가집니다. 후보 CSV에는
+`retrieval_backend`, `lexical_score`, `semantic_score`, `reranker_score`,
+`fusion_score`가 남아 순위 근거를 감사할 수 있습니다.
+
+`--retrieval-mode auto`는 임베딩 인덱스가 있으면 하이브리드 검색을 사용하고, 없으면
+기존 lexical 검색으로 실행합니다. `--retrieval-mode hybrid`는 인덱스나 ML 의존성이
+없을 때 즉시 실패하므로 시연·평가 환경 확인에 적합합니다. `--no-reranker`를 주면
+임베딩과 규칙 검색만 결합합니다.
+
+현행 매핑 단계는 다음 조건을 만족하는 행만 KOSIS 후보로 사용합니다.
+
+```text
+measurement_usage == KOSIS_VALUE
+and claim_domain_scope == 국내공식통계
+and measurement_binding_source == hcx
+and measurement_indicator/measurement_period/measurement_prd_se가 모두 존재
+```
+
+정책·조건·문맥 값, 해외 통계, 개별기업 값, 순위값, 이전값·참고값·목표값은 API 호출 전에 제외합니다. `canonical_unit`, `unit_dimension`, `semantic_type`, `entity_type`, `comparison_period`를 만든 뒤 KOSIS 입력으로 전달합니다.
+
+통계표와 메타를 조회한 후보는 다음 세 상태로 나뉩니다.
+
+- `READY`: 표·ITEM·OBJ·단위·기간이 확정되어 실제값 검증 가능
+- `REVIEW`: 코드셋·계산식·후보 또는 모집단 확인 필요
+- `REJECT`: 의미가 맞는 KOSIS ITEM 없음
+
+실제값 API는 `READY`에만 호출합니다. 전체 과정을 확인한 뒤 같은 명령에 `--verify`를 추가합니다. 판단불가에는 `CODESET_REQUIRED`, `NO_COMPATIBLE_ITEM`, `FORMULA_REQUIRED` 같은 `verdict_code`와 단계별 이유를 남깁니다.
+
+`map_verify_kosis.py`와 `data/claims/kosis_mapping_codebook_v1.csv`는 이미 확정된 규칙의 오프라인 재현용으로 유지합니다. 코드북 밖 지표는 동적 통계표 인덱스와 메타를 사용합니다.
+
+## 실전2 검증 결과
+
+### 원문 전처리
+
+| 항목 | 결과 |
+|---|---:|
+| 조선일보 원문 기사 | 2,706건 |
+| 생성된 정제 문장 | 47,514건 |
+| 본문이 비어 있던 기사 | 4건 |
+| 사용 문장 분리기 | regex fallback |
+
+### 수치 누락 회귀
+
+v1.3에서 `value=-`였던 45개 claim을 고정 표본으로 다시 실행했습니다.
+
+| 항목 | 결과 |
+|---|---:|
+| 회귀 claim | 45건 |
+| 예상 / 실제 measurement | 92 / 92 |
+| 다중 measurement 완전 분리 | 28 / 28 |
+| 필수 필드 누락 | 0건 |
+| 원문에 근거 없는 값 | 0건 |
+| 예상 밖 값 | 0건 |
+| rule fallback | 0건 |
+| 최종 상태 | PASS 45 / REVIEW 0 / FAIL 0 |
+
+### 정현님 전달 표본
+
+현재 전달 파일은 `outputs/runs/hcx_extracted_handoff_100_v15.csv`입니다.
+
+| 항목 | 결과 |
+|---|---:|
+| 전체 행 | 100행 |
+| claim | 47건 |
+| measurement 행 | 96행 |
+| 측정값 없는 placeholder | 4행 |
+| 필수 필드 누락 | 0건 |
+| measurement ID 중복 | 0건 |
+| 원문 근거 없는 measurement 기간 | 0건 |
+| KOSIS_VALUE | 55행 |
+| 기간 미확정 KOSIS_VALUE | 12행 |
+| KOSIS 자동매핑 후보 | 22행, 10 claim |
+| 현행 코드북 오프라인 매칭 | 1행, 1 claim |
+
+정현님 측 매퍼도 `verifiable_kosis=Y`가 아니라 위의 measurement 단위 게이트로 입력을 선별해야 합니다. 기간이 문장에 없는 값은 임의로 기사 날짜를 넣지 않고 후보에서 제외합니다.
+
+### 동적 KOSIS 재검증
+
+`origin/feature/model`의 동적 목록·메타 조회 방식을 measurement-first 계약에 맞게 보강해 100행을 다시 실행했습니다.
+
+| 단계 | 결과 |
+|---|---:|
+| 전체 입력 | 100행 |
+| KOSIS 입력 게이트 통과 | 22행 |
+| 표 후보 | 94행 |
+| 실제 메타 조회 통계표 | 12개 |
+| READY | 1행 |
+| REVIEW | 17행 |
+| REJECT | 4행 |
+| 실제값 일치 | 1행 |
+| 실제값 불일치 | 0행 |
+| 사유가 명확한 판단불가 | 21행 |
+
+판단불가 21행은 코드셋 필요 14, 의미가 맞는 ITEM 없음 4, 계산식 필요 1, 표 후보 모호 1, 모집단 정의 불일치 1입니다. 상세 감사는 `docs/kosis_model_logic_review.md`에 있습니다.
+
+### 테스트
+
+```powershell
+pytest
+```
+
+현재 전체 테스트 결과는 `73 passed`입니다.
+
+## 회귀 검증 재현
+
+```powershell
+python measurement_regression.py prepare `
+  --baseline "outputs\archive\hcx_extracted_isclaim51.csv" `
+  --output "data\inputs\measurement_regression_45.csv" `
+  --expect-claims 45
+
+python extract_hcx.py `
+  --input "data\inputs\measurement_regression_45.csv" `
+  --output "outputs\runs\measurement_regression_45_v15.csv" `
+  --model HCX-007 `
+  --overwrite
+
+python measurement_regression.py audit `
+  --baseline "outputs\archive\hcx_extracted_isclaim51.csv" `
+  --candidate "outputs\runs\measurement_regression_45_v15.csv" `
+  --report "outputs\runs\measurement_regression_45_audit.csv"
+```
+
+감사 결과는 claim별 `PASS`, `REVIEW`, `FAIL`과 후보 누락, 필수 필드 누락, 원문 밖 값, fallback 비율을 CSV와 JSON으로 남깁니다.
+
+## 현재 한계와 다음 작업
+
+1. 반도체·석유화학·바이오헬스·농수산식품·화장품과 LCC/대형 항공사 묶음 14행은 단일 OBJ가 아니라 코드셋 합산 규칙이 필요합니다.
+2. 무역수지는 수출액-수입액 계산식을 추가해야 합니다.
+3. 정비사 4행은 현재 후보 표에 의미가 맞는 ITEM이 없습니다. KOSIS 다른 표를 재탐색하고 없으면 국토교통부 등 다른 공식 출처 대상으로 분리합니다.
+4. 기간이 문장에 없는 KOSIS_VALUE 12행은 계속 자동매핑에서 제외합니다.
+
+## KOSIS 보조 도구
+
+- `kosis_api_test.py`: KOSIS 목록·통계자료 API 기본 호출과 응답 파싱
+- `prepare_kosis_mapping_input.py`: measurement 표준 단위·의미·기간 정규화 및 22행 입력 게이트
+- `kosis_build_embedding_index.py`: BGE-M3 기반 KOSIS 통계표 dense index 최초 생성
+- `kosis_semantic_search.py`: dense retrieval, RRF hybrid fusion, 다국어 cross-encoder rerank
+- `kosis_match_claims_to_index.py`: measurement 중심 통계표·ITEM·OBJ 후보와 READY/REVIEW/REJECT 판정
+- `kosis_build_meta_index.py`: 상위 통계표의 KOSIS 메타 long index 생성
+- `kosis_verify_claim_values.py`: READY 후보 실제값 조회와 단계별 verdict code 생성
+- `run_kosis_measurement_pipeline.py`: 준비·후보·메타·검증 통합 러너
+- `kosis_table_search.py`: 로컬 통계표 인덱스 생성 및 후보 검색
+- `kosis_metadata_summary.py`: 통계표의 분류축·항목·단위 메타 조회
+- `llm_auto_mapping_prototype.py`: 코드북 밖 지표의 LLM 후보 선택 실험
+- `kosis_codebook_v2.py`: 첫 홀드아웃 오류를 반영한 동결 코드북
+- `kosis_codebook_v3.py`: 두 번째 홀드아웃 P0 오류를 반영한 개발 후보
+- `build_kosis_holdout2_evaluation.py`: 독립 홀드아웃2 평가 재생성
+
+KOSIS API 사용 시 주의사항은 다음과 같습니다.
+
+- 목록 API의 상위 목록 파라미터는 실제 호출에서 `parentListId`를 사용합니다.
+- 일부 응답은 표준 JSON이 아니므로 `kosis_api_test.py`의 파서를 사용합니다.
+- 응답이 한 건이면 배열이 아니라 객체로 올 수 있어 리스트 정규화가 필요합니다.
+- 실제값 호출 전에 메타 API로 분류축과 항목 코드를 확인합니다.
+- 상세 파라미터는 `docs/kosis_param_guide.md`를 참고합니다.
+
+## Legacy와 이력
+
+실전1의 TF-IDF 후보 매칭, 수동 obj/item 보완, 골드·홀드아웃 평가 스크립트는 `legacy/`와 `outputs/bteam_*`에 보존합니다. 과거 산출물은 방법론 비교와 회귀 참고용이며, 현행 실행 순서는 이 README의 실전2 파이프라인을 기준으로 합니다.
+
+상세 폴더 설명은 `docs/file_structure.md`, B팀 기존 파이프라인 기록은 `docs/docs_bteam_pipeline.md`, 선행 연구와 방법론은 `docs_참고문헌_방법론.md`를 참고합니다.
 
 ## 브랜치 전략
 
-- `main`: 안정 버전만. 직접 push 금지
+- `main`: 안정 버전
 - `develop`: 통합 브랜치
-- `feature/기능명`, `fix/버그명`: 각자 작업 브랜치, develop으로 PR 병합
+- `feature/기능명`, `fix/버그명`: 기능·수정 브랜치
 
-커밋 메시지는 `feat:`, `fix:`, `docs:`, `chore:` 등 Conventional Commits 형식을 따릅니다.
----
-
-## Poc 브랜치 초기 기록
-
-아래 내용은 `Poc` 브랜치에서 정리한 초기 자동 매칭 PoC 진행 결과다. 현재 기준 성능과 제출 파일은 위의 최신 진행 현황 및 `outputs/bteam_holdout2/` 결과를 따른다.
-
-# 📊 B팀 KOSIS 매칭 PoC 진행 결과
-
-## 1. 데이터 수령 및 전처리
-
-**A팀 전달 데이터**
-
-* 원본 파일: `claim_df.csv`
-* 총 주장(Claim) 수: **20,486건**
-
-### 포함 컬럼
-
-| 컬럼            |
-| ------------- |
-| claim_id      |
-| article_id    |
-| title         |
-| date          |
-| url           |
-| claim_text    |
-| prev_sentence |
-| next_sentence |
-| numbers       |
-| units         |
-| year          |
-| region        |
-
----
-
-## 2. 수행 작업
-
-| 단계            | 결과 파일                                | 내용                                                                         | 상태 |
-| ------------- | ------------------------------------ | -------------------------------------------------------------------------- | -- |
-| ① A팀 데이터 확인   | `claim_df.csv`                       | Claim 데이터 구조 및 컬럼 확인                                                       | ✅  |
-| ② B팀 입력 형식 변환 | `claim_candidates_from_a_sample.csv` | `claim_text`, `numbers`, `units`, `time`, `population`, `keywords` 형식으로 변환 | ✅  |
-| ③ 검증 우선 후보 선별 | `claim_candidates_top30.csv`         | %, 원, 억원, 조원, 명, 건 등 통계 검증 가능성이 높은 주장 30건 선정                               | ✅  |
-| ④ KOSIS 자동 매칭 | `table_claim_mapping.csv`            | KOSIS 통계표(`kosis_table_summary.csv`)와 자동 후보 매칭                             | ✅  |
-| ⑤ 결과 검토 요약    | `metric_review_summary.csv`          | 자동 후보 적합 여부 및 수동 검토 필요 여부 정리                                               | ✅  |
-
----
-
-# 🔄 PoC 파이프라인
-
-```text
-A팀 Claim 데이터
-        │
-        ▼
-B팀 입력 형식 변환
-        │
-        ▼
-검증 가능 Claim 선별
-        │
-        ▼
-KOSIS 통계표 후보 검색
-        │
-        ▼
-자동 매칭 결과 생성
-        │
-        ▼
-사람 검토용 요약 생성
-```
-
----
-
-# 📈 진행 결과
-
-### ✅ 성공한 부분
-
-* PoC 파이프라인 전체 실행 성공
-* A팀 Claim 데이터를 B팀 입력 형식으로 변환 성공
-* KOSIS 통계표 후보 자동 매칭 성공
-* 사람이 검토 가능한 결과 요약 파일 생성 성공
-
----
-
-# ⚠️ 확인된 한계
-
-현재 A팀 Claim 데이터에는 아래 정보가 포함되어 있지 않습니다.
-
-* **metric**
-* **population**
-* **keywords**
-
-이 정보가 부족하여 일부 자동 매칭의 정확도가 낮아지는 사례가 확인되었습니다.
-
-### 예시
-
-* ✅ **물가 관련 주장** → 소비자물가지수(CPI) 통계표와 비교적 정확하게 매칭
-* ⚠️ **수출 / GDP / 가계소득 관련 주장** → 의미가 유사한 다른 통계표가 후보로 선택되는 경우 발생
-
----
-
-# 💡 PoC 결론
-
-### ✔ 확인된 사항
-
-* A팀의 **수치 기반 주장 후보**를 B팀의 **KOSIS 통계표 후보**와 연결하는 전체 파이프라인은 정상적으로 동작함을 확인했습니다.
-
-### ✔ 향후 개선 사항
-
-자동 매칭 정확도를 높이기 위해 A팀 Claim Schema에 아래 컬럼을 추가하여 전달받는 것이 필요합니다.
-
-| 추가 필요 컬럼       | 목적                   |
-| -------------- | -------------------- |
-| **metric**     | 비교 대상 통계 지표 명확화      |
-| **population** | 대상 집단 정보 제공          |
-| **keywords**   | 의미 기반 검색 및 매칭 정확도 향상 |
-
----
-
-## ✅ 최종 결론
-
-> **PoC는 전체 데이터 흐름(Claim → KOSIS 통계표 매칭 → 검토 요약) 검증에 성공했습니다.**
->
-> 향후 **metric, population, keywords** 정보를 함께 제공받는다면 KOSIS 통계표 자동 매칭의 정확도를 더욱 향상시킬 수 있을 것으로 판단됩니다.
+커밋 메시지는 `feat:`, `fix:`, `docs:`, `chore:` 등 Conventional Commits 형식을 사용합니다.
