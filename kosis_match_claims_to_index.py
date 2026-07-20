@@ -370,6 +370,16 @@ def score_table(row, tokens, claim):
         and compact(norm_claim.get("industry_or_item")) in {"", "-"}
     )
     if generic_trade_balance:
+        category_path = compact(row.get("category_path"))
+        generic_balance_source = (
+            "품목별수출액" in table_text
+            or any(
+                source in category_path
+                for source in ("SITC에의한무역통계", "무역통계", "국제수지통계")
+            )
+        )
+        if not generic_balance_source:
+            return -10**9, []
         narrow_scopes = ("지식재산권", "의약품", "우주산업", "항공제조", "기업체")
         if any(
             scope in table_text and scope not in claim_scope_text

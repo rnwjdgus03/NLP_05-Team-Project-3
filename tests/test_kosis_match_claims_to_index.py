@@ -146,8 +146,10 @@ def test_generic_trade_balance_rejects_narrow_domain_balance():
         "국제수지통계 > 지식재산권 무역수지",
     )
     generic = table("DT_TRADE", "품목별 수출액, 수입액", "SITC에의한무역통계")
+    ict_survey = table("DT_ICT", "무역수지", "ICT실태조사")
 
     assert score_table(intellectual_property, claim_tokens(claim), claim)[0] <= -10**8
+    assert score_table(ict_survey, claim_tokens(claim), claim)[0] <= -10**8
     assert score_table(generic, claim_tokens(claim), claim)[0] > 0
 
 
