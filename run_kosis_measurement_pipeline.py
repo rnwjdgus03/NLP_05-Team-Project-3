@@ -59,6 +59,40 @@ def write_top_tables(candidate_path, output_path, max_rank):
     print(f"top_tables={len(rows)} -> {output_path}")
 
 
+def measurement_key(row):
+    return row.get("claim_measurement_id") or row.get("claim_id") or ""
+
+
+def validate_reusable_candidates(ready_path, candidate_path):
+    if not candidate_path.exists():
+        raise FileNotFoundError(
+            f"재사용할 후보 CSV가 없습니다: {candidate_path}. "
+            "먼저 --skip-meta 후보 검색을 실행하세요."
+        )
+    expected = {measurement_key(row) for row in read_csv(ready_path)}
+    candidate_rows = read_csv(candidate_path)
+    actual = {measurement_key(row) for row in candidate_rows}
+    expected.discard("")
+    actual.discard("")
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    if missing or extra:
+        raise ValueError(
+            "재사용 후보 CSV와 현재 READY 입력의 measurement 집합이 다릅니다. "
+            f"missing={missing[:5]} extra={extra[:5]}"
+        )
+    top1 = [row for row in candidate_rows if row.get("candidate_rank") == "1"]
+    if len(top1) != len(expected):
+        raise ValueError(
+            "재사용 후보 CSV의 1위 후보 수가 READY measurement 수와 다릅니다. "
+            f"top1={len(top1)} expected={len(expected)}"
+        )
+    print(
+        f"table_candidates=reused rows={len(candidate_rows)} "
+        f"measurements={len(expected)} path={candidate_path}"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="v1.5 measurement-first CSV")
@@ -83,6 +117,11 @@ def main():
     parser.add_argument("--delay", type=float, default=0.12)
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--skip-meta", action="store_true", help="table-only offline run")
+    parser.add_argument(
+        "--reuse-table-candidates",
+        action="store_true",
+        help="기존 table candidates를 검증해 재사용하고 GPU 검색은 건너뜀",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -139,7 +178,10 @@ def main():
         retrieval_command.extend(["--device", args.device])
     if args.no_reranker:
         retrieval_command.append("--no-reranker")
-    run(retrieval_command)
+    if args.reuse_table_candidates:
+        validate_reusable_candidates(ready, table_candidates)
+    else:
+        run(retrieval_command)
 
     if args.skip_meta:
         print(f"table_only={table_candidates}")

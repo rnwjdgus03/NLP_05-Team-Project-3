@@ -278,6 +278,11 @@ and measurement_indicator/measurement_period/measurement_prd_se가 모두 존재
 
 실제값 API는 `READY`에만 호출합니다. 전체 과정을 확인한 뒤 같은 명령에 `--verify`를 추가합니다. 판단불가에는 `CODESET_REQUIRED`, `NO_COMPATIBLE_ITEM`, `FORMULA_REQUIRED` 같은 `verdict_code`와 단계별 이유를 남깁니다.
 
+`--skip-meta`로 후보를 검토한 뒤 메타 단계만 이어갈 때는
+`--reuse-table-candidates`를 사용합니다. 현재 READY measurement와 기존 후보 CSV의
+ID 집합 및 1위 후보 수가 일치할 때만 재사용하며, 임베딩·리랭커 모델은 다시
+로딩하지 않습니다.
+
 `map_verify_kosis.py`와 `data/claims/kosis_mapping_codebook_v1.csv`는 이미 확정된 규칙의 오프라인 재현용으로 유지합니다. 코드북 밖 지표는 동적 통계표 인덱스와 메타를 사용합니다.
 
 ## 실전2 검증 결과
