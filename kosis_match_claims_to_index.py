@@ -44,7 +44,7 @@ DEFAULT_TABLE_INDEX_CANDIDATES = [
 DEFAULT_META_INDEX = PROJECT_DIR / "data/claims/kosis_meta_index.csv"
 DEFAULT_SEMANTIC_INDEX = PROJECT_DIR / "data/indexes/kosis_bge_m3"
 
-csv.field_size_limit(sys.maxsize)
+csv.field_size_limit(2 ** 31 - 1)
 
 
 DOMAIN_HINTS = {
