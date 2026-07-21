@@ -9,7 +9,8 @@ CSV(data/claims/kosis_mapping_codebook_v1.csv)에서 읽는다. 규칙 추가·�
 - value_min/max 범위 판정 ("1%대" -> 1.0~1.9 구간 포함 여부)
 - measurement_role이 이전값/참고값/목표값이면 판정 제외
 - 단위 배율(unit_multiplier)을 규칙별 컬럼으로 관리
-- verifiable_kosis 게이트 미사용: is_claim 필터(v1.2)가 선행 게이트 역할
+- 현행 measurement 스키마는 국내공식통계 + KOSIS_VALUE만 매핑
+- 구 스키마는 measurement_usage가 없으므로 기존 동작 유지
 
 사용법:
   python map_verify_kosis.py --input hcx_extracted_isclaim51.csv --output outputs/bteam_review/mapped.csv
@@ -40,6 +41,43 @@ NUMBER_RE = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
 def nz(v):
     s = str(v or "").strip()
     return "" if s in ("", "nan", "None", "-") else s
+
+
+def mapping_exclusion_reason(row):
+    """Return why a measurement must not reach KOSIS mapping, or an empty string."""
+    usage = nz(row.get("measurement_usage"))
+    scope = nz(row.get("claim_domain_scope"))
+    if usage and usage != "KOSIS_VALUE":
+        return f"measurement_usage={usage} KOSIS 매핑 제외"
+    if usage and scope and scope != "국내공식통계":
+        return f"claim_domain_scope={scope} KOSIS 매핑 제외"
+    if usage == "KOSIS_VALUE" and "measurement_indicator" in row:
+        binding_source = nz(row.get("measurement_binding_source"))
+        if binding_source and binding_source != "hcx":
+            return f"measurement_binding_source={binding_source} 자동매핑 제외"
+        for field in ("measurement_indicator", "measurement_period", "measurement_prd_se"):
+            if not nz(row.get(field)):
+                return f"{field} 누락으로 KOSIS 매핑 제외"
+    if not nz(row.get("value")) or not nz(row.get("unit")):
+        return "value/unit 누락으로 KOSIS 매핑 제외"
+    if nz(row.get("value_type")) == "순위" or nz(row.get("unit")) == "위":
+        return "순위값은 KOSIS 원자료와 직접 비교 불가"
+    role = nz(row.get("measurement_role"))
+    if role in SKIP_ROLES:
+        return f"role={role} 판정 제외"
+    return ""
+
+
+def effective_indicator(row):
+    return nz(row.get("measurement_indicator")) or nz(row.get("indicator"))
+
+
+def effective_period(row):
+    return nz(row.get("measurement_period")) or nz(row.get("period"))
+
+
+def effective_prd_se(row):
+    return nz(row.get("measurement_prd_se")) or nz(row.get("prd_se"))
 
 
 def norm_ind(s):
@@ -152,8 +190,8 @@ def clamp_future(norm, article_date):
 
 
 def actual_for(row, rule, data_rows):
-    prd_se = nz(rule.get("cond_prd_se")) or nz(row.get("prd_se"))
-    norm = normalize_period(row.get("period"), prd_se) or normalize_period(row.get("period_end"), prd_se)
+    prd_se = nz(rule.get("cond_prd_se")) or effective_prd_se(row)
+    norm = normalize_period(effective_period(row), prd_se) or normalize_period(row.get("period_end"), prd_se)
     norm = clamp_future(norm, row.get("date"))
     if not norm:
         return None, "", "", "시점 정규화 실패"
@@ -244,18 +282,19 @@ def main():
                         "actual_period": ap_, "actual_prev_period": pp})
             out_rows.append(out)
 
-        # verifiable_kosis 게이트 제거 (2026-07-16): is_claim v1.2가 이미 KOSIS 결합 판단을 하므로
-        # 모든 행을 매핑 시도. 코드북에 없는 지표는 자연히 판단불가 처리됨.
-        if nz(row.get("measurement_role")) in SKIP_ROLES:
-            finish("판단불가", f"role={row.get('measurement_role')} 판정 제외"); continue
+        # 구 스키마는 기존 동작을 유지하고, measurement-first 스키마에서는
+        # 실제 통계값만 KOSIS 매핑으로 전달한다.
+        exclusion_reason = mapping_exclusion_reason(row)
+        if exclusion_reason:
+            finish("판단불가", exclusion_reason); continue
 
-        rule, why = find_rule(rules, row.get("indicator"), row.get("age_group"), row.get("prd_se"))
+        rule, why = find_rule(rules, effective_indicator(row), row.get("age_group"), effective_prd_se(row))
         if rule is None:
             finish("판단불가", why); continue
         if rule["verify"] != "Y" or not nz(rule["itm_id"]):
             finish("판단불가", f"표 후보만 매핑: {rule['table_note']}", rule); continue
 
-        rule_prd = nz(rule.get("cond_prd_se")) or nz(row.get("prd_se")) or "M"
+        rule_prd = nz(rule.get("cond_prd_se")) or effective_prd_se(row) or "M"
         key = (rule["org_id"], rule["tbl_id"], rule["obj_l1"], rule["obj_l2"], rule["itm_id"], rule_prd)
         try:
             if key not in cache:

@@ -19,6 +19,7 @@ import re
 import sys
 import time
 import uuid
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -148,7 +149,9 @@ def main():
     today = time.strftime("%Y-%m-%d")
     n = n_api = n_rule = n_y = 0
     mode = "a" if done else "w"
-    with open(a.output, mode, newline="", encoding="utf-8-sig") as f:
+    output_path = Path(a.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open(mode, newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=out_cols)
         if mode == "w":
             w.writeheader()
