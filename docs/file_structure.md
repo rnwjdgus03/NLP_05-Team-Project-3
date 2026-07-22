@@ -24,8 +24,8 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | ② is_claim 필터 | `is_claim_filter_hcx.py` | 문장이 KOSIS 검증 가능한 수치 주장인지 True/False (HCX-007 + Structured Outputs) |
 | ③ 추출 | `extract_hcx.py` | 문장을 measurement 단위로 구조화 (measurement-first v5 스키마) |
 | ④ 게이트 | `prepare_kosis_mapping_input.py` | KOSIS 매핑 대상만 통과 (measurement-level 정제) |
-| ⑤ 검색 | `kosis_match_claims_to_index.py` | claim ↔ KOSIS 표/메타 인덱스 후보 매칭 |
-| ⑤ 검색엔진 | `kosis_semantic_search.py` | BGE-M3 밀집 검색 + cross-encoder 리랭킹 (hybrid) |
+| ⑤ 검색 | `kosis_match_claims_to_index.py` | claim ↔ KOSIS 표 후보 매칭. **현재 lexical(키워드) 채택** |
+| ⑤ 검색엔진(미채택) | `kosis_semantic_search.py` | BGE-M3 밀집 검색 + 리랭킹. 골드 비교 결과 lexical에 열세 → 필수 경로 제외, 재현·재검토용 보존 |
 | ⑥ 메타 | `kosis_build_meta_index.py` | 후보 표의 축·항목 코드(obj/itm)를 KOSIS getMeta로 수집 |
 | ⑦ 검증 | `kosis_verify_claim_values.py` | KOSIS 실제값 조회 → 주장값 대조 → 일치/불일치/판정보류/판단불가 |
 | 오케스트레이터 | `run_kosis_measurement_pipeline.py` | ④~⑦을 순서대로 실행하는 진입점 |
@@ -37,7 +37,7 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | `kosis_api_test.py` | KOSIS Open API 호출 래퍼 (목록·메타·자료 3종) |
 | `kosis_table_search.py` | 통계목록 API로 통계표 트리 크롤링 (107,138개 표 인덱스 생성) |
 | `crawl_more_categories.py` | 기존 표 인덱스에 특정 카테고리 하위를 추가 크롤링 |
-| `kosis_build_embedding_index.py` | KOSIS 표 요약의 BGE-M3 임베딩 인덱스 구축 (Colab GPU) |
+| `kosis_build_embedding_index.py` | BGE-M3/KURE 임베딩 인덱스 구축 (Colab GPU). **미채택** — 골드 비교에서 lexical에 열세, 재실험용으로만 유지 |
 | `kosis_metadata_summary.py` | 후보 표들의 분류축·항목·단위를 조회해 요약 CSV로 정리 |
 | `merge_table_summaries.py` | 팀원별로 나눠 크롤링한 table_summary들을 하나로 병합 |
 | `merge_metadata_summaries.py` | 팀원별로 나눠 조회한 metadata_summary들을 병합 |
@@ -72,7 +72,7 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 
 ## 두 경로 구분 (중요)
 
-- **측정 파이프라인** (A): 임베딩 검색으로 표를 자동으로 찾음 → codex 주도, hybrid
+- **측정 파이프라인** (A): 검색으로 표를 자동으로 찾음 → **현재 lexical(키워드) 채택**. 임베딩(hybrid)은 골드 비교에서 열세라 미채택
 - **코드북 매핑** (C): 사람이 고정한 규칙으로 매핑 → 정현님 주도, `map_verify_kosis.py`
 - 둘은 독립 경로. 코드북은 확정 매핑을 축적하는 자산, 파이프라인은 미지 지표를 검색으로 처리.
 
