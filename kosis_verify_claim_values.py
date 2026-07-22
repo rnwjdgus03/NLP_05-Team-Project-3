@@ -463,7 +463,48 @@ def derive_actual(data_rows, prd_se, period, row):
     return None, current_period, previous_period, f'지원하지 않는 mapping_type={mapping_type}'
 
 
-def judge(claim_value, actual_value, tolerance_abs, tolerance_pct):
+DECREASE_WORDS = ('감소', '하락', '줄', '축소', '마이너스', '위축', '둔화', '뒷걸음', '하향')
+INCREASE_WORDS = ('증가', '상승', '늘', '확대', '급증', '플러스', '오른', '올라', '상향')
+
+
+def signed_claim_value(row, magnitude):
+    """증감률·증감량 주장에 방향 부호를 붙인다. KOSIS actual은 부호가 있는데(감소=음수)
+    추출된 value는 크기만 저장되는 경우가 많아, direction 또는 원문에서 감소/증가를 읽어 부호를 맞춘다.
+    수준값(억달러·명 등)에는 적용하지 않는다."""
+    if magnitude is None:
+        return magnitude
+    vt = str(row.get('value_type') or '').strip()
+    role = str(row.get('measurement_role') or '').strip()
+    if vt not in {'증감률', '증감량'} and role not in {'증감률', '증감값'}:
+        return magnitude
+    direction = str(row.get('direction') or '').strip()
+    if any(w in direction for w in INCREASE_WORDS):
+        return abs(magnitude)
+    if any(w in direction for w in DECREASE_WORDS):
+        return -abs(magnitude)
+    # direction 없음: 값 '바로 뒤'에 방향어가 붙을 때만 부호 적용 (예: '1.6% 감소').
+    # '1.4%로 계속 감소 중'처럼 떨어져 있으면 추세 서술이므로 건드리지 않는다.
+    text = str(row.get('claim_text') or '')
+    key = str(row.get('measurement_text') or '').strip() or str(row.get('value') or '').strip()
+    idx = text.find(key) if key and key != '-' else -1
+    if idx < 0:
+        return magnitude
+    after = text[idx + len(key): idx + len(key) + 6]  # 값 바로 뒤 6자
+    if any(w in after for w in DECREASE_WORDS):
+        return -abs(magnitude)
+    if any(w in after for w in INCREASE_WORDS):
+        return abs(magnitude)
+    return magnitude
+
+
+def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0):
+    """3구간 판정: 일치 / 판정보류(오차밴드) / 불일치.
+
+    - 일치: 절대오차 tolerance_abs 이내 또는 상대오차 tolerance_pct% 이내
+    - 판정보류: tolerance_pct% 초과 ~ review_pct% 이내 (근사·관점·세부항목 차이 가능 → 문맥 검토)
+    - 불일치: review_pct% 초과 (명백히 벗어남)
+    멘토 조언(오차밴드): 수치가 다르다고 바로 '틀림'이 아니라, 애매한 구간은 보류한다.
+    """
     if claim_value is None:
         return '판단불가', 'claim value 없음'
     if actual_value is None:
@@ -473,12 +514,17 @@ def judge(claim_value, actual_value, tolerance_abs, tolerance_pct):
     pct = abs_diff / max(abs(claim_value), 1e-9) * 100
     if abs_diff <= tolerance_abs or pct <= tolerance_pct:
         return '일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
+    if pct <= review_pct:
+        return '판정보류', f'차이={abs_diff:.6g}, 차이율={pct:.3g}% (오차밴드 {tolerance_pct}~{review_pct}%, 문맥 검토 필요)'
     return '불일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
 
 
 def verify_row(row, meta_cache, delay):
     out = dict(row)
+    out['default_applied'] = 'N'
+    out['default_reason'] = ''
     claim_value = parse_number(row.get('value'))
+    compare_value = signed_claim_value(row, claim_value)
     out['claim_value_numeric'] = claim_value if claim_value is not None else ''
 
     if str(row.get('candidate_rank', '')).strip() != '1':
@@ -517,11 +563,18 @@ def verify_row(row, meta_cache, delay):
     if has_obj_axis and not str(row.get('selected_obj_l1', '')).strip():
         return mark_unverifiable(out, 'OBJ_UNRESOLVED', 'metadata', 'selected_obj_l1이 확정되지 않음')
     obj_l1 = str(row.get('selected_obj_l1', '')).strip() or 'ALL'
+    if obj_l1 == 'ALL' and not has_obj_axis:
+        out['default_applied'] = 'Y'
+        out['default_reason'] = '분류축 없음 → 전체(ALL) 조회 [위험도 낮음]'
     obj_reason = (
         f"objL1={row.get('selected_obj_l1_name','')}[{obj_l1}] "
         f"axis={row.get('selected_obj_l1_axis_id','')}"
     )
     prd_se = normalize_prd_se(row.get('prd_se'), row.get('period'))
+    if not str(row.get('prd_se', '')).strip() and prd_se:
+        note = f"prd_se 미지정 → period 형식에서 '{prd_se}' 추론 [위험도 중간]"
+        out['default_applied'] = 'Y'
+        out['default_reason'] = (out['default_reason'] + '; ' + note).strip('; ')
     comparison = row.get('comparison_period') if mapping_type in {'rate_from_level', 'difference_from_level'} else ''
     if mapping_type in {'rate_from_level', 'difference_from_level'} and not parse_period(comparison):
         return mark_unverifiable(out, 'COMPARISON_PERIOD_MISSING', 'input', '증감 계산 비교 시점 없음')
@@ -575,8 +628,11 @@ def verify_row(row, meta_cache, delay):
         verdict, reason = '판단불가', manual_review_reason
         verdict_code, verdict_stage = 'OBJ_CODE_REVIEW_REQUIRED', 'metadata'
     else:
-        verdict, reason = judge(claim_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.0)
-        verdict_code = 'MATCH' if verdict == '일치' else ('VALUE_MISMATCH' if verdict == '불일치' else 'COMPARISON_FAILED')
+        verdict, reason = judge(compare_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.0, review_pct=5.0)
+        if compare_value != claim_value:
+            reason += f' (방향부호 적용: claim={compare_value})'
+        verdict_code = {'일치': 'MATCH', '불일치': 'VALUE_MISMATCH',
+                        '판정보류': 'WITHIN_UNCERTAINTY_BAND'}.get(verdict, 'COMPARISON_FAILED')
         verdict_stage = 'comparison'
 
     reason_parts = [reason, item_reason, obj_reason, agg_reason, unit_reason]
@@ -597,7 +653,7 @@ def verify_row(row, meta_cache, delay):
         'kosis_actual_raw': actual_raw if actual_raw is not None else '',
         'kosis_actual_value': actual_converted if actual_converted is not None else '',
         'kosis_rows_used': len(data_rows),
-        'value_diff': (actual_converted - claim_value) if actual_converted is not None and claim_value is not None else '',
+        'value_diff': (actual_converted - compare_value) if actual_converted is not None and compare_value is not None else '',
         'verdict': verdict,
         'verdict_code': verdict_code,
         'verdict_stage': verdict_stage,
@@ -653,6 +709,7 @@ def main():
         'claim_value_numeric', 'kosis_obj_l1', 'kosis_obj_l1_name', 'kosis_itm_id', 'kosis_itm_name',
         'kosis_unit', 'kosis_prd_se', 'kosis_period_used', 'kosis_previous_period_used',
         'kosis_actual_raw', 'kosis_actual_value', 'kosis_rows_used', 'value_diff',
+        'default_applied', 'default_reason',
         'verdict', 'verdict_code', 'verdict_stage', 'verdict_reason',
     ]
     final_fields = list(dict.fromkeys(fields + extra_fields))

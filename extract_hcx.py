@@ -469,6 +469,45 @@ def apply_local_explicit_years(result, claim):
     return corrected
 
 
+def apply_local_explicit_months(result, claim):
+    """월간(prd_se=M) 측정값이 연도만 갖고 있을 때, 원문에서 값 바로 앞의 'N월'을 찾아 YYYYMM으로 바인딩한다.
+
+    예: '월간 수출 증가율은 8월(11%), 9월(7.5%), 10월(4.6%)' -> 각 값에 8·9·10월을 매긴다.
+    한 문장에 여러 월값이 나열될 때 모두 같은 연도(마지막 달)로 뭉개지는 버그를 방지한다.
+    """
+    text = norm(claim.get("claim_text"))
+    corrected = 0
+    search_from = 0
+    for measurement in result.get("measurements") or []:
+        if norm(measurement.get("measurement_prd_se")) != "M":
+            continue
+        period = norm(measurement.get("measurement_period"))
+        if not re.fullmatch(r"(?:19|20)\d{2}", period):  # 연도만 있는 경우만 대상
+            continue
+        year = period
+        key = norm(measurement.get("measurement_text"))
+        if key in ("", "-"):
+            key = norm(measurement.get("value"))
+        if key in ("", "-"):
+            continue
+        index = text.find(key, search_from)
+        if index < 0:
+            index = text.find(key)
+        if index < 0:
+            continue
+        search_from = index + len(key)
+        local = text[max(0, index - 12):index]  # 값 바로 앞 창에서 'N월' 탐색
+        months = re.findall(r"(\d{1,2})\s*월", local)
+        if not months:
+            continue
+        month = int(months[-1])
+        if not 1 <= month <= 12:
+            continue
+        measurement["measurement_period"] = f"{year}{month:02d}"
+        corrected += 1
+    return corrected
+
+
 def remove_ungrounded_measurement_periods(result, claim):
     removed = 0
     for measurement in result.get("measurements") or []:
@@ -649,6 +688,7 @@ def extract_claim(api_key, model, claim, effort="none"):
 
     result = normalize_hcx_measurements(result, candidates, text=text)
     apply_local_explicit_years(result, claim)
+    apply_local_explicit_months(result, claim)
     period_removed_count = remove_ungrounded_measurement_periods(result, claim)
     binding_fallback_count = ensure_measurement_bindings(result)
     fallback_count = add_fallback_measurements(result, candidates)
