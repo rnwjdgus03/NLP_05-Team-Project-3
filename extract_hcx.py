@@ -711,8 +711,26 @@ def extract_claim(api_key, model, claim, effort="none"):
     return result
 
 
+_TRADE_RE = re.compile(r"수출|수입|무역수지|무역|교역")
+_FOREIGN_SUBJ = ("미국", "중국", "일본", "유럽", "EU", "독일", "프랑스", "영국", "인도",
+                 "베트남", "대만", "홍콩", "러시아", "캐나다", "호주", "멕시코", "브라질",
+                 "이탈리아", "스페인", "네덜란드", "싱가포르", "태국", "인도네시아", "필리핀",
+                 "아세안", "중동", "남미", "아프리카")
+
+
+def correct_trade_scope(scope, indicator, claim_text):
+    """한국 수출/수입/무역수지가 '해외통계·정책'으로 오분류되는 것을 국내공식통계로 교정.
+    관세청/무역통계로 검증 가능한 국내 공식통계인데 HCX가 '수출=달러=해외'로 착각하는 사례.
+    외국 국가명이 주체로 있으면 교정하지 않는다(진짜 해외 수출 통계 보호)."""
+    if (scope == "해외통계·정책" and _TRADE_RE.search(indicator or "")
+            and not any(c in (claim_text or "") for c in _FOREIGN_SUBJ)):
+        return "국내공식통계"
+    return scope
+
+
 def to_rows(claim, j, model):
     scope, rec = norm(j.get("claim_domain_scope")), norm(j.get("is_recurring_series"))
+    scope = correct_trade_scope(scope, norm(j.get("indicator")), norm(claim.get("claim_text")))
     base = {c: norm(claim.get(c)) for c in ["claim_id", "article_id", "title", "date", "url",
                                             "claim_text", "prev_sentence", "next_sentence"]}
     base.update({
