@@ -512,7 +512,10 @@ def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.
     diff = actual_value - claim_value
     abs_diff = abs(diff)
     pct = abs_diff / max(abs(claim_value), 1e-9) * 100
-    if abs_diff <= tolerance_abs or pct <= tolerance_pct:
+    # 팀 공식 기준(거의 정확일치, 엄격)에 맞춰 상대오차로 판정한다.
+    # 절대오차 지름길(0.5%p)은 1.4% vs 1.31% 같은 큰 상대오차를 일치로 오판해 제거했다.
+    # (골드 역산: 일치 <=1.23%, 불일치 >=5%. tolerance_pct/review_pct로 조정 가능.)
+    if pct <= tolerance_pct:
         return '일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
     if pct <= review_pct:
         return '판정보류', f'차이={abs_diff:.6g}, 차이율={pct:.3g}% (오차밴드 {tolerance_pct}~{review_pct}%, 문맥 검토 필요)'
@@ -631,7 +634,7 @@ def verify_row(row, meta_cache, delay):
         verdict, reason = '판단불가', manual_review_reason
         verdict_code, verdict_stage = 'OBJ_CODE_REVIEW_REQUIRED', 'metadata'
     else:
-        verdict, reason = judge(compare_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.0, review_pct=5.0)
+        verdict, reason = judge(compare_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.5, review_pct=4.0)
         if compare_value != claim_value:
             reason += f' (방향부호 적용: claim={compare_value})'
         verdict_code = {'일치': 'MATCH', '불일치': 'VALUE_MISMATCH',
