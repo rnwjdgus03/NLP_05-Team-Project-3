@@ -622,8 +622,11 @@ def verify_row(row, meta_cache, delay):
         verdict, reason = '판단불가', agg_reason
         verdict_code, verdict_stage = 'ACTUAL_DERIVATION_FAILED', 'data'
     elif not compatible:
-        verdict, reason = '판단불가', compatible_reason
-        verdict_code, verdict_stage = 'UNIT_INCOMPATIBLE', 'unit'
+        # 멘토 조언(단위→랭킹): 단위 불일치를 하드 리젝트하지 않고 후보로 남긴다.
+        # 다만 단위 변환이 안 되면 값 비교가 불가하므로 거짓 일치/불일치는 내지 않고 '판정보류'로 남겨 검토받는다.
+        verdict = '판정보류'
+        reason = compatible_reason + ' (단위 비호환 → 후보 유지·확신 판정 보류, 사람 검토)'
+        verdict_code, verdict_stage = 'UNIT_UNCERTAIN', 'unit'
     elif manual_review:
         verdict, reason = '판단불가', manual_review_reason
         verdict_code, verdict_stage = 'OBJ_CODE_REVIEW_REQUIRED', 'metadata'
