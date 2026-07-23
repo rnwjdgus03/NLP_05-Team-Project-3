@@ -1,0 +1,21 @@
+{
+  "rows": 109,
+  "unique_measurement_ids": 109,
+  "label_changes": 10,
+  "gold_verifiable": {
+    "N": 77,
+    "Y": 32
+  },
+  "gold_measurement_correct": {
+    "Y": 82,
+    "N": 27
+  },
+  "ready": 39,
+  "rejected": 70,
+  "gate_true_positive": 29,
+  "gate_false_positive": 10,
+  "gate_false_negative": 3,
+  "gate_precision": 0.7435897435897436,
+  "gate_recall": 0.90625,
+  "ready_extraction_accuracy": 0.8461538461538461
+}

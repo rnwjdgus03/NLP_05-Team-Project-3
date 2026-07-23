@@ -1,0 +1,38 @@
+{
+  "label_version": "v1",
+  "gate_version": "trade_scope_v1",
+  "source_commit": "0846657",
+  "source": {
+    "path": "outputs\\gold\\gold_measurement_scopefix.csv",
+    "sha256": "3eb7e2fabd22991b0788735cf206b2b4e644639668ece5dba37143a87e3b449a"
+  },
+  "ready": {
+    "path": "outputs\\gold\\gold_measurement_scopefix_kosis_ready.csv",
+    "sha256": "3aec94bd3491fad2a33fc2e015dccf4f72c72246dde96373668a929fd4c5ed86"
+  },
+  "locked": {
+    "path": "outputs\\gold\\gold_measurement_v1_locked.csv",
+    "sha256": "5e3b81133b2f09069b8b8946ffd25cf7bcbe24eda949e723a36d01ecb497fc9a"
+  },
+  "metrics": {
+    "rows": 109,
+    "unique_measurement_ids": 109,
+    "label_changes": 10,
+    "gold_verifiable": {
+      "N": 77,
+      "Y": 32
+    },
+    "gold_measurement_correct": {
+      "Y": 82,
+      "N": 27
+    },
+    "ready": 39,
+    "rejected": 70,
+    "gate_true_positive": 29,
+    "gate_false_positive": 10,
+    "gate_false_negative": 3,
+    "gate_precision": 0.7435897435897436,
+    "gate_recall": 0.90625,
+    "ready_extraction_accuracy": 0.8461538461538461
+  }
+}
