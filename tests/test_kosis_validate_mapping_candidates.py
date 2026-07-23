@@ -9,11 +9,13 @@ from kosis_validate_mapping_candidates import (
     build_candidate_combinations,
     build_claim_context,
     build_kosis_request,
+    _lexical_candidates,
     choose_or_abstain,
     group_official_meta,
     low_priority_reason,
     rank_valid_combinations,
     resolve_table_ambiguity,
+    required_periods_for_row,
     response_matches_request,
     validate_candidate_codes_against_meta,
     validate_mapping_candidates,
@@ -159,6 +161,39 @@ def test_scaled_and_organization_units_are_compatible(claim_unit, kosis_unit):
         required_periods=["2023", "2024"],
     )
     assert result["unit_valid"] is True
+
+
+def test_rate_from_level_accepts_source_level_unit():
+    result = validate_unit_and_period(
+        response_rows(unit="천달러"),
+        expected_unit="%",
+        required_periods=["2023", "2024"],
+        mapping_type="rate_from_level",
+    )
+    assert result["unit_valid"] is True
+
+
+def test_lexical_candidates_do_not_match_one_character_inside_word():
+    ranked = _lexical_candidates(
+        [{"code": "ONE", "name": "대"}, {"code": "EXPORT", "name": "수출액"}],
+        "역대 최대 수출 증가율",
+    )
+    scores = {row["code"]: row["semantic_score"] for row in ranked}
+    assert scores["ONE"] == 0
+    assert scores["EXPORT"] > scores["ONE"]
+
+
+def test_previous_year_is_added_only_for_explicit_year_over_year_claim():
+    assert required_periods_for_row({
+        "period": "202412",
+        "mapping_type": "rate_from_level",
+        "claim_text": "전년 동월 대비 6.6% 증가했다.",
+    }) == ["202412", "202312"]
+    assert required_periods_for_row({
+        "period": "2018",
+        "mapping_type": "rate_from_level",
+        "claim_text": "2018년 이후 매년 5% 증가했다.",
+    }) == ["2018"]
 
 
 def test_claim_context_includes_measurement_scope_fields():

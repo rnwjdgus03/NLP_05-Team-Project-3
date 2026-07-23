@@ -19,6 +19,9 @@ def test_summarize_topk_combines_retrieval_mapping_and_verdict_metrics():
         "mapping_status": "READY",
         "selected_itm_id": "I1",
         "selected_obj_l1": "O1",
+        "response_code_valid": "True",
+        "unit_valid": "True",
+        "period_valid": "True",
     }]
     verified = [{"claim_measurement_id": "m1", "verdict": "일치"}]
 
@@ -27,4 +30,6 @@ def test_summarize_topk_combines_retrieval_mapping_and_verdict_metrics():
     assert result["retrieval_hits"] == 1
     assert result["ready_rows"] == 1
     assert result["item_obj_correct"] == 1
+    assert result["technical_valid_rows"] == 1
+    assert result["technical_item_obj_hits"] == 1
     assert result["verdict_correct"] == 1

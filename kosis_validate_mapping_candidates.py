@@ -255,11 +255,22 @@ def _unit_tokens(value: Any) -> set[str]:
 
 def validate_unit_and_period(
     rows: Iterable[Mapping[str, Any]], *, expected_unit: str | None = None,
-    required_periods: Sequence[str] | None = None,
+    required_periods: Sequence[str] | None = None, mapping_type: str = "direct",
 ) -> dict[str, Any]:
     rows = list(rows or [])
     units = {_first(row, "UNIT_NM", "UNIT", "unit") for row in rows}
-    unit_valid = True if not expected_unit else any(_unit_tokens(expected_unit) & _unit_tokens(unit) for unit in units)
+    if mapping_type in {"rate_from_level", "difference_from_level"}:
+        # The claim unit is derived from two KOSIS level values, so it must not be
+        # compared directly with the source ITEM unit (for example % vs thousand USD).
+        unit_valid = any(
+            _unit_tokens(unit)
+            and not (_unit_tokens(unit) & {"percent", "percentage_point"})
+            for unit in units
+        )
+    else:
+        unit_valid = True if not expected_unit else any(
+            _unit_tokens(expected_unit) & _unit_tokens(unit) for unit in units
+        )
     available = {str(_first(row, "PRD_DE", "PRD", "period")) for row in rows}
     required = {str(x) for x in required_periods or [] if x not in (None, "")}
     missing = sorted(required - available)
@@ -327,6 +338,7 @@ def validate_mapping_candidates(
     expected_unit: str | None = None, required_periods: Sequence[str] | None = None,
     prd_se: str = "Y", item_top_k: int = 3, obj_top_k: int = 2,
     max_combinations: int = 20, margin_threshold: float = 0.10,
+    mapping_type: str = "direct",
 ) -> dict[str, Any]:
     """Small orchestration helper. It performs at most ``max_combinations`` calls."""
     item_candidates = list(item_candidates or [])
@@ -342,8 +354,12 @@ def validate_mapping_candidates(
             if not response:
                 empty_responses += 1
             result.update(response_matches_request(request, response))
-            result.update(validate_unit_and_period(result["matching_rows"], expected_unit=expected_unit,
-                                                   required_periods=required_periods))
+            result.update(validate_unit_and_period(
+                result["matching_rows"], expected_unit=expected_unit,
+                required_periods=required_periods, mapping_type=mapping_type,
+            ))
+            if not result["response_code_valid"]:
+                result["validation_reason"] = "RESPONSE_CODE_MISMATCH"
         except Exception as exc:  # caller controls transport; preserve error without hiding other candidates
             api_errors += 1
             result.update({"response_code_valid": False, "api_valid": False,
@@ -351,6 +367,16 @@ def validate_mapping_candidates(
         attempted.append(result)
     ranked = rank_valid_combinations(attempted)
     decision = choose_or_abstain(ranked, margin_threshold=margin_threshold)
+    required_period_set = {str(value) for value in required_periods or [] if value not in (None, "")}
+    if (
+        mapping_type in {"rate_from_level", "difference_from_level"}
+        and len(required_period_set) < 2
+        and decision.get("mapping_status") == READY
+    ):
+        decision.update(
+            mapping_status=NEEDS_CONFIRMATION,
+            mapping_reason="DERIVATION_BASE_PERIOD_MISSING",
+        )
     if not combinations:
         decision.update(mapping_status=MAPPING_FAILED, mapping_reason="INVALID_COMBINATION")
     elif api_errors == len(combinations):
@@ -409,8 +435,19 @@ def _lexical_candidates(values: Iterable[Mapping[str, Any]], text: str) -> list[
         name = str(value.get("name", ""))
         compact_name = re.sub(r"\s+", "", name).lower()
         name_tokens = set(re.findall(r"[0-9a-zA-Z가-힣]+", name.lower()))
-        score = (1.0 if compact_name and compact_name in normalized else 0.0)
+        # A one-character code name such as "대" or "면" must not match inside
+        # unrelated words such as "역대" or "반도체".
+        score = (1.0 if len(compact_name) >= 2 and compact_name in normalized else 0.0)
         score += len(tokens & name_tokens) / max(1, len(name_tokens))
+        for token in name_tokens:
+            if len(token) < 2 or token in tokens:
+                continue
+            prefix_length = 0
+            for length in range(len(token) - 1, 1, -1):
+                if token[:length] in normalized:
+                    prefix_length = length
+                    break
+            score += 0.75 * prefix_length / len(token)
         out.append({"code": value.get("code", ""), "name": name, "semantic_score": score})
     return sorted(out, key=lambda x: x["semantic_score"], reverse=True)
 
@@ -454,6 +491,27 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
     return ""
 
 
+def _previous_year_period(period: str) -> str:
+    value = str(period or "").strip()
+    if not re.fullmatch(r"\d{4}(?:\d{2})?", value):
+        return ""
+    return f"{int(value[:4]) - 1}{value[4:]}"
+
+
+def required_periods_for_row(row: Mapping[str, Any]) -> list[str]:
+    periods = [str(row.get("period", "")).strip()]
+    comparison = str(row.get("comparison_period", "")).strip()
+    if comparison:
+        periods.append(comparison)
+    elif str(row.get("mapping_type", "")) in {"rate_from_level", "difference_from_level"}:
+        claim_text = str(row.get("claim_text", ""))
+        if re.search(r"전년(?:도|\s*동기|\s*동월)?", claim_text):
+            previous = _previous_year_period(periods[0])
+            if previous:
+                periods.append(previous)
+    return [period for period in dict.fromkeys(periods) if period]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate bounded KOSIS ITEM/OBJ combinations")
     parser.add_argument("--input", required=True)
@@ -467,6 +525,11 @@ def main() -> None:
         "--skip-table-ambiguity",
         action="store_true",
         help="Top-K sweep에서 재사용할 row별 기술 검증 상태를 보존",
+    )
+    parser.add_argument(
+        "--evaluate-all-ranks",
+        action="store_true",
+        help="Evaluate rank 3+ candidates for a Top-K experiment instead of marking them low priority.",
     )
     args = parser.parse_args()
 
@@ -485,7 +548,7 @@ def main() -> None:
             rank = int(str(row.get("candidate_rank", "999")))
         except ValueError:
             rank = 999
-        priority_reason = low_priority_reason(row)
+        priority_reason = "" if args.evaluate_all_ranks else low_priority_reason(row)
         if priority_reason:
             outputs.append({
                 **row,
@@ -503,10 +566,7 @@ def main() -> None:
         obj_candidates = {order: _lexical_candidates(axis["values"], claim_text)
                           for order, axis in grouped["axes"].items()
                           if any(x["semantic_score"] > 0 for x in _lexical_candidates(axis["values"], claim_text))}
-        periods = [str(row.get("period", "")).strip()]
-        comparison = str(row.get("comparison_period", "")).strip()
-        if comparison:
-            periods.append(comparison)
+        periods = required_periods_for_row(row)
 
         def fetch(params: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
             extra = {f"obj_l{level}": params[f"objL{level}"] for level in range(2, 9)
@@ -525,7 +585,8 @@ def main() -> None:
                 item_candidates=item_candidates, obj_candidates=obj_candidates,
                 data_fetcher=fetch, expected_unit=row.get("unit"), required_periods=periods,
                 prd_se=str(row.get("prd_se") or "Y"), item_top_k=args.item_top_k,
-                obj_top_k=args.obj_top_k, max_combinations=args.max_combinations)
+                obj_top_k=args.obj_top_k, max_combinations=args.max_combinations,
+                mapping_type=str(row.get("mapping_type") or "direct"))
         if (
             result.get("mapping_status") == READY
             and not (rank == 1 and row.get("candidate_status") == "READY")

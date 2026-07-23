@@ -79,6 +79,12 @@ def summarize(
     retrieval = retrieval_metrics(gold_rows, candidates, ks=(k,))[0]
     gold = gold_map(gold_rows)
     ready = [row for row in validated if row.get("mapping_status") == "READY"]
+    technical_valid = [
+        row for row in validated
+        if str(row.get("response_code_valid", "")).lower() == "true"
+        and str(row.get("unit_valid", "")).lower() == "true"
+        and str(row.get("period_valid", "")).lower() == "true"
+    ]
     statuses = Counter(row.get("mapping_status") or "EMPTY" for row in validated)
     reasons = Counter(row.get("mapping_reason") or "EMPTY" for row in validated)
     item_ok, item_n = accuracy(ready, gold, "selected_itm_id", "gold_itm_id")
@@ -94,6 +100,19 @@ def summarize(
         and nz(row.get("selected_obj_l1"))
         == nz(gold[nz(row.get("claim_measurement_id"))].get("gold_obj_l1"))
         for row in joint_rows
+    )
+    joint_gold = {
+        measurement_id: row for measurement_id, row in gold.items()
+        if nz(row.get("gold_itm_id")) and nz(row.get("gold_obj_l1"))
+    }
+    technical_joint_hits = sum(
+        any(
+            nz(candidate.get("claim_measurement_id")) == measurement_id
+            and nz(candidate.get("selected_itm_id")) == nz(gold_row.get("gold_itm_id"))
+            and nz(candidate.get("selected_obj_l1")) == nz(gold_row.get("gold_obj_l1"))
+            for candidate in technical_valid
+        )
+        for measurement_id, gold_row in joint_gold.items()
     )
     verdict_rows = [
         row for row in verified
@@ -115,6 +134,7 @@ def summarize(
             if retrieval["gold_labeled"] else ""
         ),
         "ready_rows": len(ready),
+        "technical_valid_rows": len(technical_valid),
         "needs_confirmation_rows": statuses["NEEDS_CONFIRMATION"],
         "api_error_rows": statuses["API_ERROR"],
         "not_evaluated_rows": statuses["NOT_EVALUATED"],
@@ -127,6 +147,8 @@ def summarize(
         "obj_labeled": obj_n,
         "item_obj_correct": joint_ok,
         "item_obj_labeled": len(joint_rows),
+        "technical_item_obj_hits": technical_joint_hits,
+        "technical_item_obj_gold": len(joint_gold),
         "verified_rows": len(verified),
         "verdict_correct": verdict_ok,
         "verdict_labeled": len(verdict_rows),
@@ -142,14 +164,16 @@ def write_report(
     lines = [
         "# KOSIS BGE-M3 Top-K 정식 비교",
         "",
-        "| K | TBL recall | 후보 row | READY | ITEM/OBJ 정답 | verdict 정답 |",
-        "|---:|---:|---:|---:|---:|---:|",
+        "| K | TBL recall | 후보 row | 기술 유효 | READY | 기술 ITEM/OBJ hit | READY ITEM/OBJ 정답 | verdict 정답 |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summary:
         lines.append(
             f"| {row['top_k']} | {row['retrieval_hits']}/{row['retrieval_gold']} "
             f"({float(row['retrieval_recall']):.1%}) | {row['candidate_rows']} | "
-            f"{row['ready_rows']} | {row['item_obj_correct']}/{row['item_obj_labeled']} | "
+            f"{row['technical_valid_rows']} | {row['ready_rows']} | "
+            f"{row['technical_item_obj_hits']}/{row['technical_item_obj_gold']} | "
+            f"{row['item_obj_correct']}/{row['item_obj_labeled']} | "
             f"{row['verdict_correct']}/{row['verdict_labeled']} |"
         )
     recommendation = f"Top-{recommended}" if recommended is not None else "보류(READY 0)"
@@ -231,6 +255,7 @@ def main() -> None:
             "--obj-top-k", args.obj_top_k,
             "--max-combinations", args.max_combinations,
             "--skip-table-ambiguity",
+            "--evaluate-all-ranks",
         ])
     technical = read_csv(technical_path)
     gold_rows = read_csv(gold_path)
