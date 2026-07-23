@@ -27,6 +27,20 @@ def norm(value: Any) -> str:
     return str(value or "").strip()
 
 
+def norm_obj_code(value: Any) -> str:
+    """Normalize gold OBJ cells that accidentally include an axis id.
+
+    Some gold rows were recorded as "<axis_id> <code>" in gold_obj_l1.
+    The prediction column contains only the code, so scoring should compare
+    against the last whitespace-separated token instead of marking a correct
+    OBJ as wrong because of a gold formatting issue.
+    """
+    text = norm(value)
+    if " " in text:
+        return text.split()[-1]
+    return text
+
+
 def candidate_rank(row: Mapping[str, Any]) -> int:
     try:
         return int(float(norm(row.get("candidate_rank")) or "999"))
@@ -113,7 +127,7 @@ def score_item_obj(gold: list[dict[str, str]], validated: list[dict[str, str]]) 
             continue
         ready_count += 1
         expected_itm = norm(expected.get("gold_itm_id"))
-        expected_obj = norm(expected.get("gold_obj_l1"))
+        expected_obj = norm_obj_code(expected.get("gold_obj_l1"))
         predicted_itm = norm(predicted.get("selected_itm_id"))
         predicted_obj = norm(predicted.get("selected_obj_l1"))
 

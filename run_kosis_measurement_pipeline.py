@@ -105,8 +105,8 @@ def main():
     parser.add_argument(
         "--retrieval-mode",
         choices=["auto", "lexical", "hybrid"],
-        default="auto",
-        help="auto는 임베딩 인덱스가 있으면 hybrid+reranker를 사용",
+        default="lexical",
+        help="기본은 재현 가능한 lexical 검색. hybrid/BGE 비교 시에만 명시적으로 hybrid 사용",
     )
     parser.add_argument("--semantic-index", default="data/indexes/kosis_bge_m3")
     parser.add_argument("--semantic-top-k", type=int, default=50)
@@ -122,8 +122,8 @@ def main():
     parser.add_argument(
         "--api-sample-limit",
         type=int,
-        default=5,
-        help="--verify 시 후보 조합 검증 데이터 API 호출 한도. 0이면 무제한; 수치 검증 호출은 별도",
+        default=0,
+        help="--verify 시 후보 조합 검증 데이터 API 호출 한도. 0이면 무제한(기본); 수치 검증 호출은 별도",
     )
     parser.add_argument("--skip-meta", action="store_true", help="table-only offline run")
     parser.add_argument(

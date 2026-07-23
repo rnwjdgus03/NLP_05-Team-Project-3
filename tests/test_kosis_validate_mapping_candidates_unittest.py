@@ -20,6 +20,8 @@ from kosis_validate_mapping_candidates import (
     is_low_priority_candidate,
     response_matches_request,
     resolve_measurement_level_ambiguity,
+    validate_unit_and_period,
+    _merge_seeded_candidates,
     _seeded_obj_candidates,
     validate_candidate_codes_against_meta,
     validate_mapping_candidates,
@@ -232,6 +234,22 @@ class KosisCandidateValidationTests(unittest.TestCase):
         seeded = _seeded_obj_candidates(row, grouped)
         self.assertEqual(seeded[2][0]["code"], "B01")
         self.assertEqual(seeded[1][0]["code"], "A01")
+
+    def test_seeded_candidates_are_hints_not_forced_semantic_winners(self):
+        merged = _merge_seeded_candidates(
+            [{"code": "I_TOTAL", "name": "취업자", "semantic_score": 0.8}],
+            [{"code": "I_RATE", "name": "고용률", "semantic_score": 0.0}],
+        )
+        self.assertEqual(merged[0]["code"], "I_TOTAL")
+        self.assertEqual(merged[1]["code"], "I_RATE")
+        self.assertEqual(merged[1]["semantic_score"], 0.0)
+        self.assertTrue(merged[1]["seeded_hint"])
+
+    def test_unit_family_accepts_common_count_and_currency_variants(self):
+        self.assertTrue(validate_unit_and_period([{"UNIT_NM": "업체"}], expected_unit="개사")["unit_valid"])
+        self.assertTrue(validate_unit_and_period([{"UNIT_NM": "백만달러"}], expected_unit="달러")["unit_valid"])
+        self.assertTrue(validate_unit_and_period([{"UNIT_NM": "건"}], expected_unit="개")["unit_valid"])
+        self.assertFalse(validate_unit_and_period([{"UNIT_NM": "%p"}], expected_unit="%")["unit_valid"])
 
     def test_decisive_rank_one_survives_multiple_ready_alternatives(self):
         rows = [

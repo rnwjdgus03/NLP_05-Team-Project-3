@@ -258,9 +258,39 @@ def response_matches_request(request: Mapping[str, Any], rows: Iterable[Mapping[
 
 def _unit_tokens(value: Any) -> set[str]:
     text = re.sub(r"[\s,()]", "", str(value or "")).lower()
-    aliases = {"%": "percent", "퍼센트": "percent", "백분율": "percent",
-               "명": "person", "천명": "person", "만명": "person",
-               "원": "currency", "천원": "currency", "백만원": "currency", "억원": "currency"}
+    aliases = {
+        "%": "percent",
+        "%p": "percent_point",
+        "퍼센트": "percent",
+        "백분율": "percent",
+        "퍼센트포인트": "percent_point",
+        "명": "person",
+        "천명": "person",
+        "만명": "person",
+        "인": "person",
+        "개": "count",
+        "개사": "organization_count",
+        "사": "organization_count",
+        "업체": "organization_count",
+        "업체수": "organization_count",
+        "기업": "organization_count",
+        "기업수": "organization_count",
+        "대": "count",
+        "건": "count",
+        "건수": "count",
+        "가구": "count",
+        "원": "currency_krw",
+        "천원": "currency_krw",
+        "만원": "currency_krw",
+        "백만원": "currency_krw",
+        "억원": "currency_krw",
+        "조원": "currency_krw",
+        "달러": "currency_usd",
+        "천달러": "currency_usd",
+        "백만달러": "currency_usd",
+        "억달러": "currency_usd",
+        "usd": "currency_usd",
+    }
     return {aliases.get(text, text)} if text else set()
 
 
@@ -546,7 +576,13 @@ def _lexical_candidates(values: Iterable[Mapping[str, Any]], text: str) -> list[
 def _merge_seeded_candidates(
     lexical: Iterable[Mapping[str, Any]], seeded: Iterable[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Put upstream structured candidates into the pool without trusting them."""
+    """Put upstream structured candidates into the pool without trusting them.
+
+    Upstream selected_* values are useful hints, but they are not semantic
+    evidence by themselves.  Do not give them an artificial score boost: API
+    exact-match later only proves that the code is technically queryable, not
+    that it matches the news claim's meaning.
+    """
     merged: dict[str, dict[str, Any]] = {}
     for row in lexical:
         code = str(row.get("code", "")).strip()
@@ -557,8 +593,8 @@ def _merge_seeded_candidates(
         if not code:
             continue
         base = merged.get(code, {})
-        score = max(_score(base), _score(row), 2.0)
-        merged[code] = {**base, **row, "code": code, "semantic_score": score}
+        score = max(_score(base), _score(row))
+        merged[code] = {**base, **row, "code": code, "semantic_score": score, "seeded_hint": True}
     return sorted(merged.values(), key=_score, reverse=True)
 
 
@@ -569,7 +605,8 @@ def _seeded_item_candidates(row: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [{
         "code": code,
         "name": str(row.get("selected_itm_name", "")).strip(),
-        "semantic_score": _score({"semantic_score": row.get("selected_itm_score", "")}) or 2.0,
+        "semantic_score": _score({"semantic_score": row.get("selected_itm_score", "")}),
+        "seeded_hint": True,
     }]
 
 
@@ -593,7 +630,8 @@ def _seeded_obj_candidates(row: Mapping[str, Any], grouped: Mapping[str, Any]) -
         seeded[order].append({
             "code": code,
             "name": str(row.get(f"selected_obj_l{level}_name", "")).strip(),
-            "semantic_score": _score({"semantic_score": row.get(f"selected_obj_l{level}_score", "")}) or 2.0,
+            "semantic_score": _score({"semantic_score": row.get(f"selected_obj_l{level}_score", "")}),
+            "seeded_hint": True,
         })
     return seeded
 
@@ -679,8 +717,8 @@ def main() -> None:
     parser.add_argument("--obj-top-k", type=int, default=2)
     parser.add_argument("--max-combinations", type=int, default=20)
     parser.add_argument("--limit", type=int, default=0, help="Explicit small API sample limit; 0 processes all")
-    parser.add_argument("--api-sample-limit", type=int, default=5,
-                        help="Candidate-validation data API call cap; 0 means no cap (default: 5)")
+    parser.add_argument("--api-sample-limit", type=int, default=0,
+                        help="Candidate-validation data API call cap; 0 means no cap (default)")
     parser.add_argument("--delay", type=float, default=0.12)
     parser.add_argument("--validate-low-priority", action="store_true",
                         help="Also call KOSIS data API for ALTERNATE candidates with rank >= 3")
