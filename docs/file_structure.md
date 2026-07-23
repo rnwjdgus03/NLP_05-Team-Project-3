@@ -39,7 +39,8 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | `crawl_more_categories.py` | 기존 표 인덱스에 특정 카테고리 하위를 추가 크롤링 |
 | `kosis_build_embedding_index.py` | BGE-M3/KURE 임베딩 인덱스 구축 (Colab GPU). 운영 기본은 lexical이며 임베딩은 재현·재검토용으로 유지 |
 | `kosis_validate_mapping_candidates.py` | Top-K 후보의 공식 ITEM/OBJ 메타, 기간, 단위, API 응답 코드를 검증하고 불확실하면 보류 |
-| `run_kosis_topk_experiment.py` | BGE 후보 Top-1·2·3·5를 같은 골드와 Mapping-end 조건으로 비교. 2026-07-23 실험의 BGE 내부 최솟값은 Top-2 |
+| `run_kosis_topk_experiment.py` | lexical 또는 hybrid 후보 Top-1·2·3·5를 같은 골드와 Mapping-end 조건으로 비교 |
+| `compare_kosis_topk_modes.py` | 동일 조건으로 생성한 lexical/BGE Top-K 집계를 합치고 검색 방식과 최소 K를 선택 |
 | `kosis_metadata_summary.py` | 후보 표들의 분류축·항목·단위를 조회해 요약 CSV로 정리 |
 | `merge_table_summaries.py` | 팀원별로 나눠 크롤링한 table_summary들을 하나로 병합 |
 | `merge_metadata_summaries.py` | 팀원별로 나눠 조회한 metadata_summary들을 병합 |
@@ -64,6 +65,7 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | `score_gold.py` | 골드 vs 파이프라인 채점 (단계별 정확도·recall@k) |
 | `docs/kosis_bge_topk_result_20260723.md` | READY 39건 BGE Top-1·2·3·5와 Mapping-end 최종 집계 및 해석 |
 | `docs/results/kosis_bge_topk_summary_20260723.csv` | 위 실험의 공개 가능한 집계 수치. 행 단위 골드와 기사 데이터는 포함하지 않음 |
+| `notebooks/kosis_lexical_vs_bge_colab.ipynb` | 기존 BGE 결과를 재사용해 READY 39건의 lexical Top-K와 Mapping-end를 직접 비교 |
 | `build_kosis_holdout2_evaluation.py` | 2차 독립 홀드아웃 골드 검증·공식 지표 재생성 |
 | `measurement_regression.py` | measurement-first 추출 회귀 배치 준비·감사 |
 

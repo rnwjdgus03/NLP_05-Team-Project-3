@@ -1,4 +1,4 @@
-"""Run one BGE retrieval and compare Mapping-end at Top-1/2/3/5.
+"""Run one retrieval mode and compare Mapping-end at Top-1/2/3/5.
 
 The expensive table retrieval and row-level KOSIS combination validation are
 performed once at max(K). Each Top-K branch then reapplies the cross-table
@@ -160,9 +160,11 @@ def write_report(
     summary: list[dict[str, object]],
     retrieval_knee: int,
     recommended: int | None,
+    retrieval_mode: str = "hybrid",
 ) -> None:
+    title = "BGE-M3 hybrid" if retrieval_mode == "hybrid" else "lexical"
     lines = [
-        "# KOSIS BGE-M3 Top-K 정식 비교",
+        f"# KOSIS {title} Top-K 정식 비교",
         "",
         "| K | TBL recall | 후보 row | 기술 유효 | READY | 기술 ITEM/OBJ hit | READY ITEM/OBJ 정답 | verdict 정답 |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -194,7 +196,8 @@ def main() -> None:
     parser.add_argument("--input", required=True, help="READY 39 measurement CSV")
     parser.add_argument("--gold", required=True, help="locked gold measurement CSV")
     parser.add_argument("--table-index", required=True)
-    parser.add_argument("--semantic-index", required=True)
+    parser.add_argument("--retrieval-mode", choices=["lexical", "hybrid"], default="hybrid")
+    parser.add_argument("--semantic-index", default="")
     parser.add_argument("--out-dir", default="outputs/runs/bge_topk_sweep")
     parser.add_argument("--ks", type=int, nargs="+", default=[1, 2, 3, 5])
     parser.add_argument("--semantic-top-k", type=int, default=50)
@@ -212,6 +215,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.retrieval_mode == "hybrid" and not args.semantic_index:
+        parser.error("--semantic-index is required when --retrieval-mode=hybrid")
+
     ks = sorted(set(args.ks))
     if not ks or ks[0] < 1:
         parser.error("--ks에는 1 이상의 정수가 필요합니다")
@@ -225,20 +231,24 @@ def main() -> None:
     base_candidates = base_dir / f"{stem}_kosis_candidates_with_meta.csv"
     meta_index = base_dir / f"{stem}_kosis_meta_index.csv"
     if not args.reuse_base:
-        run([
+        pipeline_command = [
             sys.executable, ROOT / "run_kosis_measurement_pipeline.py",
             "--input", input_path,
             "--table-index", Path(args.table_index).resolve(),
             "--out-dir", base_dir,
             "--top-tables", max_k,
             "--top-rank-for-meta", max_k,
-            "--retrieval-mode", "hybrid",
-            "--semantic-index", Path(args.semantic_index).resolve(),
-            "--semantic-top-k", args.semantic_top_k,
-            "--rerank-top-k", args.rerank_top_k,
-            "--device", args.device,
+            "--retrieval-mode", args.retrieval_mode,
             "--delay", args.delay,
-        ])
+        ]
+        if args.retrieval_mode == "hybrid":
+            pipeline_command.extend([
+                "--semantic-index", Path(args.semantic_index).resolve(),
+                "--semantic-top-k", args.semantic_top_k,
+                "--rerank-top-k", args.rerank_top_k,
+                "--device", args.device,
+            ])
+        run(pipeline_command)
     for required in (base_candidates, meta_index):
         if not required.exists():
             raise FileNotFoundError(f"필수 base 산출물이 없습니다: {required}")
@@ -279,7 +289,9 @@ def main() -> None:
             "--delay", args.delay,
         ])
         verified = read_csv(verified_path)
-        summary.append(summarize(k, gold_rows, candidates, validated, verified))
+        row = summarize(k, gold_rows, candidates, validated, verified)
+        row = {"retrieval_mode": args.retrieval_mode, **row}
+        summary.append(row)
 
     max_hits = max(row["retrieval_hits"] for row in summary)
     retrieval_knee = min(
@@ -296,7 +308,10 @@ def main() -> None:
     else:
         recommended = None
     write_csv(out_dir / "topk_summary.csv", summary)
-    write_report(out_dir / "topk_report.md", summary, retrieval_knee, recommended)
+    write_report(
+        out_dir / "topk_report.md", summary, retrieval_knee, recommended,
+        retrieval_mode=args.retrieval_mode,
+    )
     print(f"summary={out_dir / 'topk_summary.csv'}")
     print(f"report={out_dir / 'topk_report.md'}")
     print(f"retrieval_knee_top_k={retrieval_knee}")
