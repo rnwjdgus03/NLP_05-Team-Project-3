@@ -90,6 +90,11 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
         "newEstPrdCnt": new_est_prd_cnt,
         "format": "json",
     }
+    for level in range(2, 9):
+        py_key = f"obj_l{level}"
+        api_key = f"objL{level}"
+        if py_key in extra and api_key not in extra:
+            extra[api_key] = extra.pop(py_key)
     params.update(extra)
     res = requests.get(DATA_URL, params=params, timeout=10)
     res.raise_for_status()

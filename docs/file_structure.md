@@ -58,6 +58,7 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | 파일 | 하는 일 |
 |---|---|
 | `make_gold_templates.py` | 골드 라벨 시트 템플릿 생성 (사람이 gold_ 컬럼만 채움) |
+| `lock_gold_measurement.py` | scope 보정 게이트와 라벨 기준을 병합해 골드 v1·감사·지표를 동결 |
 | `score_gold.py` | 골드 vs 파이프라인 채점 (단계별 정확도·recall@k) |
 | `build_kosis_holdout2_evaluation.py` | 2차 독립 홀드아웃 골드 검증·공식 지표 재생성 |
 | `measurement_regression.py` | measurement-first 추출 회귀 배치 준비·감사 |
@@ -97,8 +98,8 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | `data/` | 원천·중간 데이터 (`chosun_full.csv`=원천 기사 2,705, `data/claims/`, `data/archive/`) |
 | `outputs/` | 실행 결과 (`outputs/runs/`, `outputs/gold/`, `outputs/bteam_*` 홀드아웃·검토) — 아래 상세 |
 | `docs/` | 문서 (이 지도, 파이프라인 설명, 골드 스펙, 멘토 브리핑, KOSIS 파라미터 가이드) |
-| `tests/` | pytest 테스트 (80개). `pytest` 한 줄로 실행 |
-| `notebooks/` | `kosis_bge_colab.ipynb` — 임베딩 인덱스 구축용 Colab 노트북 |
+| `tests/` | pytest 테스트 (106개). `pytest` 한 줄로 실행 |
+| `notebooks/` | BGE 인덱스 구축 및 Top-K Mapping-end 비교용 Colab 노트북 |
 | `legacy/` | 옛 regex 파이프라인·1회성 스크립트 보관 (현행 아님) |
 | `logs/` | 작업 로그·트러블슈팅 기록 |
 
@@ -136,10 +137,14 @@ A팀이 준 claim 데이터와 B팀 필터링 입력.
 - `*_kosis_meta_index.csv`: 후보 표의 obj/itm 코드 상세
 - `*_kosis_candidates_with_meta.csv`: 메타 해소된 최종 후보
 - `*_kosis_verified.csv`: 최종 verdict
+- `bge_topk_mapping_end/top1|2|3|5/`: Top-K별 후보·매핑·verdict 비교
 
 ## `outputs/gold/`
 
 - `gold_is_claim.csv`, `gold_measurement.csv`: 골드 라벨 시트 (사람이 gold_ 컬럼 채움)
+- `gold_measurement_v1_locked.csv`: 기준을 통일해 동결한 109행 measurement 골드
+- `gold_measurement_scopefix_kosis_ready.csv`: Top-K 정식 실험 입력 39행
+- `bge_m3_topk_1_2_3_5_*`: 기존 후보 산출물 기준 예비 비교
 
 ## `outputs/bteam_review/`
 

@@ -116,6 +116,9 @@ def main():
     parser.add_argument("--no-reranker", action="store_true")
     parser.add_argument("--delay", type=float, default=0.12)
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--item-top-k", type=int, default=3)
+    parser.add_argument("--obj-top-k", type=int, default=2)
+    parser.add_argument("--max-combinations", type=int, default=20)
     parser.add_argument("--skip-meta", action="store_true", help="table-only offline run")
     parser.add_argument(
         "--reuse-table-candidates",
@@ -134,6 +137,7 @@ def main():
     top_tables = out_dir / f"{stem}_kosis_top_tables.csv"
     meta_index = out_dir / f"{stem}_kosis_meta_index.csv"
     final_candidates = out_dir / f"{stem}_kosis_candidates_with_meta.csv"
+    validated_candidates = out_dir / f"{stem}_kosis_validated_mappings.csv"
     verified = out_dir / f"{stem}_kosis_verified.csv"
 
     run(
@@ -227,9 +231,27 @@ def main():
         run(
             [
                 sys.executable,
-                SCRIPT_DIR / "kosis_verify_claim_values.py",
+                SCRIPT_DIR / "kosis_validate_mapping_candidates.py",
                 "--input",
                 final_candidates,
+                "--meta-index",
+                meta_index,
+                "--output",
+                validated_candidates,
+                "--item-top-k",
+                args.item_top_k,
+                "--obj-top-k",
+                args.obj_top_k,
+                "--max-combinations",
+                args.max_combinations,
+            ]
+        )
+        run(
+            [
+                sys.executable,
+                SCRIPT_DIR / "kosis_verify_claim_values.py",
+                "--input",
+                validated_candidates,
                 "--output",
                 verified,
                 "--delay",
@@ -239,6 +261,8 @@ def main():
     else:
         print("verification=skipped (add --verify after reviewing READY candidates)")
     print(f"final_candidates={final_candidates}")
+    if args.verify:
+        print(f"validated_mappings={validated_candidates}")
 
 
 if __name__ == "__main__":

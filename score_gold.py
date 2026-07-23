@@ -70,23 +70,100 @@ def score_gate(rows):
 
 
 # ---------- ③ 검색 recall@k ----------
-def score_retrieval(gold_rows, cand_rows):
+def retrieval_metrics(gold_rows, cand_rows, ks=(1, 2, 3, 5)):
     gmap = {r["claim_measurement_id"]: nz(r.get("gold_tbl_id"))
             for r in gold_rows if nz(r.get("gold_tbl_id"))}
-    if not gmap:
-        print("\n③ 검색: gold_tbl_id 채워진 행 없음"); return
     rank_of = defaultdict(lambda: 999)
+    covered = set()
     for c in cand_rows:
         mid = c.get("claim_measurement_id")
+        if mid in gmap:
+            covered.add(mid)
         if mid in gmap and nz(c.get("tbl_id")) == gmap[mid]:
             try:
                 rank_of[mid] = min(rank_of[mid], int(c.get("candidate_rank", "999")))
             except ValueError:
                 pass
+
+    rows = []
+    for k in sorted(set(ks)):
+        hits = sum(1 for mid in gmap if rank_of[mid] <= k)
+        candidate_rows = sum(
+            1 for row in cand_rows
+            if str(row.get("candidate_rank", "")).isdigit()
+            and int(row["candidate_rank"]) <= k
+        )
+        rows.append({
+            "top_k": k,
+            "gold_labeled": len(gmap),
+            "gold_candidate_covered": len(covered),
+            "hits": hits,
+            "recall": hits / len(gmap) if gmap else None,
+            "covered_recall": hits / len(covered) if covered else None,
+            "candidate_rows": candidate_rows,
+        })
+    return rows
+
+
+def write_retrieval_metrics(path, rows):
+    if not path:
+        return
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "top_k", "gold_labeled", "gold_candidate_covered", "hits",
+            "recall", "covered_recall", "candidate_rows",
+        ])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_candidate_slices(output_dir, cand_rows, ks):
+    if not output_dir or not cand_rows:
+        return
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(cand_rows[0])
+    for k in sorted(set(ks)):
+        selected = [
+            row for row in cand_rows
+            if str(row.get("candidate_rank", "")).isdigit()
+            and int(row["candidate_rank"]) <= k
+        ]
+        with (output_dir / f"kosis_table_candidates_top{k}.csv").open(
+            "w", encoding="utf-8-sig", newline=""
+        ) as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(selected)
+
+
+def score_retrieval(
+    gold_rows,
+    cand_rows,
+    ks=(1, 2, 3, 5),
+    metrics_out="",
+    slices_dir="",
+):
+    gmap = {r["claim_measurement_id"]: nz(r.get("gold_tbl_id"))
+            for r in gold_rows if nz(r.get("gold_tbl_id"))}
+    if not gmap:
+        print("\n③ 검색: gold_tbl_id 채워진 행 없음"); return []
+    if not cand_rows:
+        print("\n③ 검색: candidate CSV가 없어 채점하지 않음"); return []
+
+    metrics = retrieval_metrics(gold_rows, cand_rows, ks)
     print(f"\n③ 검색 recall@k ({len(gmap)}건 정답표 라벨)")
-    for k in (1, 5, 10):
-        hit = sum(1 for mid in gmap if rank_of[mid] <= k)
-        print(f"  recall@{k}: {pct(hit, len(gmap))}")
+    for row in metrics:
+        print(
+            f"  recall@{row['top_k']}: {pct(row['hits'], row['gold_labeled'])}"
+            f" | 후보 생성 coverage: {pct(row['gold_candidate_covered'], row['gold_labeled'])}"
+            f" | 후보 행: {row['candidate_rows']}"
+        )
+    write_retrieval_metrics(metrics_out, metrics)
+    write_candidate_slices(slices_dir, cand_rows, ks)
+    return metrics
 
 
 # ---------- ④ 판정 ----------
@@ -95,6 +172,8 @@ def score_verdict(gold_rows, verified_rows):
             for r in gold_rows if nz(r.get("gold_verdict"))}
     if not gmap:
         print("\n④ 판정: gold_verdict 채워진 행 없음"); return
+    if not verified_rows:
+        print("\n④ 판정: verified CSV가 없어 채점하지 않음"); return
     vmap = {r.get("claim_measurement_id"): nz(r.get("verdict")) for r in verified_rows}
     common = [m for m in gmap if m in vmap]
     correct = sum(1 for m in common if gmap[m] == vmap[m])
@@ -111,6 +190,9 @@ def main():
     ap.add_argument("--gold-isclaim", default="outputs/gold/gold_is_claim.csv")
     ap.add_argument("--candidates", default="")
     ap.add_argument("--verified", default="")
+    ap.add_argument("--retrieval-k", type=int, nargs="+", default=[1, 2, 3, 5])
+    ap.add_argument("--retrieval-metrics-out", default="")
+    ap.add_argument("--retrieval-slices-dir", default="")
     a = ap.parse_args()
 
     print("=" * 60)
@@ -119,7 +201,13 @@ def main():
     score_isclaim(read(a.gold_isclaim))
     gm = read(a.gold_measurement)
     score_gate(gm)
-    score_retrieval(gm, read(a.candidates))
+    score_retrieval(
+        gm,
+        read(a.candidates),
+        ks=a.retrieval_k,
+        metrics_out=a.retrieval_metrics_out,
+        slices_dir=a.retrieval_slices_dir,
+    )
     score_verdict(gm, read(a.verified))
     print("\n" + "=" * 60)
 

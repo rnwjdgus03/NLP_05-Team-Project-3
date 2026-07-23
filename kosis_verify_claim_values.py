@@ -530,9 +530,16 @@ def verify_row(row, meta_cache, delay):
     compare_value = signed_claim_value(row, claim_value)
     out['claim_value_numeric'] = claim_value if claim_value is not None else ''
 
-    if str(row.get('candidate_rank', '')).strip() != '1':
+    if row.get('mapping_status') and row.get('mapping_status') != 'READY':
+        return mark_unverifiable(
+            out,
+            row.get('mapping_status'),
+            'mapping',
+            row.get('mapping_reason', '확정 매핑이 아님'),
+        )
+    if not row.get('mapping_status') and str(row.get('candidate_rank', '')).strip() != '1':
         return mark_unverifiable(out, 'NOT_TOP_CANDIDATE', 'candidate', 'candidate_rank=1이 아님')
-    if row.get('candidate_status') != 'READY':
+    if not row.get('mapping_status') and row.get('candidate_status') != 'READY':
         code = row.get('candidate_status_code') or 'CANDIDATE_NOT_READY'
         reason = row.get('candidate_status_reason') or '후보가 READY 상태가 아님'
         return mark_unverifiable(out, code, 'candidate', reason)
@@ -681,7 +688,10 @@ def main():
     inp = Path(args.input).expanduser()
     outp = Path(args.output).expanduser() if args.output else inp.with_name(inp.stem.replace('_kosis_index_candidates_with_meta', '') + '_kosis_verified.csv')
     rows, fields = read_csv(inp)
-    rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
+    if any(str(r.get('mapping_status', '')).strip() for r in rows):
+        rows = [r for r in rows if r.get('mapping_status') == 'READY']
+    else:
+        rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
     if args.skip_empty_value:
         rows = [r for r in rows if parse_number(r.get('value')) is not None]
     if args.limit:
