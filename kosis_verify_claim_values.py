@@ -497,7 +497,8 @@ def signed_claim_value(row, magnitude):
     return magnitude
 
 
-def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0):
+def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0,
+          pending_abs=None, pending_pct=None):
     """3구간 판정: 일치 / 판정보류(오차밴드) / 불일치.
 
     - 일치: 절대오차 tolerance_abs 이내 또는 상대오차 tolerance_pct% 이내
@@ -517,9 +518,25 @@ def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.
     # (골드 역산: 일치 <=1.23%, 불일치 >=5%. tolerance_pct/review_pct로 조정 가능.)
     if pct <= tolerance_pct:
         return '일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
+    if ((pending_abs is not None and abs_diff <= pending_abs)
+            or (pending_pct is not None and pct <= pending_pct)):
+        return '판정보류', f'오차범위 검토 필요: 차이={abs_diff:.6g}, 차이율={pct:.3g}%'
     if pct <= review_pct:
         return '판정보류', f'차이={abs_diff:.6g}, 차이율={pct:.3g}% (오차밴드 {tolerance_pct}~{review_pct}%, 문맥 검토 필요)'
     return '불일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
+
+
+def annual_context_month_period_mismatch(row):
+    period = parse_period(row.get('period'))
+    if len(period) != 6:
+        return False, ''
+    text = str(row.get('claim_text') or '')
+    year = period[:4]
+    has_annual_context = year in text and any(token in text for token in ('연간', '한 해', '가운데', '동안', '전체'))
+    explicit_month = bool(re.search(rf'{year}\s*년\s*(0?[1-9]|1[0-2])\s*월', text))
+    if has_annual_context and not explicit_month:
+        return True, f'연간 문맥인데 measurement_period={period}가 월 단위로 추출되어 수동 확인 필요'
+    return False, ''
 
 
 def verify_row(row, meta_cache, delay):
@@ -530,16 +547,28 @@ def verify_row(row, meta_cache, delay):
     compare_value = signed_claim_value(row, claim_value)
     out['claim_value_numeric'] = claim_value if claim_value is not None else ''
 
-    if str(row.get('candidate_rank', '')).strip() != '1':
-        return mark_unverifiable(out, 'NOT_TOP_CANDIDATE', 'candidate', 'candidate_rank=1이 아님')
-    if row.get('candidate_status') != 'READY':
-        code = row.get('candidate_status_code') or 'CANDIDATE_NOT_READY'
-        reason = row.get('candidate_status_reason') or '후보가 READY 상태가 아님'
-        return mark_unverifiable(out, code, 'candidate', reason)
+    if row.get('mapping_status'):
+        if row.get('mapping_status') != 'READY':
+            return mark_unverifiable(
+                out,
+                row.get('mapping_status') or 'MAPPING_NOT_READY',
+                'mapping',
+                row.get('mapping_reason') or '확정 매핑이 아님',
+            )
+    else:
+        if str(row.get('candidate_rank', '')).strip() != '1':
+            return mark_unverifiable(out, 'NOT_TOP_CANDIDATE', 'candidate', 'candidate_rank=1이 아님')
+        if row.get('candidate_status') != 'READY':
+            code = row.get('candidate_status_code') or 'CANDIDATE_NOT_READY'
+            reason = row.get('candidate_status_reason') or '후보가 READY 상태가 아님'
+            return mark_unverifiable(out, code, 'candidate', reason)
     if claim_value is None:
         return mark_unverifiable(out, 'VALUE_MISSING', 'input', 'claim value가 비어 있음')
     if not parse_period(row.get('period')):
         return mark_unverifiable(out, 'PERIOD_MISSING', 'input', 'measurement period가 없음')
+    period_mismatch, period_mismatch_reason = annual_context_month_period_mismatch(row)
+    if period_mismatch:
+        return mark_unverifiable(out, 'PERIOD_GRANULARITY_REVIEW', 'input', period_mismatch_reason)
     mapping_type = str(row.get('mapping_type', '')).strip()
     if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level'}:
         return mark_unverifiable(
@@ -569,6 +598,11 @@ def verify_row(row, meta_cache, delay):
     if obj_l1 == 'ALL' and not has_obj_axis:
         out['default_applied'] = 'Y'
         out['default_reason'] = '분류축 없음 → 전체(ALL) 조회 [위험도 낮음]'
+    extra_obj = {
+        f'obj_l{level}': str(row.get(f'selected_obj_l{level}', '')).strip()
+        for level in range(2, 9)
+        if str(row.get(f'selected_obj_l{level}', '')).strip()
+    }
     obj_reason = (
         f"objL1={row.get('selected_obj_l1_name','')}[{obj_l1}] "
         f"axis={row.get('selected_obj_l1_axis_id','')}"
@@ -592,6 +626,7 @@ def verify_row(row, meta_cache, delay):
             prd_se=prd_se,
             new_est_prd_cnt=60 if prd_se == 'M' and comparison else (12 if prd_se == 'M' else 8),
             **prd_params,
+            **extra_obj,
         )
         time.sleep(delay)
     except Exception as exc:
@@ -605,6 +640,37 @@ def verify_row(row, meta_cache, delay):
             kosis_itm_name=item.get('ITM_NM', ''),
             kosis_prd_se=prd_se,
         )
+
+    if not data:
+        return mark_unverifiable(
+            out,
+            'EMPTY_RESPONSE',
+            'api',
+            'KOSIS 응답이 비어 있음',
+            kosis_obj_l1=obj_l1,
+            kosis_itm_id=item.get('ITM_ID', ''),
+            kosis_itm_name=item.get('ITM_NM', ''),
+            kosis_prd_se=prd_se,
+        )
+
+    expected_codes = {'ITM_ID': str(item.get('ITM_ID', '')), 'C1': obj_l1}
+    expected_codes.update({
+        f'C{level}': value
+        for level in range(2, 9)
+        if (value := extra_obj.get(f'obj_l{level}'))
+    })
+    exact_data = [
+        record for record in data
+        if all(str(record.get(key, '')) == str(value) for key, value in expected_codes.items())
+    ]
+    if data and not exact_data:
+        return mark_unverifiable(
+            out,
+            'RESPONSE_CODE_MISMATCH',
+            'api',
+            'KOSIS 응답 ITM_ID/C1~C8이 확정 요청 코드와 일치하지 않음',
+        )
+    data = exact_data
 
     data_rows = clean_data_rows(data)
     actual_raw, actual_period, previous_period, agg_reason = derive_actual(
@@ -664,7 +730,12 @@ def verify_row(row, meta_cache, delay):
         'verdict_code': verdict_code,
         'verdict_stage': verdict_stage,
         'verdict_reason': ' / '.join(p for p in reason_parts if p),
+        'mapping_status': row.get('mapping_status', ''),
+        'mapping_basis': row.get('mapping_basis') or 'upstream candidate validation',
     })
+    for level in range(2, 9):
+        out[f'kosis_obj_l{level}'] = row.get(f'selected_obj_l{level}', '')
+        out[f'kosis_obj_l{level}_name'] = row.get(f'selected_obj_l{level}_name', '')
     return out
 
 
@@ -681,7 +752,10 @@ def main():
     inp = Path(args.input).expanduser()
     outp = Path(args.output).expanduser() if args.output else inp.with_name(inp.stem.replace('_kosis_index_candidates_with_meta', '') + '_kosis_verified.csv')
     rows, fields = read_csv(inp)
-    rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
+    if any(str(r.get('mapping_status', '')).strip() for r in rows):
+        rows = [r for r in rows if r.get('mapping_status') == 'READY']
+    else:
+        rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
     if args.skip_empty_value:
         rows = [r for r in rows if parse_number(r.get('value')) is not None]
     if args.limit:
@@ -713,9 +787,13 @@ def main():
 
     extra_fields = [
         'claim_value_numeric', 'kosis_obj_l1', 'kosis_obj_l1_name', 'kosis_itm_id', 'kosis_itm_name',
+        'kosis_obj_l2', 'kosis_obj_l2_name', 'kosis_obj_l3', 'kosis_obj_l3_name',
+        'kosis_obj_l4', 'kosis_obj_l4_name', 'kosis_obj_l5', 'kosis_obj_l5_name',
+        'kosis_obj_l6', 'kosis_obj_l6_name', 'kosis_obj_l7', 'kosis_obj_l7_name',
+        'kosis_obj_l8', 'kosis_obj_l8_name',
         'kosis_unit', 'kosis_prd_se', 'kosis_period_used', 'kosis_previous_period_used',
         'kosis_actual_raw', 'kosis_actual_value', 'kosis_rows_used', 'value_diff',
-        'default_applied', 'default_reason',
+        'default_applied', 'default_reason', 'mapping_status', 'mapping_basis',
         'verdict', 'verdict_code', 'verdict_stage', 'verdict_reason',
     ]
     final_fields = list(dict.fromkeys(fields + extra_fields))

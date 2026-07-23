@@ -1,0 +1,7 @@
+﻿claim_measurement_id,issues,gold_tbl_id,gold_itm_id,gold_obj_l1,gold_verdict,gold_actual_value,measurement_indicator,measurement_text,claim_text
+A0006-C006-m1,gold_itm_id_missing;gold_obj_l1_missing;gold_verdict_missing;gold_actual_value_missing,DT_F_Y160,,,,,수입 증감률,1.60%,2024년에는 에너지 수입이 감소하면서 전체 수입이 전년 대비 1.6% 감소한 덕에 무역수지가 개선됐다.
+A0006-C007-m1,gold_itm_id_missing;gold_obj_l1_missing;gold_verdict_missing;gold_actual_value_missing,DT_127005_006,,,,,무역수지,697억 달러,이에 2018년(697억 달러 흑자) 이후 최대 흑자를 기록하게 됐다.
+A0006-C011-m1,gold_obj_l1_missing;gold_actual_value_missing,DT_1R11001_FRM101,13103112831T1,,불일치,,자동차 수출,708억 달러,"자동차 수출은 하반기 주요 완성차·부품업계 파업 등에 따른 일부 생산 차질 영향으로 전년도와 보합세인 708억 달러(-0.1%)를 기록하였으며, 2년 연속 700억 달러 이상의 호실적을 이어갔다."
+A0006-C011-m2,gold_obj_l1_missing;gold_actual_value_missing,DT_1R11001_FRM101,13103112831T1,,불일치,,자동차 수출 증감률,0.10%,"자동차 수출은 하반기 주요 완성차·부품업계 파업 등에 따른 일부 생산 차질 영향으로 전년도와 보합세인 708억 달러(-0.1%)를 기록하였으며, 2년 연속 700억 달러 이상의 호실적을 이어갔다."
+A0006-C019-m1,gold_obj_l1_contains_space_maybe_multi_axis,DT_092_115_2009_S023,13103131003T1,13101131003A 13102131003A.AF11100000,불일치,31.12%,수출액 증감률,31.50%,12월 수출도 한국의 최대 수출 품목인 반도체가 31.5% 증가한 145억 달러를 기록하며 호실적을 이끌었다.
+A0006-C019-m2,gold_obj_l1_contains_space_maybe_multi_axis,DT_092_115_2009_S023,13103131003T1,13101131003A 13102131003A.AF11100000,일치,145.1억 달러,수출액,145억 달러,12월 수출도 한국의 최대 수출 품목인 반도체가 31.5% 증가한 145억 달러를 기록하며 호실적을 이끌었다.
