@@ -12,8 +12,15 @@ KOSIS Open API 호출 테스트 스크립트
 import os
 import re
 import json
-import requests
-from dotenv import load_dotenv
+try:
+    import requests
+except ImportError:
+    requests = None
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        return False
 
 load_dotenv()  # 같은 폴더(또는 상위 폴더)의 .env 파일을 읽어서 환경변수로 등록
 
@@ -21,6 +28,8 @@ API_KEY = os.environ.get("KOSIS_API_KEY")
 
 
 def _require_api_key():
+    if requests is None:
+        raise RuntimeError("requests 패키지가 없어 KOSIS API를 호출할 수 없습니다.")
     if not API_KEY:
         raise RuntimeError(
             "KOSIS_API_KEY가 없음. .env 파일에 KOSIS_API_KEY=발급받은키 형태로 추가하세요."
@@ -48,6 +57,22 @@ def _parse_kosis_json(text):
     return parsed
 
 
+class KosisAPIResponseError(RuntimeError):
+    """KOSIS returned an application-level error inside an HTTP 200 response."""
+
+
+def _raise_for_kosis_error(rows):
+    error_keys = ("err", "ERR", "ERROR", "error", "ERR_CODE", "ERROR_CODE")
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        key = next((name for name in error_keys if row.get(name) not in (None, "", "0", 0)), None)
+        if key:
+            message = row.get("errMsg") or row.get("ERR_MSG") or row.get("message") or row.get(key)
+            raise KosisAPIResponseError(f"KOSIS API error: {message}")
+    return rows
+
+
 def get_list(vw_cd="MT_ZTITLE", parent_id=""):
     """
     통계목록 API - 카테고리를 순회하며 목록/통계표를 탐색.
@@ -67,7 +92,7 @@ def get_list(vw_cd="MT_ZTITLE", parent_id=""):
     }
     res = requests.get(LIST_URL, params=params, timeout=10)
     res.raise_for_status()
-    return _parse_kosis_json(res.text)
+    return _raise_for_kosis_error(_parse_kosis_json(res.text))
 
 
 def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3, **extra):
@@ -87,13 +112,21 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
         "objL1": obj_l1,
         "itmId": itm_id,
         "prdSe": prd_se,
-        "newEstPrdCnt": new_est_prd_cnt,
         "format": "json",
     }
-    params.update(extra)
+    for level in range(1, 9):
+        py_key = f"obj_l{level}"
+        api_key = f"objL{level}"
+        if py_key in extra and api_key not in extra:
+            extra[api_key] = extra.pop(py_key)
+    params.update({key: value for key, value in extra.items() if value not in (None, "")})
+    has_range = params.get("startPrdDe") not in (None, "") or params.get("endPrdDe") not in (None, "")
+    if not has_range and new_est_prd_cnt not in (None, ""):
+        params["newEstPrdCnt"] = new_est_prd_cnt
+    params = {key: value for key, value in params.items() if value not in (None, "")}
     res = requests.get(DATA_URL, params=params, timeout=10)
     res.raise_for_status()
-    return _parse_kosis_json(res.text)
+    return _raise_for_kosis_error(_parse_kosis_json(res.text))
 
 
 def get_meta(org_id, tbl_id, meta_type="ITM"):
@@ -114,7 +147,7 @@ def get_meta(org_id, tbl_id, meta_type="ITM"):
     }
     res = requests.get(META_URL, params=params, timeout=10)
     res.raise_for_status()
-    return _parse_kosis_json(res.text)
+    return _raise_for_kosis_error(_parse_kosis_json(res.text))
 
 
 def summarize_meta(org_id, tbl_id):

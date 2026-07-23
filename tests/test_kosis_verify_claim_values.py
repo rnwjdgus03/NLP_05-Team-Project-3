@@ -1,4 +1,10 @@
-from kosis_verify_claim_values import derive_actual, unit_factor, verify_row
+from kosis_verify_claim_values import (
+    annual_context_month_period_mismatch,
+    derive_actual,
+    judge,
+    unit_factor,
+    verify_row,
+)
 
 
 def test_base_unit_conversion_uses_multiplication_for_canonical_claim_values():
@@ -51,3 +57,27 @@ def test_non_ready_candidate_stops_before_api_call():
     assert out["verdict"] == "판단불가"
     assert out["verdict_code"] == "AMBIGUOUS_TABLE"
     assert out["verdict_stage"] == "candidate"
+
+
+def test_near_miss_rate_goes_to_tolerance_review():
+    verdict, reason = judge(20.6, 19.58, tolerance_abs=0.5, tolerance_pct=1.0,
+                            pending_abs=1.5, pending_pct=10.0)
+    assert verdict == "판정보류"
+    assert "오차범위" in reason
+
+
+def test_annual_context_month_period_is_reviewed():
+    mismatch, reason = annual_context_month_period_mismatch({
+        "period": "202301",
+        "claim_text": "2023년 국제선을 이용한 여객 4720만여 명 가운데 저비용항공사 이용객이 늘었다.",
+    })
+    assert mismatch is True
+    assert "월 단위" in reason
+
+
+def test_explicit_month_context_is_not_reviewed():
+    mismatch, _ = annual_context_month_period_mismatch({
+        "period": "202301",
+        "claim_text": "2023년 1월 국제선을 이용한 여객이 늘었다.",
+    })
+    assert mismatch is False

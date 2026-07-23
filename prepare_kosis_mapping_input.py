@@ -212,6 +212,12 @@ def normalize_row(row: dict) -> dict:
     out["unit"] = canonical_unit
     out["unit_dimension"] = dimension
     out["semantic_type"] = semantic
+    if semantic == "rate_change":
+        out["mapping_type"] = "rate_from_level"
+    elif semantic == "absolute_change":
+        out["mapping_type"] = "difference_from_level"
+    else:
+        out["mapping_type"] = "direct"
     out["entity_type"] = entity_type(row)
     out["comparison_period"] = comparison_period(row, semantic)
     out["mapping_eligible"] = "Y" if not code else "N"
