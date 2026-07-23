@@ -7,6 +7,7 @@ from kosis_validate_mapping_candidates import (
     NOT_EVALUATED,
     READY,
     build_candidate_combinations,
+    build_claim_context,
     build_kosis_request,
     choose_or_abstain,
     group_official_meta,
@@ -145,6 +146,30 @@ def test_unit_mismatch_is_retained_with_ranking_penalty():
     ranked = rank_valid_combinations([candidate], unit_penalty=0.25)
     assert len(ranked) == 1
     assert ranked[0]["ranking_score"] == pytest.approx(ranked[0]["semantic_score"] - 0.25)
+
+
+@pytest.mark.parametrize(
+    ("claim_unit", "kosis_unit"),
+    [("달러", "백만달러"), ("억달러", "천달러"), ("개", "개사")],
+)
+def test_scaled_and_organization_units_are_compatible(claim_unit, kosis_unit):
+    result = validate_unit_and_period(
+        response_rows(unit=kosis_unit),
+        expected_unit=claim_unit,
+        required_periods=["2023", "2024"],
+    )
+    assert result["unit_valid"] is True
+
+
+def test_claim_context_includes_measurement_scope_fields():
+    context = build_claim_context({
+        "measurement_indicator": "수출액",
+        "industry_or_item": "반도체",
+        "region": "전국",
+        "age_group": "20~29세",
+        "gender": "전체",
+    })
+    assert all(token in context for token in ("수출액", "반도체", "전국", "20~29세", "전체"))
 
 
 def test_one_valid_combination_is_ready():

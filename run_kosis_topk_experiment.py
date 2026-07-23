@@ -80,6 +80,7 @@ def summarize(
     gold = gold_map(gold_rows)
     ready = [row for row in validated if row.get("mapping_status") == "READY"]
     statuses = Counter(row.get("mapping_status") or "EMPTY" for row in validated)
+    reasons = Counter(row.get("mapping_reason") or "EMPTY" for row in validated)
     item_ok, item_n = accuracy(ready, gold, "selected_itm_id", "gold_itm_id")
     obj_ok, obj_n = accuracy(ready, gold, "selected_obj_l1", "gold_obj_l1")
     joint_rows = [
@@ -117,6 +118,9 @@ def summarize(
         "needs_confirmation_rows": statuses["NEEDS_CONFIRMATION"],
         "api_error_rows": statuses["API_ERROR"],
         "not_evaluated_rows": statuses["NOT_EVALUATED"],
+        "top_mapping_reasons": " | ".join(
+            f"{reason}:{count}" for reason, count in reasons.most_common(5)
+        ),
         "item_correct": item_ok,
         "item_labeled": item_n,
         "obj_correct": obj_ok,
@@ -129,7 +133,12 @@ def summarize(
     }
 
 
-def write_report(path: Path, summary: list[dict[str, object]], recommended: int) -> None:
+def write_report(
+    path: Path,
+    summary: list[dict[str, object]],
+    retrieval_knee: int,
+    recommended: int | None,
+) -> None:
     lines = [
         "# KOSIS BGE-M3 Top-K 정식 비교",
         "",
@@ -143,12 +152,15 @@ def write_report(path: Path, summary: list[dict[str, object]], recommended: int)
             f"{row['ready_rows']} | {row['item_obj_correct']}/{row['item_obj_labeled']} | "
             f"{row['verdict_correct']}/{row['verdict_labeled']} |"
         )
+    recommendation = f"Top-{recommended}" if recommended is not None else "보류(READY 0)"
     lines.extend([
         "",
-        f"권장 설정: **Top-{recommended}**",
+        f"검색 기준 최소 최적값: **Top-{retrieval_knee}**",
+        f"최종 권장 설정: **{recommendation}**",
         "",
         "선정 규칙은 최고 TBL recall을 달성한 설정 중 가장 작은 K이다. "
         "ITEM/OBJ와 verdict 지표는 정확도 저하 여부를 확인하는 안전장치로 함께 본다.",
+        "READY가 0이면 검색 설정만 판단하고 최종 설정은 보류한다.",
     ])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -169,6 +181,11 @@ def main() -> None:
     parser.add_argument("--obj-top-k", type=int, default=2)
     parser.add_argument("--max-combinations", type=int, default=20)
     parser.add_argument("--reuse-base", action="store_true")
+    parser.add_argument(
+        "--reuse-validation",
+        action="store_true",
+        help="기존 기술 검증 CSV까지 재사용; 기본은 검색만 재사용하고 매핑/API는 재검증",
+    )
     args = parser.parse_args()
 
     ks = sorted(set(args.ks))
@@ -204,7 +221,7 @@ def main() -> None:
 
     all_candidates = read_csv(base_candidates)
     technical_path = out_dir / f"{stem}_top{max_k}_technical_validated.csv"
-    if not args.reuse_base or not technical_path.exists():
+    if not args.reuse_validation or not technical_path.exists():
         run([
             sys.executable, ROOT / "kosis_validate_mapping_candidates.py",
             "--input", base_candidates,
@@ -240,12 +257,25 @@ def main() -> None:
         summary.append(summarize(k, gold_rows, candidates, validated, verified))
 
     max_hits = max(row["retrieval_hits"] for row in summary)
-    recommended = min(int(row["top_k"]) for row in summary if row["retrieval_hits"] == max_hits)
+    retrieval_knee = min(
+        int(row["top_k"]) for row in summary if row["retrieval_hits"] == max_hits
+    )
+    viable = [row for row in summary if int(row["ready_rows"]) > 0]
+    if viable:
+        viable_max_hits = max(row["retrieval_hits"] for row in viable)
+        recommended = min(
+            int(row["top_k"])
+            for row in viable
+            if row["retrieval_hits"] == viable_max_hits
+        )
+    else:
+        recommended = None
     write_csv(out_dir / "topk_summary.csv", summary)
-    write_report(out_dir / "topk_report.md", summary, recommended)
+    write_report(out_dir / "topk_report.md", summary, retrieval_knee, recommended)
     print(f"summary={out_dir / 'topk_summary.csv'}")
     print(f"report={out_dir / 'topk_report.md'}")
-    print(f"recommended_top_k={recommended}")
+    print(f"retrieval_knee_top_k={retrieval_knee}")
+    print(f"recommended_top_k={recommended if recommended is not None else 'PENDING'}")
 
 
 if __name__ == "__main__":

@@ -234,10 +234,23 @@ def response_matches_request(request: Mapping[str, Any], rows: Iterable[Mapping[
 
 def _unit_tokens(value: Any) -> set[str]:
     text = re.sub(r"[\s,()]", "", str(value or "")).lower()
-    aliases = {"%": "percent", "퍼센트": "percent", "백분율": "percent",
-               "명": "person", "천명": "person", "만명": "person",
-               "원": "currency", "천원": "currency", "백만원": "currency", "억원": "currency"}
-    return {aliases.get(text, text)} if text else set()
+    if not text:
+        return set()
+    if text in {"%p", "%포인트", "퍼센트포인트", "percentagepoint"}:
+        return {"percentage_point"}
+    if text in {"%", "퍼센트", "백분율", "percent"}:
+        return {"percent"}
+    if "달러" in text or text in {"usd", "$", "불", "미화"}:
+        return {"currency_usd"}
+    if "원" in text:
+        return {"currency_krw"}
+    if "명" in text or text in {"인", "사람"}:
+        return {"person"}
+    if text in {"개", "개사", "사", "곳", "업체", "기업", "회사"}:
+        return {"organization_count"}
+    if text in {"대", "건", "가구", "세대", "호", "회"}:
+        return {f"count_{text}"}
+    return {text}
 
 
 def validate_unit_and_period(
@@ -402,6 +415,17 @@ def _lexical_candidates(values: Iterable[Mapping[str, Any]], text: str) -> list[
     return sorted(out, key=lambda x: x["semantic_score"], reverse=True)
 
 
+def build_claim_context(row: Mapping[str, Any]) -> str:
+    fields = (
+        "claim_text", "indicator", "measurement_indicator", "measurement",
+        "measurement_text", "entity", "population", "population_etc",
+        "sex", "gender", "age", "age_group", "industry",
+        "industry_or_item", "measurement_item", "region", "origin_country",
+        "destination_country",
+    )
+    return " ".join(str(row.get(key, "")) for key in fields)
+
+
 def resolve_table_ambiguity(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Apply the Mapping-end cross-table abstention rule to a Top-K slice."""
     outputs = [dict(row) for row in rows]
@@ -474,8 +498,7 @@ def main() -> None:
         key = (str(row.get("org_id", "")), str(row.get("tbl_id", "")))
         meta_rows = meta_by_table.get(key, [])
         grouped = group_official_meta(meta_rows)
-        claim_text = " ".join(str(row.get(k, "")) for k in (
-            "claim_text", "indicator", "measurement", "entity", "population", "sex", "age", "industry"))
+        claim_text = build_claim_context(row)
         item_candidates = _lexical_candidates(grouped["items"], claim_text)
         obj_candidates = {order: _lexical_candidates(axis["values"], claim_text)
                           for order, axis in grouped["axes"].items()
