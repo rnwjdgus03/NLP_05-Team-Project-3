@@ -8,6 +8,7 @@ from kosis_validate_mapping_candidates import (
     READY,
     build_candidate_combinations,
     build_claim_context,
+    build_obj_context,
     build_kosis_request,
     _lexical_candidates,
     choose_or_abstain,
@@ -181,6 +182,27 @@ def test_lexical_candidates_do_not_match_one_character_inside_word():
     scores = {row["code"]: row["semantic_score"] for row in ranked}
     assert scores["ONE"] == 0
     assert scores["EXPORT"] > scores["ONE"]
+
+
+def test_zero_score_obj_candidate_falls_back_to_official_aggregate():
+    combos = build_candidate_combinations(
+        [{"code": "I_TOTAL", "semantic_score": 1.0}],
+        {
+            1: [{"code": "R_SEOUL", "name": "서울", "semantic_score": 0.0}],
+            2: [{"code": "S_F", "name": "여자", "semantic_score": 0.0}],
+            3: [{"code": "A_20", "name": "20대", "semantic_score": 0.0}],
+        },
+        official_meta(),
+    )
+    assert (combos[0]["objL1"], combos[0]["objL2"], combos[0]["objL3"]) == (
+        "R_ALL", "S_ALL", "A_ALL",
+    )
+
+
+def test_obj_context_uses_scope_but_removes_measurement_words():
+    assert build_obj_context({"indicator": "반도체 수출액", "industry_or_item": "-"}) == "반도체"
+    assert build_obj_context({"indicator": "수출액", "industry_or_item": "-"}) == ""
+    assert build_obj_context({"indicator": "수출액", "industry_or_item": "자동차"}) == "자동차"
 
 
 def test_previous_year_is_added_only_for_explicit_year_over_year_claim():

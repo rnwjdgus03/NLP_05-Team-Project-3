@@ -164,7 +164,7 @@ def build_candidate_combinations(
     axes: list[tuple[int, list[dict[str, Any]]]] = []
     for order, axis in grouped["axes"].items():
         choices = [x for x in _normalize_candidates(by_order.get(order, []))
-                   if x["code"] in grouped["axis_codes"][order]][:max(0, obj_top_k)]
+                   if x["code"] in grouped["axis_codes"][order] and _score(x) > 0][:max(0, obj_top_k)]
         if not choices:
             default = _aggregate_default(axis)
             if default is None:
@@ -463,6 +463,33 @@ def build_claim_context(row: Mapping[str, Any]) -> str:
     return " ".join(str(row.get(key, "")) for key in fields)
 
 
+def build_obj_context(row: Mapping[str, Any]) -> str:
+    """Build a narrow context for OBJ selection without incidental article words."""
+    scope_fields = (
+        "industry_or_item", "measurement_item", "entity", "population",
+        "population_etc", "sex", "gender", "age", "age_group", "region",
+        "origin_country", "destination_country",
+    )
+    scopes = [
+        str(row.get(key, "")).strip()
+        for key in scope_fields
+        if str(row.get(key, "")).strip() not in {"", "-"}
+    ]
+    indicator = str(_first(row, "indicator", "measurement_indicator")).strip()
+    metric_phrases = (
+        "수출액 증감률", "수출 증가율", "수입 증가율", "수입 증감률",
+        "수출 증감률", "여객 수", "이용객 수", "정비사 수 비율",
+        "정비사 비율", "정비사 수", "기업 수", "수출액", "수입액",
+        "무역수지 증감", "무역수지", "증가율", "감소율", "증감률", "비율",
+    )
+    for phrase in metric_phrases:
+        indicator = indicator.replace(phrase, " ")
+    indicator = re.sub(r"\s+", " ", indicator).strip()
+    if indicator:
+        scopes.append(indicator)
+    return " ".join(dict.fromkeys(scopes))
+
+
 def resolve_table_ambiguity(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Apply the Mapping-end cross-table abstention rule to a Top-K slice."""
     outputs = [dict(row) for row in rows]
@@ -562,10 +589,11 @@ def main() -> None:
         meta_rows = meta_by_table.get(key, [])
         grouped = group_official_meta(meta_rows)
         claim_text = build_claim_context(row)
+        obj_text = build_obj_context(row)
         item_candidates = _lexical_candidates(grouped["items"], claim_text)
-        obj_candidates = {order: _lexical_candidates(axis["values"], claim_text)
+        obj_candidates = {order: _lexical_candidates(axis["values"], obj_text)
                           for order, axis in grouped["axes"].items()
-                          if any(x["semantic_score"] > 0 for x in _lexical_candidates(axis["values"], claim_text))}
+                          if any(x["semantic_score"] > 0 for x in _lexical_candidates(axis["values"], obj_text))}
         periods = required_periods_for_row(row)
 
         def fetch(params: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
