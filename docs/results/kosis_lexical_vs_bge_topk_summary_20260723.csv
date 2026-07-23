@@ -1,0 +1,9 @@
+retrieval_mode,top_k,candidate_rows,retrieval_hits,retrieval_gold,retrieval_recall,technical_valid_rows,ready_rows,technical_item_obj_hits,technical_item_obj_gold
+lexical,1,39,13,24,0.5416666667,18,0,0,20
+lexical,2,74,15,24,0.625,18,0,0,20
+lexical,3,109,15,24,0.625,18,0,0,20
+lexical,5,179,15,24,0.625,21,0,0,20
+hybrid,1,39,12,24,0.5,11,0,0,20
+hybrid,2,78,14,24,0.5833333333,19,0,0,20
+hybrid,3,117,14,24,0.5833333333,19,0,0,20
+hybrid,5,195,14,24,0.5833333333,21,0,0,20

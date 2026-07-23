@@ -66,6 +66,8 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 | `docs/kosis_bge_topk_result_20260723.md` | READY 39건 BGE Top-1·2·3·5와 Mapping-end 최종 집계 및 해석 |
 | `docs/results/kosis_bge_topk_summary_20260723.csv` | 위 실험의 공개 가능한 집계 수치. 행 단위 골드와 기사 데이터는 포함하지 않음 |
 | `notebooks/kosis_lexical_vs_bge_colab.ipynb` | 기존 BGE 결과를 재사용해 READY 39건의 lexical Top-K와 Mapping-end를 직접 비교 |
+| `docs/kosis_lexical_vs_bge_result_20260723.md` | 동일 READY 39건·locked gold·Mapping-end 조건의 lexical/BGE 최종 비교 |
+| `docs/results/kosis_lexical_vs_bge_topk_summary_20260723.csv` | lexical/BGE Top-1·2·3·5 공개 집계 8행 |
 | `build_kosis_holdout2_evaluation.py` | 2차 독립 홀드아웃 골드 검증·공식 지표 재생성 |
 | `measurement_regression.py` | measurement-first 추출 회귀 배치 준비·감사 |
 
