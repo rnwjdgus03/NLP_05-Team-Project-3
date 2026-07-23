@@ -338,12 +338,12 @@ RRF = 1 / (60 + lexical_rank) + 1 / (60 + semantic_rank)
 - `notebooks/kosis_bge_colab.ipynb`: Colab Pro+ GPU 실행과 Google Drive 저장
 - `kosis_validate_mapping_candidates.py`: Mapping-end 공식 메타·API 조합 검증
 - `run_kosis_topk_experiment.py`: 검색 1회로 Top-1·2·3·5 전체 비교
-- `notebooks/kosis_topk_mapping_end_colab.ipynb`: READY 39건 정식 비교용 Colab 노트북
+- `notebooks/kosis_topk_mapping_end_colab_v2.ipynb`: READY 39건 정식 비교용 Colab 노트북
 
 ##### Top-1·2·3·5 정식 비교
 
 READY 39건과 잠긴 골드셋을 기준으로 최종 후보 수를 결정할 때는
-`notebooks/kosis_topk_mapping_end_colab.ipynb`를 실행합니다. BGE-M3 Top-50과
+`notebooks/kosis_topk_mapping_end_colab_v2.ipynb`를 실행합니다. BGE-M3 Top-50과
 reranker Top-20은 한 번만 계산하고 최종 후보를 Top-1·2·3·5로 나눕니다. 공식
 ITEM/OBJ 메타와 실제 API 조합 검증도 Top-5 후보에 한 번만 수행하고, 각 K에서
 복수 유효 후보 상태를 다시 계산합니다.
