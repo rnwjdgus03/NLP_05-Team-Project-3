@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping
@@ -27,6 +28,11 @@ def norm(value: Any) -> str:
     return str(value or "").strip()
 
 
+def is_filled_label(value: Any) -> bool:
+    text = norm(value)
+    return text not in {"", "-", "?", "nan", "None"}
+
+
 def norm_obj_code(value: Any) -> str:
     """Normalize gold OBJ cells that accidentally include an axis id.
 
@@ -38,7 +44,30 @@ def norm_obj_code(value: Any) -> str:
     text = norm(value)
     if " " in text:
         return text.split()[-1]
+    # Final gold files may store axis id + code in one cell, e.g.
+    # A01/M00/F20.  Pipeline output stores only the API code 01/00/20.
+    # Do not strip official codes such as 00_15102AA5A6.
+    if "_" not in text:
+        match = re.fullmatch(r"[A-Z]+(\d+)", text)
+        if match:
+            return match.group(1)
     return text
+
+
+def gold_obj_codes(row: Mapping[str, Any]) -> list[str]:
+    return [
+        norm_obj_code(row.get(f"gold_obj_l{level}"))
+        for level in range(1, 9)
+        if norm(row.get(f"gold_obj_l{level}"))
+    ]
+
+
+def predicted_obj_codes(row: Mapping[str, Any]) -> list[str]:
+    return [
+        norm_obj_code(row.get(f"selected_obj_l{level}"))
+        for level in range(1, 9)
+        if norm(row.get(f"selected_obj_l{level}"))
+    ]
 
 
 def candidate_rank(row: Mapping[str, Any]) -> int:
@@ -127,17 +156,17 @@ def score_item_obj(gold: list[dict[str, str]], validated: list[dict[str, str]]) 
             continue
         ready_count += 1
         expected_itm = norm(expected.get("gold_itm_id"))
-        expected_obj = norm_obj_code(expected.get("gold_obj_l1"))
+        expected_objs = gold_obj_codes(expected)
         predicted_itm = norm(predicted.get("selected_itm_id"))
-        predicted_obj = norm(predicted.get("selected_obj_l1"))
+        predicted_objs = predicted_obj_codes(predicted)
 
         item_ok = expected_itm == predicted_itm
-        obj_ok = expected_obj == predicted_obj
+        obj_ok = bool(expected_objs) and expected_objs == predicted_objs[:len(expected_objs)]
         item_hit += int(item_ok)
         obj_hit += int(obj_ok)
         both_hit += int(item_ok and obj_ok)
         if not (item_ok and obj_ok):
-            mismatch_samples.append((key, expected_itm, predicted_itm, expected_obj, predicted_obj))
+            mismatch_samples.append((key, expected_itm, predicted_itm, expected_objs, predicted_objs))
 
     total = len(gold_item_obj)
     print("\n==== 5. item / obj accuracy ====")
@@ -157,7 +186,7 @@ def score_verdict(gold: list[dict[str, str]], verified: list[dict[str, str]]) ->
     gold_verdict = {
         measurement_id(row): norm(row.get("gold_verdict"))
         for row in gold
-        if measurement_id(row) and norm(row.get("gold_verdict"))
+        if measurement_id(row) and is_filled_label(row.get("gold_verdict"))
     }
     verified_by_id = {
         measurement_id(row): row

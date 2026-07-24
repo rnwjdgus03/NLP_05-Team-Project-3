@@ -81,7 +81,8 @@ def group_official_meta(meta_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any
         name = str(_first(row, "ITM_NM", "itm_nm", "name", "code_name")).strip()
         if not code:
             continue
-        if obj_id.upper() == "ITEM":
+        is_item = str(_first(row, "is_item", "IS_ITEM")).strip().upper()
+        if obj_id.upper() == "ITEM" or is_item in {"Y", "TRUE", "1"}:
             items.append({"code": code, "name": name, "raw": row})
             continue
         order = _axis_order(row)

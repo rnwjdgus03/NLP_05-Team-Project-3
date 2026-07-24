@@ -62,8 +62,62 @@ def test_condition_and_missing_period_are_rejected_with_codes():
     )
     assert condition["mapping_exclusion_code"] == "NOT_KOSIS_VALUE"
 
-    missing_period = normalize_row(measurement_row(measurement_period="-", measurement_prd_se="-"))
+    missing_period = normalize_row(
+        measurement_row(
+            claim_text="수출액은 높은 수준이었다.",
+            measurement_period="-",
+            measurement_prd_se="-",
+        )
+    )
     assert missing_period["mapping_exclusion_code"] == "PERIOD_MISSING"
+
+
+def test_previous_value_with_period_is_ready():
+    out = normalize_row(measurement_row(measurement_role="이전값", measurement_period="2023"))
+    assert out["mapping_eligible"] == "Y"
+
+
+def test_target_value_is_rejected_as_not_observed():
+    out = normalize_row(measurement_row(measurement_role="목표값"))
+    assert out["mapping_exclusion_code"] == "ROLE_NOT_OBSERVED_VALUE"
+
+
+def test_unclear_reference_value_is_rejected():
+    out = normalize_row(
+        measurement_row(
+            measurement_role="참고값",
+            claim_text="수출 흐름은 안정적이었다.",
+            measurement_text="100억 달러",
+        )
+    )
+    assert out["mapping_exclusion_code"] == "REFERENCE_RELATION_UNCLEAR"
+
+
+def test_missing_period_infers_last_year_only_with_context():
+    out = normalize_row(
+        measurement_row(
+            date="2025-01-01",
+            claim_text="지난해 수출액은 100억 달러였다.",
+            measurement_period="-",
+            measurement_prd_se="-",
+        )
+    )
+    assert out["period"] == "2024"
+    assert out["prd_se"] == "Y"
+    assert out["default_applied"] == "Y"
+
+
+def test_missing_period_without_context_stays_rejected():
+    out = normalize_row(
+        measurement_row(
+            date="2025-01-01",
+            claim_text="수출액은 높은 수준이었다.",
+            measurement_period="-",
+            measurement_prd_se="-",
+        )
+    )
+    assert out["mapping_exclusion_code"] == "PERIOD_MISSING"
+    assert out["default_applied"] == "N"
 
 
 def test_person_entity_wins_over_airline_context():
@@ -101,6 +155,11 @@ def test_prepare_writes_ready_and_rejected_files(tmp_path):
     rejected = measurement_row(
         claim_measurement_id="A1-C2-m1",
         measurement_usage="POLICY_VALUE",
+        measurement_indicator="최저임금",
+        measurement_item="-",
+        claim_text="최저임금은 시간당 1만30원이다.",
+        value="10030",
+        unit="원",
     )
     with source.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(ready))

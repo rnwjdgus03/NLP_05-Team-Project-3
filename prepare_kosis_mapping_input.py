@@ -16,7 +16,23 @@ from pathlib import Path
 
 
 EMPTY = {"", "-", "nan", "none", "null"}
-SKIP_ROLES = {"이전값", "참고값", "목표값"}
+SKIP_ROLES = {"목표값"}
+KOSIS_LIKE_DOMAINS = {
+    "무역", "고용", "물가", "인구", "생산·산업", "교통", "소득·임금", "경제일반",
+}
+KOSIS_LIKE_INDICATOR_TOKENS = (
+    "수출", "수입", "무역수지", "고용률", "실업률", "취업자", "근로자", "인구",
+    "소비자물가", "물가", "생산지수", "소매판매", "여객", "이용객", "정비사",
+    "사업체", "기업 수", "로봇 밀도", "로봇 보급률", "출생", "혼인", "이혼",
+)
+NON_OBSERVED_TOKENS = (
+    "정책", "제도", "지원", "지원금", "급여", "장려금", "장학금", "봉급", "최저임금",
+    "요건", "기준", "검진", "대상 연령", "양육비", "세율", "공제", "보험료",
+    "참가", "통합한국관", "개별기업",
+)
+EXTERNAL_SOURCE_TOKENS = (
+    "국제로봇연맹", "IFR", "WTO", "시리움", "Cirium", "전세계", "세계에서", "세계수출순위",
+)
 
 
 def nz(value) -> str:
@@ -33,6 +49,126 @@ def parse_number(value):
         return float(match.group())
     except ValueError:
         return None
+
+
+def parse_article_date(row: dict):
+    text = nz(row.get("date")) or nz(row.get("article_date"))
+    match = re.search(r"((?:19|20)\d{2})\D?(0[1-9]|1[0-2])?\D?(0[1-9]|[12]\d|3[01])?", text)
+    if not match:
+        return None
+    year = int(match.group(1))
+    month = int(match.group(2) or 1)
+    return year, month
+
+
+def previous_month(year: int, month: int):
+    if month == 1:
+        return year - 1, 12
+    return year, month - 1
+
+
+def compact_text(value: str) -> str:
+    return re.sub(r"\s+", "", str(value or ""))
+
+
+def infer_period_from_context(row: dict) -> tuple[str, str, str]:
+    """Infer a missing measurement period only when the text gives a clear cue."""
+    text = " ".join(nz(row.get(k)) for k in ("measurement_text", "claim_text", "prev_sentence", "next_sentence"))
+    ctext = compact_text(text)
+
+    month_match = re.search(r"((?:19|20)\d{2})\s*년\s*(0?[1-9]|1[0-2])\s*월", text)
+    if month_match:
+        return f"{month_match.group(1)}{int(month_match.group(2)):02d}", "M", "명시 연월에서 measurement_period 보정"
+
+    quarter_match = re.search(r"((?:19|20)\d{2})\s*년\s*([1-4])\s*분기", text)
+    if quarter_match:
+        return f"{quarter_match.group(1)}Q{quarter_match.group(2)}", "Q", "명시 분기에서 measurement_period 보정"
+
+    half_match = re.search(r"((?:19|20)\d{2})\s*년\s*(상반기|하반기)", text)
+    if half_match:
+        half = "H1" if half_match.group(2) == "상반기" else "H2"
+        return f"{half_match.group(1)}{half}", "H", "명시 반기에서 measurement_period 보정"
+
+    year_end_match = re.search(r"((?:19|20)\d{2})\s*년\s*말", text)
+    if year_end_match:
+        return year_end_match.group(1), "Y", "명시 연말 표현에서 연간 measurement_period 보정"
+
+    year_match = re.search(r"((?:19|20)\d{2})\s*년", text)
+    if year_match:
+        return year_match.group(1), "Y", "명시 연도에서 measurement_period 보정"
+
+    article_date = parse_article_date(row)
+    if not article_date:
+        return "", "", ""
+    year, month = article_date
+
+    relative_month = re.search(r"(?:지난|작년|올해)\s*(0?[1-9]|1[0-2])\s*월", text)
+    if relative_month:
+        rel_month = int(relative_month.group(1))
+        rel_year = year - 1 if "작년" in ctext else year
+        return f"{rel_year}{rel_month:02d}", "M", "기사 날짜 기준 상대 월 보정"
+
+    quarter_only = re.search(r"([1-4])\s*분기", text)
+    if quarter_only and ("올해" in ctext or "금년" in ctext or "지난" in ctext or "작년" in ctext):
+        rel_year = year - 1 if ("작년" in ctext or "지난해" in ctext) else year
+        return f"{rel_year}Q{quarter_only.group(1)}", "Q", "기사 날짜 기준 상대 분기 보정"
+
+    if "지난달" in ctext or "전월" in ctext:
+        py, pm = previous_month(year, month)
+        return f"{py}{pm:02d}", "M", "기사 날짜 기준 지난달/전월 보정"
+    if "지난해말" in ctext or "작년말" in ctext:
+        return str(year - 1), "Y", "기사 날짜 기준 지난해 말/작년 말 보정"
+    if "지난해" in ctext or "작년" in ctext or "전년" in ctext:
+        return str(year - 1), "Y", "기사 날짜 기준 지난해/작년/전년 보정"
+    if "올해" in ctext or "금년" in ctext or "올해들어" in ctext:
+        return str(year), "Y", "기사 날짜 기준 올해/금년 보정"
+    return "", "", ""
+
+
+def is_policy_or_condition_text(row: dict) -> bool:
+    text = compact_text(" ".join(nz(row.get(k)) for k in (
+        "metric_domain", "indicator", "measurement_indicator", "measurement_item", "claim_text", "measurement_text"
+    )))
+    return any(compact_text(token) in text for token in NON_OBSERVED_TOKENS)
+
+
+def has_external_source_context(row: dict) -> bool:
+    text = compact_text(nz(row.get("claim_text")))
+    return any(compact_text(token) in text for token in EXTERNAL_SOURCE_TOKENS)
+
+
+def indicator_value_context_conflict(row: dict) -> bool:
+    indicator = compact_text(nz(row.get("measurement_indicator")) or nz(row.get("indicator")))
+    if not any(token in indicator for token in ("수출액", "수입액")):
+        return False
+    measurement = nz(row.get("measurement_text"))
+    text = nz(row.get("claim_text"))
+    if not measurement or not text:
+        return False
+    idx = text.find(measurement)
+    window = text[idx: idx + len(measurement) + 12] if idx >= 0 else text
+    return any(token in compact_text(window) for token in ("적자", "흑자"))
+
+
+def looks_kosis_observed_stat(row: dict, dimension: str, semantic: str) -> bool:
+    if semantic in {"rank", "condition", "multiple"}:
+        return False
+    if is_policy_or_condition_text(row):
+        return False
+    domain = nz(row.get("metric_domain"))
+    scope = nz(row.get("claim_domain_scope"))
+    text = compact_text(" ".join(nz(row.get(k)) for k in (
+        "metric_domain", "indicator", "measurement_indicator", "measurement_item", "claim_text"
+    )))
+    if scope == "개별기업":
+        return False
+    if scope not in {"", "국내공식통계"} and has_external_source_context(row):
+        return False
+    if scope not in {"", "국내공식통계"} and domain != "무역":
+        return False
+    domain_hit = any(token in domain for token in KOSIS_LIKE_DOMAINS)
+    indicator_hit = any(compact_text(token) in text for token in KOSIS_LIKE_INDICATOR_TOKENS)
+    return (domain_hit or indicator_hit) and dimension in {"currency", "person_count", "count", "rate", "quantity"}
 
 
 def canonicalize_unit(unit: str) -> str:
@@ -156,22 +292,34 @@ def comparison_period(row: dict, semantic: str) -> str:
     return ""
 
 
+def reference_relation_confirmed(row: dict) -> bool:
+    if not nz(row.get("measurement_period")):
+        return False
+    text = re.sub(r"\s+", "", " ".join(nz(row.get(k)) for k in ("claim_text", "measurement_text")))
+    return any(token in text for token in ("이후", "보다", "대비", "비교", "기준", "최대", "최저", "종전", "기존"))
+
+
 def exclusion(row: dict, dimension: str, semantic: str):
     measurement_id = nz(row.get("claim_measurement_id"))
     if not measurement_id:
         return "NO_MEASUREMENT", "측정값 없는 placeholder"
     usage = nz(row.get("measurement_usage"))
-    if usage != "KOSIS_VALUE":
+    rescue_observed = looks_kosis_observed_stat(row, dimension, semantic)
+    if usage != "KOSIS_VALUE" and not rescue_observed:
         return "NOT_KOSIS_VALUE", f"measurement_usage={usage or '-'}"
     scope = nz(row.get("claim_domain_scope"))
-    if scope != "국내공식통계":
+    if scope != "국내공식통계" and not rescue_observed:
         return "OUT_OF_KOSIS_SCOPE", f"claim_domain_scope={scope or '-'}"
     source = nz(row.get("measurement_binding_source"))
     if source != "hcx":
         return "BINDING_NOT_CONFIRMED", f"measurement_binding_source={source or '-'}"
     role = nz(row.get("measurement_role"))
-    if role in SKIP_ROLES:
-        return "ROLE_NOT_DIRECT_TARGET", f"measurement_role={role}"
+    if role == "목표값":
+        return "ROLE_NOT_OBSERVED_VALUE", "목표값은 실제 관측 통계가 아님"
+    if role == "참고값" and not reference_relation_confirmed(row):
+        return "REFERENCE_RELATION_UNCLEAR", "참고값과 주장의 관계가 불명확함"
+    if indicator_value_context_conflict(row):
+        return "INDICATOR_VALUE_CONTEXT_CONFLICT", "수출액/수입액 지표로 추출됐지만 값 문맥은 흑자/적자라 무역수지 값일 가능성이 큼"
     if parse_number(row.get("value")) is None:
         return "VALUE_MISSING", "value가 숫자가 아님"
     if not (nz(row.get("measurement_indicator")) or nz(row.get("indicator"))):
@@ -191,22 +339,31 @@ def exclusion(row: dict, dimension: str, semantic: str):
 
 def normalize_row(row: dict) -> dict:
     out = dict(row)
-    raw_unit = nz(row.get("unit"))
+    inferred_period = ""
+    inferred_prd_se = ""
+    default_reason = ""
+    if not nz(out.get("measurement_period")):
+        inferred_period, inferred_prd_se, default_reason = infer_period_from_context(out)
+        if inferred_period:
+            out["measurement_period"] = inferred_period
+            if not nz(out.get("measurement_prd_se")):
+                out["measurement_prd_se"] = inferred_prd_se
+    raw_unit = nz(out.get("unit"))
     canonical_unit = canonicalize_unit(raw_unit)
     dimension = unit_dimension(canonical_unit)
-    semantic = semantic_type(row, dimension)
-    code, reason = exclusion(row, dimension, semantic)
+    semantic = semantic_type(out, dimension)
+    code, reason = exclusion(out, dimension, semantic)
 
     # Preserve claim-level fields while exposing the aliases expected by the
     # feature/model matcher.  The aliases are always measurement-level values.
-    out["claim_indicator"] = nz(row.get("indicator"))
-    out["claim_industry_or_item"] = nz(row.get("industry_or_item"))
-    out["claim_period"] = nz(row.get("period"))
-    out["claim_prd_se"] = nz(row.get("prd_se"))
-    out["indicator"] = nz(row.get("measurement_indicator")) or nz(row.get("indicator"))
-    out["industry_or_item"] = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
-    out["period"] = nz(row.get("measurement_period"))
-    out["prd_se"] = nz(row.get("measurement_prd_se"))
+    out["claim_indicator"] = nz(out.get("indicator"))
+    out["claim_industry_or_item"] = nz(out.get("industry_or_item"))
+    out["claim_period"] = nz(out.get("period"))
+    out["claim_prd_se"] = nz(out.get("prd_se"))
+    out["indicator"] = nz(out.get("measurement_indicator")) or nz(out.get("indicator"))
+    out["industry_or_item"] = nz(out.get("measurement_item")) or nz(out.get("industry_or_item"))
+    out["period"] = nz(out.get("measurement_period"))
+    out["prd_se"] = nz(out.get("measurement_prd_se"))
     out["raw_unit"] = raw_unit
     out["canonical_unit"] = canonical_unit
     out["unit"] = canonical_unit
@@ -223,10 +380,27 @@ def normalize_row(row: dict) -> dict:
     out["mapping_eligible"] = "Y" if not code else "N"
     out["mapping_exclusion_code"] = code
     out["mapping_exclusion_reason"] = reason
+    out["default_applied"] = "Y" if inferred_period else "N"
+    out["default_reason"] = default_reason
+    if not code and looks_kosis_observed_stat(out, dimension, semantic):
+        rescue_reasons = []
+        if nz(row.get("measurement_usage")) != "KOSIS_VALUE":
+            rescue_reasons.append(f"measurement_usage={nz(row.get('measurement_usage')) or '-'}이지만 KOSIS형 관측 지표로 READY 허용")
+        if nz(row.get("claim_domain_scope")) != "국내공식통계":
+            rescue_reasons.append(f"claim_domain_scope={nz(row.get('claim_domain_scope')) or '-'}이지만 KOSIS형 관측 지표로 READY 허용")
+        if rescue_reasons:
+            out["default_applied"] = "Y"
+            joined = "; ".join(rescue_reasons)
+            out["default_reason"] = (out["default_reason"] + "; " + joined).strip("; ")
     return out
 
 
 DERIVED_FIELDS = [
+    "indicator",
+    "industry_or_item",
+    "period",
+    "prd_se",
+    "mapping_type",
     "claim_indicator",
     "claim_industry_or_item",
     "claim_period",
@@ -240,6 +414,8 @@ DERIVED_FIELDS = [
     "mapping_eligible",
     "mapping_exclusion_code",
     "mapping_exclusion_reason",
+    "default_applied",
+    "default_reason",
 ]
 
 

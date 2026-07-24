@@ -552,6 +552,45 @@ API 오류도 단순 실패로 묶지 않고 원인을 세분화했습니다.
 | `NO_DATA_FOR_COMBINATION` | 16 | 요청 ITEM/OBJ/기간 조합에 해당하는 데이터 없음 |
 | `INVALID_PERIOD_FORMAT` | 2 | KOSIS 기간 파라미터 형식 오류 |
 
+#### 최종 골드 좌표 기반 실제값 검증 (mapping-end)
+
+최종 골드셋은 `data/gold/gold_measurement_tail_100_final.csv`입니다. 이 파일은
+`gold_tbl_id`, `gold_itm_id`, `gold_obj_l1~gold_obj_l3`에 사람이 확정한 KOSIS 좌표를
+담고 있습니다. `gold_obj_l1~l3`는 `A01`, `M00`, `F20`처럼 축 ID와 코드가 함께 들어간
+형식이므로, `verify_gold_coordinates.py`가 이를 KOSIS API 파라미터
+`objL1=01`, `objL2=00`, `objL3=20`으로 변환합니다.
+
+실행 명령은 다음과 같습니다.
+
+```powershell
+python verify_gold_coordinates.py `
+  --gold "data\gold\gold_measurement_tail_100_final.csv" `
+  --output "outputs\runs\gold_tail100_final_gold_coordinate_verified.csv" `
+  --delay 0
+```
+
+검증 스크립트는 자동 후보 검색 성능을 재는 것이 아니라, **확정 KOSIS 좌표를 받았을 때
+실제값 API 조회와 계산식 판정이 가능한지**를 확인합니다.
+
+처리하는 계산식은 다음과 같습니다.
+
+- `direct`: KOSIS actual value를 단위 환산 후 claim value와 비교
+- `rate_from_level`: 현재기간·전년동기 수준값으로 증감률 계산
+- `무역집중도`: 상위기업 교역액 / 전체기업 교역액 × 100
+- `상위 N대`: 상위기업별 축명에서 N을 파생
+
+최종 골드 좌표 12건 기준 결과는 다음과 같습니다.
+
+| verdict | 개수 | 비율 |
+|---|---:|---:|
+| 일치 | 8 | 66.7% |
+| 불일치 | 3 | 25.0% |
+| 판정보류 | 1 | 8.3% |
+| 판단불가 | 0 | 0.0% |
+
+따라서 최종 골드 좌표가 주어진 범위에서는 판단 가능률이 100%이며, 기존 API 요청 변수
+오류로 남던 해외직접투자 케이스도 값 비교 단계까지 도달합니다.
+
 ### 테스트
 
 ```powershell
@@ -599,12 +638,10 @@ python measurement_regression.py audit `
 - `kosis_match_claims_to_index.py`: measurement 중심 통계표·ITEM·OBJ 후보와 READY/REVIEW/REJECT 판정
 - `kosis_build_meta_index.py`: 상위 통계표의 KOSIS 메타 long index 생성
 - `kosis_verify_claim_values.py`: READY 후보 실제값 조회와 단계별 verdict code 생성
+- `verify_gold_coordinates.py`: 최종 골드셋의 확정 KOSIS 좌표 기반 실제값·계산식 검증
 - `run_kosis_measurement_pipeline.py`: 준비·후보·메타·검증 통합 러너
 - `kosis_table_search.py`: 로컬 통계표 인덱스 생성 및 후보 검색
 - `kosis_metadata_summary.py`: 통계표의 분류축·항목·단위 메타 조회
-- `llm_auto_mapping_prototype.py`: 코드북 밖 지표의 LLM 후보 선택 실험
-- `kosis_codebook_v2.py`: 첫 홀드아웃 오류를 반영한 동결 코드북
-- `kosis_codebook_v3.py`: 두 번째 홀드아웃 P0 오류를 반영한 개발 후보
 - `build_kosis_holdout2_evaluation.py`: 독립 홀드아웃2 평가 재생성
 
 KOSIS API 사용 시 주의사항은 다음과 같습니다.
