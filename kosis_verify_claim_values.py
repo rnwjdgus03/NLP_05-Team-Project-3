@@ -125,6 +125,28 @@ def normalize_prd_se(prd_se, period):
     return 'Y'
 
 
+def infer_comparison_period(row):
+    """Infer only explicit year-over-year comparisons from the claim text."""
+    explicit = parse_period(row.get('comparison_period'))
+    if explicit:
+        return explicit, ''
+    current = parse_period(row.get('period') or row.get('measurement_period'))
+    if not current:
+        return '', ''
+    text = compact(row.get('claim_text'))
+    year_over_year = any(token in text for token in (
+        '전년동월대비', '전년동월보다', '전년대비', '전년보다',
+        '지난해같은달대비', '지난해같은기간대비',
+    ))
+    if not year_over_year:
+        return '', ''
+    if len(current) == 6:
+        return f'{int(current[:4]) - 1}{current[4:]}', '원문의 전년 비교 표현에서 비교 월 추론'
+    if len(current) == 4:
+        return str(int(current) - 1), '원문의 전년 비교 표현에서 비교 연도 추론'
+    return '', ''
+
+
 def period_range(period, prd_se, comparison_period=""):
     p = parse_period(period)
     if not p:
@@ -586,6 +608,16 @@ def verify_row(row, meta_cache, delay):
         out['default_applied'] = 'Y'
         out['default_reason'] = (out['default_reason'] + '; ' + note).strip('; ')
     comparison = row.get('comparison_period') if mapping_type in {'rate_from_level', 'difference_from_level'} else ''
+    comparison_note = ''
+    if mapping_type in {'rate_from_level', 'difference_from_level'} and not parse_period(comparison):
+        comparison, comparison_note = infer_comparison_period(row)
+        if comparison:
+            row = {**row, 'comparison_period': comparison}
+            out['comparison_period'] = comparison
+            out['default_applied'] = 'Y'
+            out['default_reason'] = (
+                out['default_reason'] + '; ' + comparison_note + ' [위험도 낮음]'
+            ).strip('; ')
     if mapping_type in {'rate_from_level', 'difference_from_level'} and not parse_period(comparison):
         return mark_unverifiable(out, 'COMPARISON_PERIOD_MISSING', 'input', '증감 계산 비교 시점 없음')
     prd_params, period_note = period_range(row.get('period'), prd_se, comparison)
@@ -651,6 +683,8 @@ def verify_row(row, meta_cache, delay):
     reason_parts = [reason, item_reason, obj_reason, agg_reason, unit_reason]
     if period_note:
         reason_parts.append(period_note)
+    if comparison_note:
+        reason_parts.append(comparison_note)
     if not data_rows:
         reason_parts.append('조회 데이터 없음')
 

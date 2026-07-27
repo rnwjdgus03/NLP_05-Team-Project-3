@@ -1,4 +1,9 @@
-from kosis_verify_claim_values import derive_actual, unit_factor, verify_row
+from kosis_verify_claim_values import (
+    derive_actual,
+    infer_comparison_period,
+    unit_factor,
+    verify_row,
+)
 
 
 def test_base_unit_conversion_uses_multiplication_for_canonical_claim_values():
@@ -6,6 +11,31 @@ def test_base_unit_conversion_uses_multiplication_for_canonical_claim_values():
     assert unit_factor("백만원", "원")[0] == 1_000_000
     assert unit_factor("천명", "명")[0] == 1_000
     assert unit_factor("백만달러", "원")[0] is None
+
+
+def test_explicit_year_over_year_text_infers_comparison_period():
+    monthly, monthly_reason = infer_comparison_period({
+        "period": "202412",
+        "claim_text": "12월 수출액은 전년 동월 대비 6.6% 증가했다.",
+    })
+    yearly, yearly_reason = infer_comparison_period({
+        "period": "2024",
+        "claim_text": "전체 수입이 전년 대비 1.6% 감소했다.",
+    })
+
+    assert monthly == "202312"
+    assert "비교 월" in monthly_reason
+    assert yearly == "2023"
+    assert "비교 연도" in yearly_reason
+
+
+def test_comparison_period_is_not_guessed_without_explicit_yoy_text():
+    period, reason = infer_comparison_period({
+        "period": "202412",
+        "claim_text": "수출 증가율이 6.6%를 기록했다.",
+    })
+    assert period == ""
+    assert reason == ""
 
 
 def test_rate_from_monthly_flow_uses_previous_year_sum():

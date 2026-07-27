@@ -11,6 +11,9 @@ from kosis_validate_mapping_candidates import (
     build_obj_context,
     build_kosis_request,
     _lexical_candidates,
+    _merge_seeded_candidates,
+    _seeded_item_candidates,
+    _seeded_obj_candidates,
     choose_or_abstain,
     group_official_meta,
     low_priority_reason,
@@ -182,6 +185,34 @@ def test_lexical_candidates_do_not_match_one_character_inside_word():
     scores = {row["code"]: row["semantic_score"] for row in ranked}
     assert scores["ONE"] == 0
     assert scores["EXPORT"] > scores["ONE"]
+
+
+def test_upstream_item_obj_selections_are_reused_as_official_meta_hints():
+    grouped = group_official_meta(official_meta())
+    row = {
+        "selected_itm_id": "I_RATE",
+        "selected_itm_name": "고용률",
+        "selected_itm_score": "12",
+        "selected_obj_l1_axis_id": "REGION",
+        "selected_obj_l1": "R_ALL",
+        "selected_obj_l1_name": "전국",
+        "selected_obj_l1_score": "8",
+    }
+
+    items = _merge_seeded_candidates(
+        _lexical_candidates(grouped["items"], ""),
+        _seeded_item_candidates(row),
+    )
+    seeded_obj = _seeded_obj_candidates(row, grouped)
+    regions = _merge_seeded_candidates(
+        _lexical_candidates(grouped["axes"][1]["values"], ""),
+        seeded_obj[1],
+    )
+
+    assert items[0]["code"] == "I_RATE"
+    assert items[0]["seeded_hint"] is True
+    assert regions[0]["code"] == "R_ALL"
+    assert regions[0]["seeded_hint"] is True
 
 
 def test_zero_score_obj_candidate_falls_back_to_official_aggregate():

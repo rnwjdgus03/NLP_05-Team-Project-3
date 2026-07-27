@@ -523,16 +523,18 @@ A팀이 `gold_verifiable`·`gold_measurement_correct`(109행)까지 채워, 게�
 | ② 게이트 | 정밀도 P(verifiable\|ready) | 74.4% |
 | ② 게이트 | 재현율 P(ready\|verifiable) | **90.6%** (scope만 수정 69.0%, 최초 59.5%) |
 | ② 추출 | 필드 정확도(ready) | 84.6% |
-| ③ 검색 | recall@5 | 62.5% (동결 전 파일럿) |
-| ④ 판정 | 정확도 | 31.8% (동결 전 파일럿) |
+| ③ 검색 | recall@2 | 62.5% (locked v1, 15/24) |
+| ④ 판정 | 도달 행 정확도 | 100% (3/3, 전체 verdict coverage 3/22) |
 
 **게이트 scope 오분류 버그 수정** — 채점 결과 게이트가 검증 가능한 값을 과도하게 반려(재현율 59.5%)했고, 원인은 한국 수출액·무역수지·선박수출이 `claim_domain_scope='해외통계·정책'`으로 오분류(HCX가 "수출=달러=해외"로 착각)되어 `OUT_OF_KOSIS_SCOPE`로 반려된 것이었습니다. `extract_hcx.py`의 `correct_trade_scope`(무역 지표 + 외국 국가명 없음 → 국내공식통계)와 소급 패치 `patch_trade_scope.py`로 교정해 **재현율 59.5% → 69.0%**로 개선(정밀도 유지). 교정된 6건은 게이트를 통과했으나 다수가 무역수지 계산식(`FORMULA_REQUIRED`)·선박 코드셋(`CODESET_REQUIRED`) 등 **다음 단계 병목**에 걸려, 병목이 검색 recall + 코드셋/계산식으로 이어짐을 확인했습니다.
 
 **골드 기준 통일과 v1 동결** — `POLICY_VALUE`, `CONDITION`, `CONTEXT`인데 `gold_verifiable=Y`였던 10건을 N으로 통일했습니다. 동결 결과는 109행, `gold_verifiable=Y` 32건, READY 39건이며 게이트 정밀도 74.4%, 재현율 90.6%입니다. 남은 false negative 3건은 모두 `measurement_role=이전값`을 직접 검증 대상에서 제외한 사례입니다. 원본은 보존하고 `outputs/gold/gold_measurement_v1_locked.csv`와 변경 감사·지표·보고서를 별도로 생성합니다.
 
-`score_gold.py`는 candidate/verified CSV가 없을 때 0%로 오해되는 결과를 출력하지 않고 해당 단계를 미채점으로 표시합니다. 검색과 verdict 수치는 v1 동결 입력으로 두 브랜치를 다시 실행한 뒤 갱신해야 합니다.
+`score_gold.py`는 candidate/verified CSV가 없을 때 0%로 오해되는 결과를 출력하지 않고 해당 단계를 미채점으로 표시합니다. locked v1 재평가에서는 lexical Top-2가 recall 62.5%로 최소 최적값이었고, 자동 READY는 4/39건입니다. 골드 좌표가 있는 READY 3건은 ITEM/OBJ가 모두 맞았으며 verdict도 3/3 일치했습니다. 단, 전체 gold verdict 22건 중 최종 단계까지 도달한 것은 3건(13.6%)이므로 조건부 정확도와 coverage를 함께 보고합니다.
 
-**남은 과제**: (1) 이전값을 게이트 직접 대상으로 포함할지 결정. (2) 코드북 override(검색 못 찾는 실적표), 무역수지 계산식, 품목 코드셋. (3) v1 동결 입력으로 Poc → Mapping-end 통합 재실행.
+상세 결과와 재현 명령은 [`docs/locked_v1_mapping_end_result_20260727.md`](docs/locked_v1_mapping_end_result_20260727.md)에 있습니다.
+
+**남은 과제**: (1) 검색에서 놓친 정답표 9/24를 코드북·키워드 확장으로 보완. (2) `INVALID_COMBINATION`과 rank-1 비결정 행의 ITEM/OBJ 후보 개선. (3) 이전값을 게이트 직접 대상으로 포함할지 결정. (4) 무역수지 계산식과 품목 코드셋 회귀 규칙 추가.
 
 > 주의: 파일럿 표본이 24~33건 규모로 방향성 결론입니다. 골드 확장 시 재검증합니다.
 
@@ -542,7 +544,8 @@ A팀이 `gold_verifiable`·`gold_measurement_correct`(109행)까지 채워, 게�
 pytest
 ```
 
-현재 `Poc@6ceb3ff` 기준 전체 테스트 결과는 `117 passed`입니다.
+`Poc@6ceb3ff` 기준은 `117 passed`, Mapping-end 선택 통합 후 현재 재현 브랜치는
+`120 passed`입니다.
 
 브랜치, locked gold, 파일 해시와 KOSIS 좌표 검증 재현 절차는
 [`docs/reproducibility_baseline_20260727.md`](docs/reproducibility_baseline_20260727.md)를

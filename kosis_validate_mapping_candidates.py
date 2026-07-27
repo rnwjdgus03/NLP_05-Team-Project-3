@@ -452,6 +452,72 @@ def _lexical_candidates(values: Iterable[Mapping[str, Any]], text: str) -> list[
     return sorted(out, key=lambda x: x["semantic_score"], reverse=True)
 
 
+def _merge_seeded_candidates(
+    lexical: Iterable[Mapping[str, Any]],
+    seeded: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge upstream meta selections as hints without bypassing code validation."""
+    merged: dict[str, dict[str, Any]] = {}
+    for row in lexical:
+        code = str(row.get("code", "")).strip()
+        if code:
+            merged[code] = dict(row)
+    for row in seeded:
+        code = str(row.get("code", "")).strip()
+        if not code:
+            continue
+        base = merged.get(code, {})
+        merged[code] = {
+            **base,
+            **row,
+            "code": code,
+            "semantic_score": max(_score(base), _score(row)),
+            "seeded_hint": True,
+        }
+    return sorted(merged.values(), key=_score, reverse=True)
+
+
+def _seeded_item_candidates(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    code = str(row.get("selected_itm_id", "")).strip()
+    if not code:
+        return []
+    return [{
+        "code": code,
+        "name": str(row.get("selected_itm_name", "")).strip(),
+        "semantic_score": _score({"semantic_score": row.get("selected_itm_score", "")}),
+        "seeded_hint": True,
+    }]
+
+
+def _seeded_obj_candidates(
+    row: Mapping[str, Any],
+    grouped: Mapping[str, Any],
+) -> dict[int, list[dict[str, Any]]]:
+    axis_orders = {
+        str(axis.get("obj_id", "")): order
+        for order, axis in grouped.get("axes", {}).items()
+        if str(axis.get("obj_id", ""))
+    }
+    seeded: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for level in range(1, 9):
+        code = str(row.get(f"selected_obj_l{level}", "")).strip()
+        if not code:
+            continue
+        axis_id = str(row.get(f"selected_obj_l{level}_axis_id", "")).strip()
+        order = axis_orders.get(axis_id, level)
+        if order not in grouped.get("axes", {}):
+            continue
+        seeded[order].append({
+            "code": code,
+            "name": str(row.get(f"selected_obj_l{level}_name", "")).strip(),
+            "semantic_score": _score({
+                "semantic_score": row.get(f"selected_obj_l{level}_score", "")
+            }),
+            "seeded_hint": True,
+        })
+    return seeded
+
+
 def build_claim_context(row: Mapping[str, Any]) -> str:
     fields = (
         "claim_text", "indicator", "measurement_indicator", "measurement",
@@ -590,10 +656,19 @@ def main() -> None:
         grouped = group_official_meta(meta_rows)
         claim_text = build_claim_context(row)
         obj_text = build_obj_context(row)
-        item_candidates = _lexical_candidates(grouped["items"], claim_text)
-        obj_candidates = {order: _lexical_candidates(axis["values"], obj_text)
-                          for order, axis in grouped["axes"].items()
-                          if any(x["semantic_score"] > 0 for x in _lexical_candidates(axis["values"], obj_text))}
+        item_candidates = _merge_seeded_candidates(
+            _lexical_candidates(grouped["items"], claim_text),
+            _seeded_item_candidates(row),
+        )
+        seeded_obj = _seeded_obj_candidates(row, grouped)
+        obj_candidates = {}
+        for order, axis in grouped["axes"].items():
+            candidates = _merge_seeded_candidates(
+                _lexical_candidates(axis["values"], obj_text),
+                seeded_obj.get(order, []),
+            )
+            if any(candidate["semantic_score"] > 0 for candidate in candidates):
+                obj_candidates[order] = candidates
         periods = required_periods_for_row(row)
 
         def fetch(params: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
