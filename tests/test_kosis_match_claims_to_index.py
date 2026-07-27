@@ -1,12 +1,16 @@
 from kosis_match_claims_to_index import (
+    apply_mapping_override,
     candidate_decision,
     claim_tokens,
     compact,
     item_mapping_type,
+    mapping_override_matches_claim,
     norm_table_row,
     normalized_claim_row,
     rank_table_candidates,
     score_table,
+    select_structured_meta,
+    table_override_matches_claim,
 )
 from kosis_semantic_search import SemanticHit
 
@@ -50,6 +54,9 @@ def test_measurement_fields_override_claim_fields():
     assert claim["industry_or_item"] == "반도체"
     assert claim["period"] == "2024"
 
+    year_end = normalized_claim_row(ready_claim(measurement_period="2023년말"))
+    assert year_end["period"] == "2023"
+
 
 def test_rate_claim_can_be_derived_from_level_item():
     claim = normalized_claim_row(ready_claim())
@@ -71,6 +78,78 @@ def test_generic_trade_table_beats_wrong_product_and_archive():
 
     assert generic_score > cosmetics_score
     assert archived_score < 0
+
+
+def test_table_override_requires_all_scope_fields_and_promotes_target():
+    claim = normalized_claim_row(ready_claim())
+    generic = table("DT_TRADE", "품목별 수출액, 수입액", "SITC에의한무역통계")
+    ict = table("DT_ICT_YEAR", "수출 및 수입액", "ICT실태조사")
+    rule = {
+        "rule_id": "semiconductor_export_y",
+        "indicator_contains": "수출",
+        "item_contains": "반도체",
+        "claim_contains": "",
+        "prd_se": "Y",
+        "org_id": "1",
+        "tbl_id": "DT_ICT_YEAR",
+        "boost": "1200",
+    }
+
+    assert table_override_matches_claim(rule, claim) is True
+    assert table_override_matches_claim(rule, {**claim, "prd_se": "M"}) is False
+
+    ranked = rank_table_candidates(
+        [generic, ict],
+        claim,
+        top_tables=2,
+        table_overrides=[rule],
+    )
+    assert ranked[0]["table"]["tbl_id"] == "DT_ICT_YEAR"
+    assert ranked[0]["override_rule_id"] == "semiconductor_export_y"
+    assert ranked[0]["retrieval_backend"] == "lexical+codebook"
+
+
+def test_mapping_override_seeds_item_and_each_official_obj_axis():
+    claim = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="바이오헬스 수출 증가율",
+            measurement_item="바이오헬스",
+        )
+    )
+    meta = [
+        {"is_item": "Y", "axis_id": "ITEM", "code_id": "T001", "code_name": "바이오헬스산업 매출액"},
+        {"is_item": "N", "axis_order": "2", "axis_id": "A", "axis_name": "산업별",
+         "code_id": "A01", "code_name": "바이오헬스산업"},
+        {"is_item": "N", "axis_order": "3", "axis_id": "B", "axis_name": "매출현황별",
+         "code_id": "B03", "code_name": "수출액", "unit_name": "백만원"},
+    ]
+    rule = {
+        "rule_id": "biohealth_export_y",
+        "indicator_contains": "수출",
+        "item_contains": "바이오헬스",
+        "prd_se": "Y",
+        "org_id": "358",
+        "tbl_id": "DT_BIO",
+        "itm_id": "T001",
+        "obj_l2": "A01",
+        "obj_l3": "B03",
+        "source_unit": "백만원",
+    }
+
+    assert mapping_override_matches_claim(
+        rule,
+        claim,
+        {"org_id": "358", "tbl_id": "DT_BIO"},
+    )
+    structured = select_structured_meta(meta, claim, [])
+    selected = apply_mapping_override(structured, meta, claim, rule)
+
+    assert selected["selected_itm_id"] == "T001"
+    assert selected["selected_obj_l2"] == "A01"
+    assert selected["selected_obj_l3"] == "B03"
+    assert selected["mapping_type"] == "rate_from_level"
+    assert selected["mapping_override_rule"] == "biohealth_export_y"
+    assert candidate_decision(1, 1200, 100, selected, meta, claim)[0] == "READY"
 
 
 def test_trade_population_and_metric_mismatches_are_hard_rejected():

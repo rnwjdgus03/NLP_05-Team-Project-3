@@ -73,8 +73,7 @@ def get_list(vw_cd="MT_ZTITLE", parent_id=""):
 def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3, **extra):
     """
     통계자료(Param) API - 실제 통계 수치 조회.
-    obj_l1: 분류1 코드 (필수, 통계표마다 다름 - 보통 '분류값 ID' 전체 조회 시 orgId+tblId만 넣고
-            objL1 없이 한번 호출해보면 사용 가능한 분류코드가 에러/샘플로 힌트가 나오는 경우가 많음)
+    obj_l1: 분류1 코드. 첫 분류축이 없는 일부 표는 None을 허용한다.
     itm_id: 항목 코드 (필수)
     prd_se: 수록주기 (연도 Y, 반기 H, 분기 Q, 월 M 등)
     new_est_prd_cnt: 최신 시점 몇 개를 가져올지 (startPrdDe/endPrdDe 대신 사용)
@@ -84,12 +83,13 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
         "apiKey": _require_api_key(),
         "orgId": org_id,
         "tblId": tbl_id,
-        "objL1": obj_l1,
         "itmId": itm_id,
         "prdSe": prd_se,
         "newEstPrdCnt": new_est_prd_cnt,
         "format": "json",
     }
+    if obj_l1 not in (None, ""):
+        params["objL1"] = obj_l1
     for level in range(2, 9):
         py_key = f"obj_l{level}"
         api_key = f"objL{level}"

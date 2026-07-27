@@ -156,7 +156,7 @@ def test_unit_mismatch_is_retained_with_ranking_penalty():
 
 @pytest.mark.parametrize(
     ("claim_unit", "kosis_unit"),
-    [("달러", "백만달러"), ("억달러", "천달러"), ("개", "개사")],
+    [("달러", "백만달러"), ("달러", "백만US$"), ("억달러", "천달러"), ("개", "개사")],
 )
 def test_scaled_and_organization_units_are_compatible(claim_unit, kosis_unit):
     result = validate_unit_and_period(
@@ -230,10 +230,10 @@ def test_zero_score_obj_candidate_falls_back_to_official_aggregate():
     )
 
 
-def test_obj_context_uses_scope_but_removes_measurement_words():
-    assert build_obj_context({"indicator": "반도체 수출액", "industry_or_item": "-"}) == "반도체"
-    assert build_obj_context({"indicator": "수출액", "industry_or_item": "-"}) == ""
-    assert build_obj_context({"indicator": "수출액", "industry_or_item": "자동차"}) == "자동차"
+def test_obj_context_keeps_metric_nouns_that_can_be_official_axes():
+    assert build_obj_context({"indicator": "반도체 수출액", "industry_or_item": "-"}) == "반도체 수출액"
+    assert build_obj_context({"indicator": "수출액", "industry_or_item": "-"}) == "수출액"
+    assert build_obj_context({"indicator": "수출액", "industry_or_item": "자동차"}) == "자동차 수출액"
 
 
 def test_previous_year_is_added_only_for_explicit_year_over_year_claim():
@@ -300,6 +300,33 @@ def test_api_error_and_empty_response_have_distinct_outcomes():
     assert api_error["mapping_status"] == API_ERROR
     assert empty["mapping_status"] == MAPPING_FAILED
     assert empty["mapping_reason"] == "EMPTY_RESPONSE"
+
+
+def test_kosis_error_payloads_distinguish_no_data_from_bad_request():
+    kwargs = dict(
+        org_id="ORG",
+        tbl_id="TBL",
+        meta_rows=official_meta(),
+        item_candidates=[{"code": "I_TOTAL", "semantic_score": 0.9}],
+        obj_candidates=explicit_obj_candidates(),
+        expected_unit="명",
+        required_periods=["2024"],
+    )
+
+    no_data = validate_mapping_candidates(
+        **kwargs,
+        data_fetcher=lambda _request: [{"err": "30", "errMsg": "데이터가 존재하지 않습니다."}],
+    )
+    bad_request = validate_mapping_candidates(
+        **kwargs,
+        data_fetcher=lambda _request: [{"err": "21", "errMsg": "잘못된 요청 변수"}],
+    )
+
+    assert (no_data["mapping_status"], no_data["mapping_reason"]) == (
+        MAPPING_FAILED, "EMPTY_RESPONSE",
+    )
+    assert bad_request["mapping_status"] == API_ERROR
+    assert "KOSIS_ERROR[21]" in bad_request["candidate_obj_combinations"][0]["api_error"]
 
 
 def test_unique_national_and_total_defaults_include_reason_and_low_risk():

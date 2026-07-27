@@ -37,6 +37,8 @@ def parse_number(value):
 
 def canonicalize_unit(unit: str) -> str:
     raw = re.sub(r"\s+", "", nz(unit)).replace("％", "%")
+    raw = re.sub(r"(?i)u\.?s\.?\$", "달러", raw)
+    raw = re.sub(r"(?i)usd", "달러", raw)
     aliases = {
         "퍼센트": "%",
         "프로": "%",
@@ -53,6 +55,17 @@ def canonicalize_unit(unit: str) -> str:
         "사람": "명",
     }
     return aliases.get(raw, raw)
+
+
+def canonicalize_period(period: str, prd_se: str = "") -> str:
+    raw = nz(period)
+    periodicity = nz(prd_se).upper()
+    if periodicity == "M":
+        match = re.search(r"((?:19|20)\d{2})\D*(1[0-2]|0?[1-9])", raw)
+        if match:
+            return f"{match.group(1)}{int(match.group(2)):02d}"
+    match = re.search(r"(?:19|20)\d{2}", raw)
+    return match.group() if match else raw
 
 
 def unit_dimension(unit: str) -> str:
@@ -205,8 +218,8 @@ def normalize_row(row: dict) -> dict:
     out["claim_prd_se"] = nz(row.get("prd_se"))
     out["indicator"] = nz(row.get("measurement_indicator")) or nz(row.get("indicator"))
     out["industry_or_item"] = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
-    out["period"] = nz(row.get("measurement_period"))
     out["prd_se"] = nz(row.get("measurement_prd_se"))
+    out["period"] = canonicalize_period(row.get("measurement_period"), out["prd_se"])
     out["raw_unit"] = raw_unit
     out["canonical_unit"] = canonical_unit
     out["unit"] = canonical_unit

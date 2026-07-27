@@ -1,6 +1,7 @@
 import csv
 
 from prepare_kosis_mapping_input import (
+    canonicalize_period,
     canonicalize_unit,
     normalize_row,
     prepare,
@@ -39,6 +40,12 @@ def test_unit_normalization_preserves_meaning():
     assert unit_dimension("세") == "age"
     assert unit_dimension("배") == "multiple"
     assert unit_dimension("백만달러") == "currency"
+    assert unit_dimension("백만US$") == "currency"
+
+
+def test_period_labels_are_canonicalized_for_kosis():
+    assert canonicalize_period("2023년말", "Y") == "2023"
+    assert canonicalize_period("2024년 12월", "M") == "202412"
 
 
 def test_normalize_row_uses_measurement_level_aliases():

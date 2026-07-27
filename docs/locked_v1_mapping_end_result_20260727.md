@@ -1,5 +1,8 @@
 # Locked v1 lexical + Mapping-end 재평가
 
+> 이 문서는 코드북 확장 전 기준선이다. 검색·ITEM/OBJ 코드북 적용 후 결과는
+> [`locked_v1_codebook_result_20260727.md`](locked_v1_codebook_result_20260727.md)를 본다.
+
 ## 평가 기준
 
 - 기준 코드: `Poc@6ceb3ff` 위 재현 브랜치

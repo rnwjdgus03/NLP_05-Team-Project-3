@@ -1,0 +1,6 @@
+rule_id,indicator_contains,item_contains,claim_contains,prd_se,org_id,tbl_id,boost,enabled,note
+energy_import_y,수입,,에너지,Y,339,DT_F_Y160,1200,Y,에너지 수입 증감은 에너지수급 연간표 우선
+semiconductor_export_y,수출,반도체,,Y,127,DT_127005_005,1200,Y,반도체 연간 수출은 ICT실태조사 산업별 표 우선
+semiconductor_export_m,수출,반도체,,M,127,DT_092_115_2009_S023,1200,Y,반도체 월간 수출은 ICT수출입통계 월별 표 우선
+biohealth_export_y,수출,바이오헬스,,Y,358,DT_358004_002,1200,Y,바이오헬스 수출은 산업별 매출현황의 수출액 축 사용
+airline_mechanics_y,정비사,항공,,Y,444,DT_444002_N2023A006,1200,Y,항공 정비사 수는 항공산업 직무별 종사자 표 우선

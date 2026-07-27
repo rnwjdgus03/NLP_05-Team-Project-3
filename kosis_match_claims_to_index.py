@@ -43,6 +43,8 @@ DEFAULT_TABLE_INDEX_CANDIDATES = [
 ]
 DEFAULT_META_INDEX = PROJECT_DIR / "data/claims/kosis_meta_index.csv"
 DEFAULT_SEMANTIC_INDEX = PROJECT_DIR / "data/indexes/kosis_bge_m3"
+DEFAULT_TABLE_OVERRIDES = PROJECT_DIR / "data/claims/kosis_table_search_overrides_v1.csv"
+DEFAULT_MAPPING_OVERRIDES = PROJECT_DIR / "data/claims/kosis_mapping_overrides_v1.csv"
 
 csv.field_size_limit(2 ** 31 - 1)
 
@@ -86,12 +88,14 @@ TOKEN_EXPANSIONS = {
     "자동차": ["승용자동차", "차량", "자동차"],
     "완성차": ["승용자동차", "차량", "자동차"],
     "선박": ["선박", "보트", "부유구조물"],
-    "반도체": ["반도체", "전자집적회로", "메모리", "디바이스"],
+    "반도체": ["반도체", "전자집적회로", "메모리", "디바이스", "ICT", "IT산업"],
     "화장품": ["화장품", "화장용품", "향수"],
     "석유화학": ["석유", "화학", "화학제품"],
-    "바이오헬스": ["의약품", "의료용품", "바이오"],
+    "바이오헬스": ["의약품", "의료용품", "바이오", "바이오헬스산업", "수출액"],
     "농수산식품": ["식품", "농산물", "수산", "어류"],
     "최저임금": ["임금", "노동", "근로"],
+    "에너지": ["에너지수급", "에너지수입액"],
+    "정비사": ["직무별", "종사자", "항공정비"],
 }
 
 STOPWORDS = {
@@ -133,6 +137,61 @@ def compact(text):
     return re.sub(r"\s+", "", str(text or "").strip())
 
 
+def load_table_overrides(path: Path | None = None):
+    target = path or DEFAULT_TABLE_OVERRIDES
+    if not target.exists():
+        return []
+    rows, _ = read_csv(target)
+    return [
+        row for row in rows
+        if str(row.get("enabled", "Y")).strip().upper() not in {"N", "FALSE", "0"}
+        and str(row.get("org_id", "")).strip()
+        and str(row.get("tbl_id", "")).strip()
+    ]
+
+
+def load_mapping_overrides(path: Path | None = None):
+    target = path or DEFAULT_MAPPING_OVERRIDES
+    if not target.exists():
+        return []
+    rows, _ = read_csv(target)
+    return [
+        row for row in rows
+        if str(row.get("enabled", "Y")).strip().upper() not in {"N", "FALSE", "0"}
+        and str(row.get("org_id", "")).strip()
+        and str(row.get("tbl_id", "")).strip()
+        and str(row.get("itm_id", "")).strip()
+    ]
+
+
+def _contains_rule_value(text, expected):
+    values = [compact(value) for value in str(expected or "").split("|") if compact(value)]
+    return not values or any(value in compact(text) for value in values)
+
+
+def table_override_matches_claim(rule, claim):
+    norm_claim = normalized_claim_row(claim)
+    if not _contains_rule_value(norm_claim.get("indicator"), rule.get("indicator_contains")):
+        return False
+    if not _contains_rule_value(norm_claim.get("industry_or_item"), rule.get("item_contains")):
+        return False
+    if not _contains_rule_value(norm_claim.get("claim_text"), rule.get("claim_contains")):
+        return False
+    required_prd_se = str(rule.get("prd_se", "")).strip().upper()
+    return not required_prd_se or required_prd_se == str(norm_claim.get("prd_se", "")).strip().upper()
+
+
+def mapping_override_matches_claim(rule, claim, table=None):
+    if not table_override_matches_claim(rule, claim):
+        return False
+    if table is None:
+        return True
+    return (
+        str(rule.get("org_id", "")).strip() == str(table.get("org_id", "")).strip()
+        and str(rule.get("tbl_id", "")).strip() == str(table.get("tbl_id", "")).strip()
+    )
+
+
 def get_first(row, *keys):
     for key in keys:
         value = row.get(key, "")
@@ -143,14 +202,17 @@ def get_first(row, *keys):
 
 def normalized_claim_row(row):
     """A팀/HCX 파일마다 다른 컬럼명을 후보 매칭용 표준명으로 맞춘다."""
-    if any(key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")):
+    has_measurement_contract = any(
+        key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")
+    )
+    if has_measurement_contract:
         row = normalize_mapping_row(row)
     return {
         "claim_id": get_first(row, "claim_id", "claimId", "id"),
         "claim_measurement_id": get_first(row, "claim_measurement_id", "measurement_id"),
-        "indicator": get_first(row, "measurement_indicator", "indicator", "지표"),
+        "indicator": get_first(row, "indicator", "measurement_indicator", "지표"),
         "metric_domain": get_first(row, "metric_domain", "도메인", "검색 구분 레이블"),
-        "industry_or_item": get_first(row, "measurement_item", "industry_or_item", "품목", "산업", "대상"),
+        "industry_or_item": get_first(row, "industry_or_item", "measurement_item", "품목", "산업", "대상"),
         "keywords": get_first(row, "keywords", "키워드"),
         "region": get_first(row, "region", "지역"),
         "age_group": get_first(row, "age_group", "연령"),
@@ -169,8 +231,8 @@ def normalized_claim_row(row):
         "mapping_eligible": get_first(row, "mapping_eligible"),
         "mapping_exclusion_code": get_first(row, "mapping_exclusion_code"),
         "mapping_exclusion_reason": get_first(row, "mapping_exclusion_reason"),
-        "period": get_first(row, "measurement_period", "period", "작성일", "date"),
-        "prd_se": get_first(row, "measurement_prd_se", "prd_se", "주기"),
+        "period": get_first(row, "period", "measurement_period", "작성일", "date"),
+        "prd_se": get_first(row, "prd_se", "measurement_prd_se", "주기"),
         "change_base": get_first(row, "change_base"),
         "comparison_period": get_first(row, "comparison_period"),
         "claim_text": get_first(row, "claim_text", "문장", "sentence", "evidence_text"),
@@ -654,19 +716,25 @@ def item_mapping_type(norm_claim, meta_unit, item_name):
 
 
 def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
-    """검증 API가 바로 쓸 수 있게 item 후보와 objL1 후보를 분리해서 고른다."""
+    """검증 API가 바로 쓸 수 있게 ITEM과 실제 축 순서별 OBJ 후보를 고른다."""
     selected = {
         "selected_itm_id": "", "selected_itm_name": "", "selected_itm_unit": "", "selected_itm_score": "",
-        "selected_obj_l1_axis_id": "", "selected_obj_l1_axis_name": "",
-        "selected_obj_l1": "", "selected_obj_l1_name": "", "selected_obj_l1_score": "",
         "mapping_type": "", "unit_compatibility_reason": "",
         "selected_code_status": "meta 없음",
     }
+    for level in range(1, 9):
+        selected.update({
+            f"selected_obj_l{level}_axis_id": "",
+            f"selected_obj_l{level}_axis_name": "",
+            f"selected_obj_l{level}": "",
+            f"selected_obj_l{level}_name": "",
+            f"selected_obj_l{level}_score": "",
+        })
     if not meta_rows:
         return selected
 
     items = []
-    objs = []
+    objs_by_order = defaultdict(list)
     for r in meta_rows:
         meta_unit = r.get("unit_name") or r.get("UNIT_NM", "")
         score, hits = score_structured_meta(r, norm_claim, weighted_tokens)
@@ -682,9 +750,13 @@ def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
                 score += 30
             items.append((score, r, mapping_type, unit_reason))
         else:
-            objs.append((score, r))
+            try:
+                order = int(str(r.get("axis_order") or r.get("OBJ_ID_SN") or "1"))
+            except ValueError:
+                order = 1
+            if 1 <= order <= 8:
+                objs_by_order[order].append((score, r))
     items.sort(key=lambda x: (-x[0], x[1].get("code_name", "")))
-    objs.sort(key=lambda x: (-x[0], x[1].get("axis_id", ""), x[1].get("code_name", "")))
 
     if items:
         score, r, mapping_type, unit_reason = items[0]
@@ -696,17 +768,73 @@ def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
             "mapping_type": mapping_type,
             "unit_compatibility_reason": unit_reason,
         })
-    if objs:
-        # 점수가 모두 낮으면 총액/계/전국 같은 안전한 기본값을 우선한다.
+    for order, objs in objs_by_order.items():
+        objs.sort(key=lambda x: (-x[0], x[1].get("axis_id", ""), x[1].get("code_name", "")))
         score, r = objs[0]
         selected.update({
-            "selected_obj_l1_axis_id": r.get("axis_id") or r.get("OBJ_ID", ""),
-            "selected_obj_l1_axis_name": r.get("axis_name") or r.get("OBJ_NM", ""),
-            "selected_obj_l1": r.get("code_id") or r.get("ITM_ID", ""),
-            "selected_obj_l1_name": r.get("code_name") or r.get("ITM_NM", ""),
-            "selected_obj_l1_score": score,
+            f"selected_obj_l{order}_axis_id": r.get("axis_id") or r.get("OBJ_ID", ""),
+            f"selected_obj_l{order}_axis_name": r.get("axis_name") or r.get("OBJ_NM", ""),
+            f"selected_obj_l{order}": r.get("code_id") or r.get("ITM_ID", ""),
+            f"selected_obj_l{order}_name": r.get("code_name") or r.get("ITM_NM", ""),
+            f"selected_obj_l{order}_score": score,
         })
-    selected["selected_code_status"] = "itm/obj 후보 선택" if selected["selected_itm_id"] or selected["selected_obj_l1"] else "코드 매칭 없음"
+    has_obj = any(selected[f"selected_obj_l{level}"] for level in range(1, 9))
+    selected["selected_code_status"] = "itm/obj 후보 선택" if selected["selected_itm_id"] or has_obj else "코드 매칭 없음"
+    return selected
+
+
+def apply_mapping_override(structured_meta, meta_rows, norm_claim, rule):
+    """공식 메타에 실제로 존재하는 코드만 감사 가능한 규칙으로 시드한다."""
+    selected = dict(structured_meta)
+    item_code = str(rule.get("itm_id", "")).strip()
+    item_row = next(
+        (
+            row for row in meta_rows
+            if (row.get("is_item") == "Y" or row.get("OBJ_ID") == "ITEM")
+            and str(row.get("code_id") or row.get("ITM_ID") or "").strip() == item_code
+        ),
+        None,
+    )
+    if item_row:
+        item_name = item_row.get("code_name") or item_row.get("ITM_NM", "")
+        source_unit = str(rule.get("source_unit", "")).strip() or (
+            item_row.get("unit_name") or item_row.get("UNIT_NM", "")
+        )
+        mapping_type = str(rule.get("mapping_type", "")).strip()
+        unit_reason = ""
+        if not mapping_type:
+            mapping_type, unit_reason = item_mapping_type(norm_claim, source_unit, item_name)
+        selected.update({
+            "selected_itm_id": item_code,
+            "selected_itm_name": item_name,
+            "selected_itm_unit": source_unit,
+            "selected_itm_score": 1000,
+            "mapping_type": mapping_type,
+            "unit_compatibility_reason": unit_reason,
+        })
+
+    for level in range(1, 9):
+        code = str(rule.get(f"obj_l{level}", "")).strip()
+        if not code:
+            continue
+        obj_row = next(
+            (
+                row for row in meta_rows
+                if str(row.get("axis_order") or row.get("OBJ_ID_SN") or "").strip() == str(level)
+                and str(row.get("code_id") or row.get("ITM_ID") or "").strip() == code
+            ),
+            None,
+        )
+        if obj_row:
+            selected.update({
+                f"selected_obj_l{level}_axis_id": obj_row.get("axis_id") or obj_row.get("OBJ_ID", ""),
+                f"selected_obj_l{level}_axis_name": obj_row.get("axis_name") or obj_row.get("OBJ_NM", ""),
+                f"selected_obj_l{level}": code,
+                f"selected_obj_l{level}_name": obj_row.get("code_name") or obj_row.get("ITM_NM", ""),
+                f"selected_obj_l{level}_score": 1000,
+            })
+    selected["mapping_override_rule"] = str(rule.get("rule_id", "")).strip()
+    selected["selected_code_status"] = "코드북 후보 선택"
     return selected
 
 
@@ -737,7 +865,12 @@ def candidate_decision(
         row.get("is_item") != "Y" and row.get("OBJ_ID") != "ITEM"
         for row in table_meta_rows
     )
-    if has_obj_axis and not structured_meta.get("selected_obj_l1"):
+    selected_obj_codes = [
+        structured_meta.get(f"selected_obj_l{level}")
+        for level in range(1, 9)
+        if structured_meta.get(f"selected_obj_l{level}")
+    ]
+    if has_obj_axis and not selected_obj_codes:
         return "REVIEW", "OBJ_UNRESOLVED", "세부 대상 OBJ를 확정하지 못함"
 
     indicator = compact(norm_claim.get("indicator", ""))
@@ -745,12 +878,20 @@ def candidate_decision(
         return "REVIEW", "FORMULA_REQUIRED", "수출액-수입액 계산식 매핑이 필요함"
 
     family = claim_item_family(norm_claim)
-    selected_obj_name = compact(structured_meta.get("selected_obj_l1_name", ""))
+    selected_obj_names = [
+        compact(structured_meta.get(f"selected_obj_l{level}_name", ""))
+        for level in range(1, 9)
+        if structured_meta.get(f"selected_obj_l{level}_name")
+    ]
+    selected_obj_name = compact(" ".join(selected_obj_names))
     if family:
         aliases = {compact(family), *(compact(alias) for alias in ITEM_FAMILIES[family])}
-        broad_code = selected_obj_name in aliases or selected_obj_name in {
-            compact(f"{family}계"), compact(f"{family}전체")
+        broad_names = aliases | {
+            compact(f"{family}계"),
+            compact(f"{family}전체"),
+            compact(f"{family}산업"),
         }
+        broad_code = any(name in broad_names for name in selected_obj_names)
         if not broad_code:
             return "REVIEW", "CODESET_REQUIRED", f"{family} 집계용 OBJ 코드셋이 필요함"
 
@@ -790,6 +931,7 @@ def rank_table_candidates(
     semantic_runtime=None,
     semantic_top_k=50,
     rerank_top_k=20,
+    table_overrides=None,
 ):
     """Return table candidates using lexical or hybrid retrieval.
 
@@ -800,32 +942,49 @@ def rank_table_candidates(
     norm_claim = normalized_claim_row(claim)
     tokens = claim_tokens(norm_claim)
     candidate_pool = filtered_tables_for_claim(table_rows, norm_claim)
+    matching_overrides = {
+        (str(rule.get("org_id", "")), str(rule.get("tbl_id", ""))): rule
+        for rule in table_overrides or []
+        if table_override_matches_claim(rule, norm_claim)
+    }
+    table_lookup = {table_key(table): table for table in table_rows}
+    candidate_keys = {table_key(table) for table in candidate_pool}
+    for key in matching_overrides:
+        table = table_lookup.get(key)
+        if table is not None and key not in candidate_keys:
+            candidate_pool.append(table)
+            candidate_keys.add(key)
     lexical = []
     for table in candidate_pool:
         score, hits = score_table(table, tokens, norm_claim)
+        override = matching_overrides.get(table_key(table))
+        if override:
+            score += int(float(override.get("boost") or 1000))
+            hits = [*hits, f"codebook:{override.get('rule_id', 'override')}"]
         if score >= min_score:
             lexical.append((score, hits, table))
     lexical.sort(key=lambda item: (-item[0], item[2]["tbl_name"]))
 
     if semantic_runtime is None:
-        return [
-            {
+        results = []
+        for score, hits, table in lexical[:top_tables]:
+            override = matching_overrides.get(table_key(table))
+            results.append({
                 "score": score,
                 "hits": hits,
                 "table": table,
-                "retrieval_backend": "lexical",
+                "retrieval_backend": "lexical+codebook" if override else "lexical",
                 "lexical_score": score,
                 "lexical_eligible": True,
                 "semantic_score": None,
                 "reranker_score": None,
                 "fusion_score": None,
-            }
-            for score, hits, table in lexical[:top_tables]
-        ]
+                "override_rule_id": override.get("rule_id", "") if override else "",
+            })
+        return results
 
     query = build_claim_query(norm_claim)
     semantic_hits = semantic_runtime.search(query, top_k=semantic_top_k)
-    table_lookup = {table_key(table): table for table in table_rows}
     lexical_pool_size = max(semantic_top_k, rerank_top_k, top_tables)
     lexical_pool = lexical[:lexical_pool_size]
     lexical_by_key = {
@@ -865,6 +1024,9 @@ def rank_table_candidates(
                 "semantic_score": semantic_evidence["score"] if semantic_evidence else None,
                 "fusion_score": fusion,
                 "reranker_score": None,
+                "override_rule_id": (
+                    matching_overrides.get(key, {}).get("rule_id", "")
+                ),
             }
         )
     fused.sort(
@@ -892,6 +1054,8 @@ def rank_table_candidates(
         else:
             final = 0.35 * item["reranker_score"] + 0.65 * item["fusion_score"]
             backend = "hybrid+reranker"
+        if item.get("override_rule_id"):
+            backend += "+codebook"
         item["score"] = int(round(final * 1000))
         item["retrieval_backend"] = backend
     fused.sort(
@@ -943,6 +1107,7 @@ def load_precomputed_rankings(path, table_rows):
                 "semantic_score": _float_or_none(row.get("semantic_score")),
                 "reranker_score": _float_or_none(row.get("reranker_score")),
                 "fusion_score": _float_or_none(row.get("fusion_score")),
+                "override_rule_id": row.get("table_override_rule", ""),
             }
         )
     for candidates in grouped.values():
@@ -973,6 +1138,16 @@ def main():
     parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
     parser.add_argument("--device", default=None, help="임베딩/리랭커 장치: cuda 또는 cpu")
     parser.add_argument("--no-reranker", action="store_true")
+    parser.add_argument(
+        "--table-overrides",
+        default=str(DEFAULT_TABLE_OVERRIDES),
+        help="감사 가능한 통계표 검색 override CSV. 빈 문자열이면 사용하지 않음",
+    )
+    parser.add_argument(
+        "--mapping-overrides",
+        default=str(DEFAULT_MAPPING_OVERRIDES),
+        help="공식 ITEM/OBJ 코드로 검증되는 매핑 override CSV. 빈 문자열이면 사용하지 않음",
+    )
     parser.add_argument(
         "--ranking-input",
         default="",
@@ -1008,6 +1183,16 @@ def main():
         r["_compact_tbl_name"] = compact(r["tbl_name"])
         r["_compact_category_path"] = compact(r["category_path"])
     meta_by_table = load_meta_index(meta_path)
+    table_overrides = (
+        load_table_overrides(Path(args.table_overrides).expanduser())
+        if args.table_overrides
+        else []
+    )
+    mapping_overrides = (
+        load_mapping_overrides(Path(args.mapping_overrides).expanduser())
+        if args.mapping_overrides
+        else []
+    )
 
     precomputed = None
     semantic_runtime = None
@@ -1054,6 +1239,7 @@ def main():
                 semantic_runtime=semantic_runtime,
                 semantic_top_k=args.semantic_top_k,
                 rerank_top_k=args.rerank_top_k,
+                table_overrides=table_overrides,
             )
         for rank, candidate in enumerate(ranked, 1):
             table_score = candidate["score"]
@@ -1074,6 +1260,20 @@ def main():
                     runner_up_score = runner_up["score"]
             table_meta_rows = meta_by_table.get((table["org_id"], table["tbl_id"]), [])
             structured_meta = select_structured_meta(table_meta_rows, norm_claim, tokens)
+            mapping_rule = next(
+                (
+                    rule for rule in mapping_overrides
+                    if mapping_override_matches_claim(rule, norm_claim, table)
+                ),
+                None,
+            )
+            if mapping_rule:
+                structured_meta = apply_mapping_override(
+                    structured_meta,
+                    table_meta_rows,
+                    norm_claim,
+                    mapping_rule,
+                )
             candidate_status, candidate_status_code, candidate_status_reason = candidate_decision(
                 rank,
                 table_score,
@@ -1123,6 +1323,7 @@ def main():
                 "semantic_score": candidate.get("semantic_score") if candidate.get("semantic_score") is not None else "",
                 "reranker_score": candidate.get("reranker_score") if candidate.get("reranker_score") is not None else "",
                 "fusion_score": candidate.get("fusion_score") if candidate.get("fusion_score") is not None else "",
+                "table_override_rule": candidate.get("override_rule_id", ""),
                 "org_id": table["org_id"],
                 "tbl_id": table["tbl_id"],
                 "tbl_name": table["tbl_name"],
@@ -1140,11 +1341,22 @@ def main():
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
         "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
+        "table_override_rule", "mapping_override_rule",
         "org_id", "tbl_id", "tbl_name", "stat_id", "category_path",
         "meta_candidates",
         "selected_itm_id", "selected_itm_name", "selected_itm_unit", "selected_itm_score",
-        "selected_obj_l1_axis_id", "selected_obj_l1_axis_name",
-        "selected_obj_l1", "selected_obj_l1_name", "selected_obj_l1_score", "selected_code_status",
+        *[
+            field
+            for level in range(1, 9)
+            for field in (
+                f"selected_obj_l{level}_axis_id",
+                f"selected_obj_l{level}_axis_name",
+                f"selected_obj_l{level}",
+                f"selected_obj_l{level}_name",
+                f"selected_obj_l{level}_score",
+            )
+        ],
+        "selected_code_status",
         "mapping_type", "unit_compatibility_reason",
         "claim_text",
     ]

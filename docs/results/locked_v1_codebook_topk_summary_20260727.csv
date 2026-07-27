@@ -1,0 +1,5 @@
+retrieval_mode,top_k,candidate_rows,retrieval_hits,retrieval_gold,retrieval_recall,ready_rows,technical_valid_rows,verified_rows,verdict_correct,verdict_labeled
+lexical,1,39,21,24,0.875,5,24,5,3,5
+lexical,2,76,23,24,0.9583333333333334,5,34,5,3,5
+lexical,3,111,23,24,0.9583333333333334,5,42,5,3,5
+lexical,5,181,23,24,0.9583333333333334,5,57,5,3,5

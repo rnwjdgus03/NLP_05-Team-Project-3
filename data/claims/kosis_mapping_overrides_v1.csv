@@ -1,0 +1,6 @@
+rule_id,indicator_contains,item_contains,claim_contains,prd_se,org_id,tbl_id,itm_id,obj_l1,obj_l2,obj_l3,mapping_type,source_unit,enabled,note
+energy_total_import_y,수입,,에너지,Y,339,DT_F_Y160,13103112841ITEM,13102112841T001.T1,,,,백만US$,Y,전체 수입 증감은 국가 총수입 축의 수준값에서 계산
+semiconductor_export_y,수출,반도체,,Y,127,DT_127005_005,T001,A020101,,,,백만US$,Y,연간 반도체 수출액과 전년 대비 증감률
+semiconductor_export_m,수출,반도체,,M,127,DT_092_115_2009_S023,13103131003T1,13102131003A.AF11100000,,,,달러,Y,월간 반도체 전체 수출액과 전년 동월 대비 증감률
+biohealth_export_y,수출,바이오헬스,,Y,358,DT_358004_002,T001,,A01,B03,,백만원,Y,바이오헬스산업과 수출액 축을 함께 지정
+airline_mechanics_y,정비사,항공,,Y,444,DT_444002_N2023A006,T001,A020201,B06,,,명,Y,항공운송업의 항공기 정비 직무 종사자

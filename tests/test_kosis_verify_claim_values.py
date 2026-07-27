@@ -1,9 +1,14 @@
 from kosis_verify_claim_values import (
     derive_actual,
     infer_comparison_period,
+    parse_number,
     unit_factor,
     verify_row,
 )
+
+
+def test_scientific_notation_claim_value_is_not_truncated():
+    assert parse_number("1.42E+11") == 142_000_000_000
 
 
 def test_base_unit_conversion_uses_multiplication_for_canonical_claim_values():

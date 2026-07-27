@@ -97,7 +97,7 @@ def parse_number(value):
     if not s or s in {'-', '—', 'nan', 'None'}:
         return None
     s = s.replace(',', '')
-    m = re.search(r'-?\d+(?:\.\d+)?', s)
+    m = re.search(r'[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?', s)
     return float(m.group()) if m else None
 
 

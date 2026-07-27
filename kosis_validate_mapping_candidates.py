@@ -240,7 +240,7 @@ def _unit_tokens(value: Any) -> set[str]:
         return {"percentage_point"}
     if text in {"%", "퍼센트", "백분율", "percent"}:
         return {"percent"}
-    if "달러" in text or text in {"usd", "$", "불", "미화"}:
+    if "달러" in text or "us$" in text or "usd" in text or text in {"$", "불", "미화"}:
         return {"currency_usd"}
     if "원" in text:
         return {"currency_krw"}
@@ -351,6 +351,24 @@ def validate_mapping_candidates(
         result = dict(combo)
         try:
             response = list(data_fetcher(request) or [])
+            kosis_errors = [row for row in response if str(row.get("err", "")).strip()]
+            if kosis_errors:
+                error_codes = {str(row.get("err", "")).strip() for row in kosis_errors}
+                error_message = "; ".join(
+                    str(row.get("errMsg", "")).strip() for row in kosis_errors
+                    if str(row.get("errMsg", "")).strip()
+                )
+                if error_codes == {"30"}:
+                    response = []
+                else:
+                    api_errors += 1
+                    result.update({
+                        "response_code_valid": False,
+                        "api_valid": False,
+                        "api_error": f"KOSIS_ERROR[{','.join(sorted(error_codes))}]: {error_message}",
+                    })
+                    attempted.append(result)
+                    continue
             if not response:
                 empty_responses += 1
             result.update(response_matches_request(request, response))
@@ -545,7 +563,7 @@ def build_obj_context(row: Mapping[str, Any]) -> str:
     metric_phrases = (
         "수출액 증감률", "수출 증가율", "수입 증가율", "수입 증감률",
         "수출 증감률", "여객 수", "이용객 수", "정비사 수 비율",
-        "정비사 비율", "정비사 수", "기업 수", "수출액", "수입액",
+        "정비사 비율", "정비사 수", "기업 수",
         "무역수지 증감", "무역수지", "증가율", "감소율", "증감률", "비율",
     )
     for phrase in metric_phrases:
@@ -675,7 +693,7 @@ def main() -> None:
             extra = {f"obj_l{level}": params[f"objL{level}"] for level in range(2, 9)
                      if params.get(f"objL{level}") not in (None, "")}
             return get_stat_data(org_id=params["orgId"], tbl_id=params["tblId"],
-                                 obj_l1=params.get("objL1", "ALL"), itm_id=params["itmId"],
+                                 obj_l1=params.get("objL1"), itm_id=params["itmId"],
                                  prd_se=params.get("prdSe", "Y"),
                                  startPrdDe=params.get("startPrdDe"), endPrdDe=params.get("endPrdDe"),
                                  **extra)

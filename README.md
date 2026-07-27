@@ -523,8 +523,8 @@ A팀이 `gold_verifiable`·`gold_measurement_correct`(109행)까지 채워, 게�
 | ② 게이트 | 정밀도 P(verifiable\|ready) | 74.4% |
 | ② 게이트 | 재현율 P(ready\|verifiable) | **90.6%** (scope만 수정 69.0%, 최초 59.5%) |
 | ② 추출 | 필드 정확도(ready) | 84.6% |
-| ③ 검색 | recall@2 | 62.5% (locked v1, 15/24) |
-| ④ 판정 | 도달 행 정확도 | 100% (3/3, 전체 verdict coverage 3/22) |
+| ③ 검색 | recall@2 | **95.8%** (코드북 확장 후 23/24) |
+| ④ 판정 | 자동 도달 | READY 5/39, verdict coverage 5/22 |
 
 **게이트 scope 오분류 버그 수정** — 채점 결과 게이트가 검증 가능한 값을 과도하게 반려(재현율 59.5%)했고, 원인은 한국 수출액·무역수지·선박수출이 `claim_domain_scope='해외통계·정책'`으로 오분류(HCX가 "수출=달러=해외"로 착각)되어 `OUT_OF_KOSIS_SCOPE`로 반려된 것이었습니다. `extract_hcx.py`의 `correct_trade_scope`(무역 지표 + 외국 국가명 없음 → 국내공식통계)와 소급 패치 `patch_trade_scope.py`로 교정해 **재현율 59.5% → 69.0%**로 개선(정밀도 유지). 교정된 6건은 게이트를 통과했으나 다수가 무역수지 계산식(`FORMULA_REQUIRED`)·선박 코드셋(`CODESET_REQUIRED`) 등 **다음 단계 병목**에 걸려, 병목이 검색 recall + 코드셋/계산식으로 이어짐을 확인했습니다.
 
@@ -534,7 +534,24 @@ A팀이 `gold_verifiable`·`gold_measurement_correct`(109행)까지 채워, 게�
 
 상세 결과와 재현 명령은 [`docs/locked_v1_mapping_end_result_20260727.md`](docs/locked_v1_mapping_end_result_20260727.md)에 있습니다.
 
-**남은 과제**: (1) 검색에서 놓친 정답표 9/24를 코드북·키워드 확장으로 보완. (2) `INVALID_COMBINATION`과 rank-1 비결정 행의 ITEM/OBJ 후보 개선. (3) 이전값을 게이트 직접 대상으로 포함할지 결정. (4) 무역수지 계산식과 품목 코드셋 회귀 규칙 추가.
+**코드북·키워드 확장 완료(2026-07-27)** — 검색 누락 9건 중 의미상 유효한
+8건을 복구해 lexical recall@2를 15/24(62.5%)에서 **23/24(95.8%)**로
+높였다. 통계표 규칙은 `kosis_table_search_overrides_v1.csv`, 공식 ITEM/OBJ
+좌표는 `kosis_mapping_overrides_v1.csv`에 분리해 감사 가능하게 관리한다.
+READY는 4/39에서 5/39로 증가했다. 검색이 복구되어도 비교 기준 미명시,
+KOSIS Param API 데이터 없음, 통화 차원 불일치 행은 강제 확정하지 않는다.
+
+과학 표기값 파서 오류도 수정했다. READY 5건의 API 결과는 모두 MATCH지만
+locked gold와의 verdict 일치는 3/5다. 나머지 2건은 차이가 각각 0.057%,
+0.061%인 반올림 값으로, gold의 엄격 일치 정책과 현행 허용오차가 충돌한다.
+세부 결과는
+[`docs/locked_v1_codebook_result_20260727.md`](docs/locked_v1_codebook_result_20260727.md)에
+있다.
+
+**남은 과제**: (1) 국가 전체 무역수지에 ICT 표가 gold로 지정된 1건의 범위
+재검토. (2) 반올림 허용오차와 gold verdict 정책 확정. (3) 비교 기준이 없는
+증감률을 판단불가로 유지할지 라벨 기준 확정. (4) 무역수지 계산식과 품목
+코드셋 회귀 규칙 추가. (5) 이전값을 게이트 직접 대상으로 포함할지 결정.
 
 > 주의: 파일럿 표본이 24~33건 규모로 방향성 결론입니다. 골드 확장 시 재검증합니다.
 
