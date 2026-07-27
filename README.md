@@ -50,7 +50,7 @@ actual_value 비교 및 verdict 생성
 ```powershell
 git clone https://github.com/rnwjdgus03/NLP_05-Team-Project-3.git
 cd NLP_05-Team-Project-3
-pip install requests python-dotenv pytest
+pip install -r requirements-dev.txt
 # 선택: 더 정교한 한국어 문장 분리
 pip install kss
 ```
@@ -542,7 +542,11 @@ A팀이 `gold_verifiable`·`gold_measurement_correct`(109행)까지 채워, 게�
 pytest
 ```
 
-현재 전체 테스트 결과는 `115 passed`입니다.
+현재 `Poc@6ceb3ff` 기준 전체 테스트 결과는 `117 passed`입니다.
+
+브랜치, locked gold, 파일 해시와 KOSIS 좌표 검증 재현 절차는
+[`docs/reproducibility_baseline_20260727.md`](docs/reproducibility_baseline_20260727.md)를
+기준으로 합니다.
 
 ## 회귀 검증 재현
 
