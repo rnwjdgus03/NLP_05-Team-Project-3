@@ -1,6 +1,9 @@
 from kosis_verify_claim_values import (
     annual_context_month_period_mismatch,
     derive_actual,
+    infer_mapping_type,
+    infer_value_type,
+    previous_period_for,
     judge,
     unit_factor,
     verify_row,
@@ -31,6 +34,43 @@ def test_rate_from_monthly_flow_uses_previous_year_sum():
     assert current == "202401+202402"
     assert previous == "202301+202302"
     assert "증감률" in reason
+
+
+def test_blank_value_type_growth_rate_is_inferred_from_indicator():
+    row = {
+        "indicator": "대중 수출액 증감률",
+        "unit": "%",
+        "period": "2024",
+        "claim_text": "대중 수출액은 전년 대비 6.6% 증가했다.",
+    }
+    assert infer_value_type(row) == "증감률"
+    mapping_type, reason = infer_mapping_type(row, "수출액", "천달러")
+    assert mapping_type == "rate_from_level"
+    assert "수준값" in reason
+
+
+def test_previous_period_is_inferred_for_growth_rate_without_change_base():
+    previous, reason = previous_period_for(
+        "2024", "Y", {
+            "indicator": "수출액 증감률",
+            "unit": "%",
+            "claim_text": "수출액이 6.5% 증가했다.",
+        }
+    )
+    assert previous == "2023"
+    assert "전년" in reason
+
+
+def test_previous_month_is_inferred_for_month_over_month():
+    previous, reason = previous_period_for(
+        "202403", "M", {
+            "indicator": "여객 수 증감률",
+            "unit": "%",
+            "claim_text": "여객 수가 전월 대비 3.1% 증가했다.",
+        }
+    )
+    assert previous == "202402"
+    assert "전월" in reason
 
 
 def test_stock_measurement_uses_latest_not_sum():

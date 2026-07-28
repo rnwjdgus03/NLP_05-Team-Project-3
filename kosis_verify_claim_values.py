@@ -160,6 +160,94 @@ def unit_kind(unit):
     return infer_unit_dimension(canonicalize_unit(unit))
 
 
+def row_text(row):
+    return ' '.join(str(row.get(k, '')) for k in (
+        'indicator', 'measurement_indicator', 'claim_indicator',
+        'metric_domain', 'industry_or_item', 'measurement_item',
+        'value_type', 'semantic_type', 'measurement_role',
+        'measurement_text', 'claim_text', 'evidence_text',
+    ))
+
+
+def infer_value_type(row):
+    explicit = str(row.get('value_type') or '').strip()
+    if explicit and explicit != '-':
+        return explicit
+    text = compact(row_text(row))
+    if any(token in text for token in ('증감률', '증가율', '감소율', '상승률', '하락률', '등락률')):
+        return '증감률'
+    if any(token in text for token in ('증감량', '증가폭', '감소폭')) and unit_kind(row.get('unit')) != 'rate':
+        return '증감량'
+    if unit_kind(row.get('unit')) == 'rate':
+        if any(token in text for token in ('전년대비', '전월대비', '전년동월대비', '대비증가', '대비감소')):
+            return '증감률'
+        return '비율'
+    return '수준값'
+
+
+def infer_semantic_type(row):
+    explicit = str(row.get('semantic_type') or '').strip()
+    if explicit and explicit != '-':
+        return explicit
+    value_type = infer_value_type(row)
+    if value_type == '증감률':
+        return 'rate_change'
+    if value_type == '비율':
+        return 'rate_level'
+    if value_type == '증감량':
+        return 'difference'
+    return 'level'
+
+
+def previous_period_for(period, prd_se, row):
+    target = parse_period(period)
+    if not target:
+        return '', ''
+    text = compact(row_text(row))
+    base = compact(row.get('change_base') or row.get('comparison_base') or '')
+
+    if any(token in text or token in base for token in ('전년동월', '전년같은달', '작년같은달')):
+        if len(target) == 6:
+            return str(int(target[:4]) - 1) + target[4:], '전년동월 기준 비교 시점 자동 계산'
+        if len(target) == 4:
+            return str(int(target) - 1), '연간 자료 전년 기준 비교 시점 자동 계산'
+
+    if any(token in text or token in base for token in ('전월', '전달', '지난달')):
+        if len(target) != 6:
+            return '', '전월 비교에는 월 period가 필요함'
+        year, month = int(target[:4]), int(target[4:])
+        month -= 1
+        if month == 0:
+            year -= 1
+            month = 12
+        return f'{year}{month:02d}', '전월 기준 비교 시점 자동 계산'
+
+    if any(token in text or token in base for token in ('전년', '작년', '지난해')) or infer_value_type(row) == '증감률':
+        if len(target) == 6:
+            return str(int(target[:4]) - 1) + target[4:], '전년 기준 비교 시점 자동 계산'
+        if len(target) == 4:
+            return str(int(target) - 1), '전년 기준 비교 시점 자동 계산'
+
+    return '', '증감 계산 비교 기준을 확정할 수 없음'
+
+
+def infer_mapping_type(row, item_name='', item_unit=''):
+    explicit = str(row.get('mapping_type') or '').strip()
+    if explicit:
+        return explicit, ''
+    value_type = infer_value_type(row)
+    semantic = infer_semantic_type(row)
+    item_text = compact(f'{item_name} {item_unit}')
+    item_is_rate = any(k in item_text for k in ('비율', '증감률', '증가율', '감소율', '등락률', '구성비', '%'))
+    if value_type == '증감률' or semantic == 'rate_change':
+        if item_is_rate:
+            return 'direct', 'KOSIS ITEM이 증감률/비율 계열 → 직접 비교'
+        return 'rate_from_level', '뉴스는 증감률, KOSIS는 수준값 ITEM → 현재/이전값으로 증감률 계산'
+    if value_type == '증감량':
+        return 'difference_from_level', '뉴스는 증감량 → 현재/이전값 차이 계산'
+    return 'direct', ''
+
+
 def item_compatible(item_name, item_unit, row):
     """선택된 ITEM도 뉴스 단위와 지표 의미를 다시 확인한다."""
     claim_unit = row.get('unit', '')
@@ -167,7 +255,7 @@ def item_compatible(item_name, item_unit, row):
     ik = unit_kind(item_unit)
     text = compact(' '.join(str(row.get(k, '')) for k in ('indicator', 'metric_domain', 'claim_text')))
     name = compact(item_name)
-    semantic = row.get('semantic_type', '')
+    semantic = infer_semantic_type(row)
     rate_claim = semantic in {'rate_change', 'rate_level'} or '%' in compact(claim_unit)
     rate_item = any(k in name for k in ('비율', '증감률', '증가율', '등락률', '구성비')) or '%' in compact(item_unit)
     if semantic == 'rate_change' and rate_item and not any(
@@ -473,7 +561,7 @@ def signed_claim_value(row, magnitude):
     수준값(억달러·명 등)에는 적용하지 않는다."""
     if magnitude is None:
         return magnitude
-    vt = str(row.get('value_type') or '').strip()
+    vt = infer_value_type(row)
     role = str(row.get('measurement_role') or '').strip()
     if vt not in {'증감률', '증감량'} and role not in {'증감률', '증감값'}:
         return magnitude
@@ -540,6 +628,7 @@ def annual_context_month_period_mismatch(row):
 
 
 def verify_row(row, meta_cache, delay):
+    row = dict(row)
     out = dict(row)
     out['default_applied'] = 'N'
     out['default_reason'] = ''
@@ -569,14 +658,6 @@ def verify_row(row, meta_cache, delay):
     period_mismatch, period_mismatch_reason = annual_context_month_period_mismatch(row)
     if period_mismatch:
         return mark_unverifiable(out, 'PERIOD_GRANULARITY_REVIEW', 'input', period_mismatch_reason)
-    mapping_type = str(row.get('mapping_type', '')).strip()
-    if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level'}:
-        return mark_unverifiable(
-            out,
-            'MAPPING_TYPE_UNSUPPORTED',
-            'candidate',
-            f'지원하지 않는 mapping_type={mapping_type or "-"}',
-        )
     org_id = row.get('org_id', '')
     tbl_id = row.get('tbl_id', '')
     if not org_id or not tbl_id:
@@ -591,6 +672,16 @@ def verify_row(row, meta_cache, delay):
     item, item_reason = choose_item(meta_rows, row)
     if not item:
         return mark_unverifiable(out, 'NO_COMPATIBLE_ITEM', 'metadata', item_reason)
+    mapping_type, mapping_note = infer_mapping_type(row, item.get('ITM_NM', ''), item.get('UNIT_NM', ''))
+    row['mapping_type'] = mapping_type
+    out['mapping_type'] = mapping_type
+    if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level'}:
+        return mark_unverifiable(
+            out,
+            'MAPPING_TYPE_UNSUPPORTED',
+            'candidate',
+            f'지원하지 않는 mapping_type={mapping_type or "-"}',
+        )
     has_obj_axis = any(meta.get('OBJ_ID') != 'ITEM' for meta in meta_rows)
     if has_obj_axis and not str(row.get('selected_obj_l1', '')).strip():
         return mark_unverifiable(out, 'OBJ_UNRESOLVED', 'metadata', 'selected_obj_l1이 확정되지 않음')
@@ -614,7 +705,14 @@ def verify_row(row, meta_cache, delay):
         out['default_reason'] = (out['default_reason'] + '; ' + note).strip('; ')
     comparison = row.get('comparison_period') if mapping_type in {'rate_from_level', 'difference_from_level'} else ''
     if mapping_type in {'rate_from_level', 'difference_from_level'} and not parse_period(comparison):
-        return mark_unverifiable(out, 'COMPARISON_PERIOD_MISSING', 'input', '증감 계산 비교 시점 없음')
+        inferred_comparison, comparison_reason = previous_period_for(row.get('period'), prd_se, row)
+        if parse_period(inferred_comparison):
+            comparison = inferred_comparison
+            out['comparison_period'] = inferred_comparison
+            out['default_applied'] = 'Y'
+            out['default_reason'] = (out['default_reason'] + '; ' + comparison_reason).strip('; ')
+        else:
+            return mark_unverifiable(out, 'COMPARISON_PERIOD_MISSING', 'input', comparison_reason)
     prd_params, period_note = period_range(row.get('period'), prd_se, comparison)
 
     try:
@@ -707,7 +805,7 @@ def verify_row(row, meta_cache, delay):
                         '판정보류': 'WITHIN_UNCERTAINTY_BAND'}.get(verdict, 'COMPARISON_FAILED')
         verdict_stage = 'comparison'
 
-    reason_parts = [reason, item_reason, obj_reason, agg_reason, unit_reason]
+    reason_parts = [reason, mapping_note, item_reason, obj_reason, agg_reason, unit_reason]
     if period_note:
         reason_parts.append(period_note)
     if not data_rows:
