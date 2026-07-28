@@ -38,6 +38,7 @@ INVALID_COMBINATION = "INVALID_COMBINATION"
 PERIOD_MISSING = "PERIOD_MISSING"
 UNIT_MISMATCH = "UNIT_MISMATCH"
 EMPTY_RESPONSE = "EMPTY_RESPONSE"
+UPSTREAM_REJECT = "UPSTREAM_REJECT"
 
 LOW_RISK_DEFAULT_NAMES = ("계", "전체", "총계", "전국")
 HIGH_RISK_MISSING_FIELDS = (
@@ -508,6 +509,7 @@ def validate_mapping_candidates(
         # the rate and handles unit compatibility later.
         unit_for_candidate_validation = None
     attempted, api_errors, empty_responses = [], 0, 0
+    api_error_samples: list[str] = []
     request_errors, response_mismatches, not_evaluated = 0, 0, 0
     limit_reached = False
     for combo in combinations:
@@ -542,6 +544,8 @@ def validate_mapping_candidates(
                                                    required_periods=required_periods))
         except Exception as exc:  # caller controls transport; preserve error without hiding other candidates
             api_errors += 1
+            if len(api_error_samples) < 3:
+                api_error_samples.append(f"{type(exc).__name__}: {exc}")
             result.update({"response_code_valid": False, "api_valid": False,
                            "api_error": f"{type(exc).__name__}: {exc}"})
         attempted.append(result)
@@ -590,6 +594,7 @@ def validate_mapping_candidates(
         "attempted_combination_count": len(attempted),
         "api_valid_combination_count": len(ranked),
         "api_error_count": api_errors,
+        "api_error_sample": " | ".join(api_error_samples),
         "empty_response_count": empty_responses,
         "request_error_count": request_errors,
         "response_mismatch_count": response_mismatches,
@@ -739,6 +744,10 @@ def is_low_priority_candidate(row: Mapping[str, Any], *, rank_threshold: int = 3
     return status == "ALTERNATE" and rank is not None and rank >= rank_threshold
 
 
+def is_upstream_rejected_candidate(row: Mapping[str, Any]) -> bool:
+    return str(row.get("candidate_status", "")).strip().upper() == "REJECT"
+
+
 def _rank1_is_decisive(row: Mapping[str, Any]) -> bool:
     rank = _int_or_none(row.get("candidate_rank"))
     if rank != 1:
@@ -824,6 +833,16 @@ def main() -> None:
     outputs: list[dict[str, Any]] = []
     api_calls = 0
     for row in work:
+        if is_upstream_rejected_candidate(row):
+            reason = str(row.get("candidate_status_reason", "")).strip() or UPSTREAM_REJECT
+            outputs.append({**row,
+                            "mapping_status": INVALID_COMBINATION,
+                            "mapping_reason": f"{UPSTREAM_REJECT}: {reason}",
+                            "status_reason": reason,
+                            "evaluation_complete": "skipped_upstream_reject",
+                            "api_calls_used": api_calls,
+                            "api_call_limit": api_call_limit})
+            continue
         if not args.validate_low_priority and is_low_priority_candidate(row):
             outputs.append({**row,
                             "mapping_status": NOT_EVALUATED,
