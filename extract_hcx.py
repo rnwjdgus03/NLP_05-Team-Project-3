@@ -139,6 +139,18 @@ USER_TMPL = """기사 제목: {title}
 
 위 후보를 참고해 [검증 대상 문장]의 주장을 JSON으로 추출하라. 후보는 검증 보조 정보이며 문맥에 맞게 역할과 용도를 판정하라."""
 
+RETRIEVAL_CONTEXT_TMPL = """
+
+[KOSIS retrieval hints - not article evidence]
+{retrieval_context}
+
+Use these candidates only to normalize possible indicator and item names.
+Never copy a value, period, unit, population, or scope from a candidate unless
+the article title, claim sentence, or neighboring sentences support it.
+If time information is absent or ambiguous in the article, keep the period and
+periodicity unresolved. The article evidence always takes priority.
+"""
+
 REPAIR_TMPL = """
 
 [이전 추출 결과 검증 실패]
@@ -162,6 +174,7 @@ OUT_COLS = ["claim_id", "claim_measurement_id", "article_id", "title", "date", "
             "measurement_repaired", "measurement_fallback_count", "measurement_binding_fallback_count",
             "extraction_model", "prompt_version", "extracted_at"]
 PROMPT_VERSION = "v1.5-measurement-binding"
+RETRIEVAL_PROMPT_VERSION = "v1.6-early-kosis-context"
 
 NUMBER_TOKEN = (
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)"
@@ -362,8 +375,17 @@ def prompt_candidates(candidates):
     return json.dumps(compact, ensure_ascii=False)
 
 
-def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4,
-             effort="none", previous_result=None, issues=None):
+def build_hcx_user_content(
+    title,
+    date,
+    text,
+    prev,
+    nxt,
+    candidates,
+    retrieval_context="",
+    previous_result=None,
+    issues=None,
+):
     user_content = USER_TMPL.format(
         title=title,
         date=date,
@@ -372,11 +394,31 @@ def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4
         next=nxt,
         numeric_candidates=prompt_candidates(candidates),
     )
+    if retrieval_context and str(retrieval_context).strip() not in {"", "-", "[]"}:
+        user_content += RETRIEVAL_CONTEXT_TMPL.format(
+            retrieval_context=str(retrieval_context).strip()
+        )
     if issues:
         user_content += REPAIR_TMPL.format(
             issues="; ".join(issues),
             previous_result=json.dumps(previous_result, ensure_ascii=False),
         )
+    return user_content
+
+
+def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4,
+             effort="none", previous_result=None, issues=None, retrieval_context=""):
+    user_content = build_hcx_user_content(
+        title=title,
+        date=date,
+        text=text,
+        prev=prev,
+        nxt=nxt,
+        candidates=candidates,
+        retrieval_context=retrieval_context,
+        previous_result=previous_result,
+        issues=issues,
+    )
     body = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -676,6 +718,7 @@ def extract_claim(api_key, model, claim, effort="none"):
         "nxt": claim.get("next_sentence", "-"),
         "candidates": candidates,
         "effort": effort,
+        "retrieval_context": claim.get("_retrieval_context", ""),
     }
     raw = call_hcx(**common)
     result = parse_json(raw)
@@ -708,6 +751,11 @@ def extract_claim(api_key, model, claim, effort="none"):
     result["_measurement_fallback_count"] = str(fallback_count)
     result["_measurement_binding_fallback_count"] = str(binding_fallback_count)
     result["_measurement_period_removed_count"] = str(period_removed_count)
+    result["_prompt_version"] = (
+        RETRIEVAL_PROMPT_VERSION
+        if norm(claim.get("_retrieval_context")) not in {"-", "[]"}
+        else PROMPT_VERSION
+    )
     return result
 
 
@@ -740,7 +788,8 @@ def to_rows(claim, j, model):
                                        "origin_country", "destination_country", "period", "period_end",
                                        "prd_se", "time_resolution_status", "evidence_text",
                                        "extraction_confidence", "needs_review", "review_reason"]},
-        "extraction_model": model, "prompt_version": PROMPT_VERSION,
+        "extraction_model": model,
+        "prompt_version": norm(j.get("_prompt_version", PROMPT_VERSION)),
         "extracted_at": time.strftime("%Y-%m-%d"),
         "measurement_repaired": norm(j.get("_measurement_repaired", "N")),
         "measurement_fallback_count": norm(j.get("_measurement_fallback_count", "0")),
@@ -784,6 +833,11 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sleep", type=float, default=1.0)
     ap.add_argument("--overwrite", action="store_true")
+    ap.add_argument(
+        "--retrieval-context",
+        default="",
+        help="claim_id,retrieval_context CSV from kosis_early_retrieve.py",
+    )
     a = ap.parse_args()
 
     load_dotenv()
@@ -793,6 +847,22 @@ def main():
 
     with open(a.input, encoding="utf-8-sig") as f:
         claims = list(csv.DictReader(f))
+    if a.retrieval_context:
+        with open(a.retrieval_context, encoding="utf-8-sig") as f:
+            context_rows = list(csv.DictReader(f))
+        context_by_claim = {
+            norm(row.get("claim_id")): row.get("retrieval_context", "")
+            for row in context_rows
+            if norm(row.get("claim_id")) != "-"
+        }
+        for claim in claims:
+            claim["_retrieval_context"] = context_by_claim.get(
+                norm(claim.get("claim_id")), ""
+            )
+        print(
+            f"retrieval_context={len(context_by_claim)} "
+            f"matched={sum(bool(c.get('_retrieval_context')) for c in claims)}"
+        )
     output_path = Path(a.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     done = set()

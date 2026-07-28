@@ -94,6 +94,30 @@ def build_claim_query(claim):
     )
 
 
+def build_early_claim_query(claim, neighbor_limit=500):
+    """Build a semantic query before measurement-level structuring.
+
+    The claim sentence remains the primary signal. Title and neighboring
+    sentences provide disambiguating context, but article date is deliberately
+    excluded so retrieval cannot turn publication time into a measurement
+    period.
+    """
+
+    def cleaned(key, limit):
+        value = str(claim.get(key, "") or "").strip()
+        if value in {"", "-"}:
+            return ""
+        return value[:limit]
+
+    fields = [
+        ("claim", cleaned("claim_text", 1200)),
+        ("title", cleaned("title", 300)),
+        ("previous_context", cleaned("prev_sentence", neighbor_limit)),
+        ("next_context", cleaned("next_sentence", neighbor_limit)),
+    ]
+    return " | ".join(f"{label}: {value}" for label, value in fields if value)
+
+
 def reciprocal_rank_fusion(lexical_rank, semantic_rank, rank_constant=60):
     score = 0.0
     if lexical_rank:

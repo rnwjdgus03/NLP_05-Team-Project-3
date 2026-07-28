@@ -1,6 +1,7 @@
 from extract_hcx import (
     add_fallback_measurements,
     apply_local_explicit_years,
+    build_hcx_user_content,
     ensure_measurement_bindings,
     extract_numeric_candidates,
     measurement_issues,
@@ -14,6 +15,22 @@ from extract_hcx import (
 
 def candidate_pairs(text):
     return {(item["value"], item["unit"]) for item in extract_numeric_candidates(text)}
+
+
+def test_retrieval_context_is_marked_as_hint_not_article_evidence():
+    content = build_hcx_user_content(
+        title="Title",
+        date="2025-01-01",
+        text="The measured value is 10 percent.",
+        prev="-",
+        nxt="-",
+        candidates=[],
+        retrieval_context='[{"tbl_id":"T1","table_name":"Rate table"}]',
+    )
+
+    assert "KOSIS retrieval hints - not article evidence" in content
+    assert '"tbl_id":"T1"' in content
+    assert "Never copy a value, period, unit" in content
 
 
 def test_normalize_korean_magnitude_numbers():

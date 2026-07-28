@@ -192,6 +192,63 @@ measurement_binding_source
 
 ### 4. KOSIS 매핑·검증
 
+#### 실험: 구조화 전 원문 BGE 검색
+
+작은 골드셋에서의 기존 BGE 비교는 최종 결론으로 사용하지 않는다. 확대된
+`is_claim=True` 표본에서는 HCX 구조화 전에 원문·제목·앞뒤 문장으로 통계표 후보를
+먼저 찾는 retrieval-assisted extraction 경로를 별도로 평가한다.
+
+```text
+is_claim=True
+→ 원문 BGE-M3 Top-20
+→ reranker Top-5
+→ 후보 표명·분류·ITEM·단위 힌트를 HCX에 제공
+→ measurement 구조화
+→ mapping_eligible 게이트
+```
+
+원문 검색은 `kosis_early_retrieve.py`가 담당한다. 기사 날짜는 검색문에서 제외하며,
+후보 메타데이터는 지표·항목 이름 정규화에만 사용한다. 기사에 없는 값·기간·단위·
+모집단을 후보에서 복사하지 않는다. 기본 실행은 다음과 같다.
+
+```powershell
+python kosis_early_retrieve.py `
+  --input "outputs\runs\is_claim_news_4000_true.csv" `
+  --output-candidates "outputs\runs\early_bge_candidates_top20.csv" `
+  --output-context "outputs\runs\early_bge_context_top5.csv" `
+  --semantic-index "data\indexes\kosis_bge_m3" `
+  --semantic-top-k 20 `
+  --rerank-top-k 20 `
+  --context-top-k 5 `
+  --device cuda
+```
+
+후보 표의 공식 ITEM·단위 메타 인덱스를 만든 뒤 BGE를 다시 실행하지 않고 컨텍스트만
+보강할 수 있다.
+
+```powershell
+python kosis_early_retrieve.py `
+  --reuse-candidates "outputs\runs\early_bge_candidates_top20.csv" `
+  --output-candidates "outputs\runs\early_bge_candidates_top20.csv" `
+  --output-context "outputs\runs\early_bge_context_top5.csv" `
+  --meta-index "outputs\runs\early_bge_meta_index.csv" `
+  --context-top-k 5
+```
+
+보강된 컨텍스트를 사용하는 HCX 결과는 baseline 출력과 다른 경로에 저장한다.
+
+```powershell
+python extract_hcx.py `
+  --input "outputs\runs\is_claim_news_4000_true.csv" `
+  --retrieval-context "outputs\runs\early_bge_context_top5.csv" `
+  --output "outputs\runs\hcx_early_bge_extracted.csv" `
+  --model HCX-007
+```
+
+Colab GPU 재현은
+[`notebooks/kosis_early_retrieval_colab.ipynb`](notebooks/kosis_early_retrieval_colab.ipynb)를
+사용한다.
+
 #### 통계표 임베딩 인덱스 최초 1회 생성
 
 `kosis_table_summary.csv`가 바뀌지 않는 동안 인덱스는 다시 만들 필요가 없습니다.

@@ -22,6 +22,7 @@ python run_kosis_measurement_pipeline.py --input hcx_v15.csv --table-index kosis
 |---|---|---|
 | ① 전처리 | `preprocess_news.py` | 기사 CSV → 문장 단위 HCX 입력 CSV로 변환 |
 | ② is_claim 필터 | `is_claim_filter_hcx.py` | 문장이 KOSIS 검증 가능한 수치 주장인지 True/False (HCX-007 + Structured Outputs) |
+| ②-1 조기 검색(실험) | `kosis_early_retrieve.py` | True 원문·제목·앞뒤 문장으로 BGE Top-20·reranker Top-5를 만들고 HCX 참고 컨텍스트 생성 |
 | ③ 추출 | `extract_hcx.py` | 문장을 measurement 단위로 구조화 (measurement-first v5 스키마) |
 | ④ 게이트 | `prepare_kosis_mapping_input.py` | KOSIS 매핑 대상만 통과 (measurement-level 정제) |
 | ⑤ 검색 | `kosis_match_claims_to_index.py` | claim ↔ KOSIS 표 후보 매칭. **현재 lexical(키워드) 채택** |
