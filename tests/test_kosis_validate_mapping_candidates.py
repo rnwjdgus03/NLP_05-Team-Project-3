@@ -16,6 +16,8 @@ from kosis_validate_mapping_candidates import (
     build_candidate_combinations,
     build_kosis_request,
     choose_or_abstain,
+    infer_comparison_period,
+    infer_rate_change_claim,
     group_official_meta,
     rank_valid_combinations,
     response_matches_request,
@@ -173,6 +175,30 @@ def test_unit_mismatch_is_retained_with_ranking_penalty():
     ranked = rank_valid_combinations([candidate], unit_penalty=0.25)
     assert len(ranked) == 1
     assert ranked[0]["ranking_score"] == pytest.approx(ranked[0]["semantic_score"] - 0.25)
+
+
+def test_growth_rate_claim_from_level_item_does_not_require_percent_unit():
+    claim = {
+        "indicator": "수출액 증감률",
+        "unit": "%",
+        "period": "2024",
+        "claim_text": "수출액이 전년 대비 6.5% 증가했다.",
+    }
+    assert infer_rate_change_claim(claim) is True
+    assert infer_comparison_period(claim) == "2023"
+
+    candidate = {
+        **one_combination(),
+        **validate_unit_and_period(
+            response_rows(unit="천달러"),
+            expected_unit=None,
+            required_periods=["2024", "2023"],
+        ),
+        "response_code_valid": True,
+    }
+    ranked = rank_valid_combinations([candidate])
+    decision = choose_or_abstain(ranked, high_risk_missing=[])
+    assert decision["mapping_status"] == READY
 
 
 def test_one_valid_combination_is_ready():
@@ -421,10 +447,19 @@ def test_missing_required_period_needs_confirmation_with_period_reason():
     assert result["period_valid"] is False
 
 
-def test_change_claim_missing_comparison_period_needs_confirmation():
+def test_change_claim_with_comparison_basis_can_infer_comparison_period():
     result = validate_mapping_candidates(**validation_kwargs(
         claim={"indicator": "취업자 수 증감", "period": "2024", "mapping_type": "rate_from_level",
                "comparison_basis": "전년 대비"},
+        required_periods=["2023", "2024"],
+    ))
+    assert result["mapping_status"] == READY
+    assert "comparison_period" not in result.get("high_risk_missing", [])
+
+
+def test_change_claim_without_comparison_basis_needs_confirmation():
+    result = validate_mapping_candidates(**validation_kwargs(
+        claim={"indicator": "취업자 수 증감", "period": "2024", "mapping_type": "difference_from_level"},
         required_periods=["2024"],
     ))
     assert result["mapping_status"] == NEEDS_CONFIRMATION

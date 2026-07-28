@@ -335,6 +335,70 @@ def _normalized_text(value: Any) -> str:
     return re.sub(r"[^0-9a-zA-Z가-힣]", "", str(value or "")).lower()
 
 
+def _claim_text(row: Mapping[str, Any] | None) -> str:
+    row = row or {}
+    return " ".join(str(_first(row, key)) for key in (
+        "mapping_type", "semantic_type", "value_type", "indicator",
+        "measurement_indicator", "claim_indicator", "industry_or_item",
+        "measurement_item", "measurement_text", "claim_text", "evidence_text",
+        "change_base", "comparison_basis",
+    ))
+
+
+def _parse_period(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or text == "-":
+        return ""
+    month = re.search(r"(20\d{2})\D?(0[1-9]|1[0-2])", text)
+    if month:
+        return month.group(1) + month.group(2)
+    year = re.search(r"(19\d{2}|20\d{2})", text)
+    if year:
+        return year.group(1)
+    return text
+
+
+def infer_rate_change_claim(row: Mapping[str, Any] | None) -> bool:
+    text = _normalized_text(_claim_text(row))
+    explicit = str(_first(row or {}, "mapping_type", "semantic_type", "value_type")).lower()
+    if explicit in {"rate_from_level", "rate_change", "rate", "증감률"}:
+        return True
+    if any(token in text for token in ("증감률", "증가율", "감소율", "상승률", "하락률", "등락률")):
+        return True
+    if any(token in text for token in ("전년대비", "전월대비", "전년동월대비", "대비증가", "대비감소")):
+        return True
+    return False
+
+
+def infer_comparison_period(row: Mapping[str, Any] | None) -> str:
+    row = row or {}
+    current = _parse_period(_first(row, "comparison_period"))
+    if current:
+        return current
+    target = _parse_period(_first(row, "measurement_period", "period"))
+    if not target:
+        return ""
+    text = _normalized_text(_claim_text(row))
+    if any(token in text for token in ("전월", "전달", "지난달")):
+        if len(target) != 6:
+            return ""
+        year, month = int(target[:4]), int(target[4:])
+        month -= 1
+        if month == 0:
+            year -= 1
+            month = 12
+        return f"{year}{month:02d}"
+    if any(token in text for token in ("전년동월", "전년같은달", "작년같은달")):
+        if len(target) == 6:
+            return str(int(target[:4]) - 1) + target[4:]
+    if infer_rate_change_claim(row) or any(token in text for token in ("전년", "작년", "지난해")):
+        if len(target) == 6:
+            return str(int(target[:4]) - 1) + target[4:]
+        if len(target) == 4:
+            return str(int(target) - 1)
+    return ""
+
+
 def find_high_risk_missing(claim: Mapping[str, Any] | None,
                            combination: Mapping[str, Any] | None = None) -> list[str]:
     """Find material missing/unexplained claim constraints without guessing them."""
@@ -346,13 +410,13 @@ def find_high_risk_missing(claim: Mapping[str, Any] | None,
     if not _first(claim, "period", "measurement_period"):
         missing.append("period")
     mapping_type = str(_first(claim, "mapping_type", "semantic_type", "value_type")).lower()
-    needs_comparison = mapping_type in {
-        "rate_from_level", "difference_from_level", "rate", "difference",
-        "rate_change", "absolute_change", "증감률", "증감량",
+    needs_comparison = infer_rate_change_claim(claim) or mapping_type in {
+        "difference_from_level", "difference", "absolute_change", "증감량",
     }
-    if needs_comparison and not _first(claim, "comparison_period"):
+    inferred_comparison = infer_comparison_period(claim)
+    if needs_comparison and not (_first(claim, "comparison_period") or inferred_comparison):
         missing.append("comparison_period")
-    if needs_comparison and not _first(claim, "comparison_basis", "change_base"):
+    if needs_comparison and not (_first(claim, "comparison_basis", "change_base") or inferred_comparison):
         missing.append("comparison_basis")
     selected_text = " ".join(str((combination or {}).get(key, ""))
         for key in ["itm_name", *(f"objL{level}_name" for level in range(1, 9))])
@@ -436,9 +500,8 @@ def validate_mapping_candidates(
     grouped = group_official_meta(meta_rows)
     combinations = build_candidate_combinations(item_candidates, obj_candidates, grouped,
         item_top_k=item_top_k, obj_top_k=obj_top_k, max_combinations=max_combinations)
-    semantic_type = str(_first(claim or {}, "mapping_type", "semantic_type", "value_type")).lower()
     unit_for_candidate_validation = expected_unit
-    if semantic_type in {"rate_from_level", "rate_change", "rate", "증감률"}:
+    if infer_rate_change_claim(claim):
         # A percent change claim is often verified from level data whose KOSIS
         # unit is currency/count/etc. Do not reject technically valid level
         # mappings at candidate-validation time; value verification computes
@@ -789,6 +852,12 @@ def main() -> None:
                 obj_candidates[order] = merged
         periods = [str(_first(row, "measurement_period", "period")).strip()]
         comparison = str(row.get("comparison_period", "")).strip()
+        if not comparison and infer_rate_change_claim(row):
+            comparison = infer_comparison_period(row)
+            if comparison:
+                row["comparison_period"] = comparison
+                if not str(row.get("mapping_type", "")).strip():
+                    row["mapping_type"] = "rate_from_level"
         if comparison:
             periods.append(comparison)
 
