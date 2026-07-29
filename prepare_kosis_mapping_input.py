@@ -202,6 +202,40 @@ def exclusion(row: dict, dimension: str, semantic: str):
     return "", ""
 
 
+ENRICHMENT_ACTIONS = {
+    "NO_MEASUREMENT": "REEXTRACT_MEASUREMENT",
+    "BINDING_NOT_CONFIRMED": "CONFIRM_MEASUREMENT_BINDING",
+    "ROLE_NOT_DIRECT_TARGET": "CONFIRM_DIRECT_TARGET_ROLE",
+    "VALUE_MISSING": "REEXTRACT_VALUE",
+    "INDICATOR_MISSING": "REEXTRACT_INDICATOR",
+    "PERIOD_MISSING": "RESOLVE_PERIOD_FROM_CONTEXT",
+    "PERIODICITY_MISSING": "RESOLVE_PERIODICITY",
+    "UNIT_UNSUPPORTED": "NORMALIZE_UNIT",
+    "VALUE_TYPE_UNIT_CONFLICT": "REPAIR_VALUE_TYPE_OR_UNIT",
+}
+
+
+def mapping_gate(row: dict, code: str) -> tuple[str, str]:
+    """Classify strict eligibility failures into recoverable vs hard reject."""
+    if not code:
+        return "READY", ""
+    if code == "OUT_OF_KOSIS_SCOPE":
+        scope = nz(row.get("claim_domain_scope"))
+        if not scope or scope == "기타":
+            return "ENRICH", "CONFIRM_KOSIS_SCOPE"
+        return "REJECT", ""
+    if code == "NOT_KOSIS_VALUE":
+        if not nz(row.get("measurement_usage")):
+            return "ENRICH", "CLASSIFY_MEASUREMENT_USAGE"
+        return "REJECT", ""
+    if code == "RANK_NOT_DIRECTLY_COMPARABLE":
+        return "REJECT", ""
+    action = ENRICHMENT_ACTIONS.get(code)
+    if action:
+        return "ENRICH", action
+    return "REJECT", ""
+
+
 def normalize_row(row: dict) -> dict:
     out = dict(row)
     raw_unit = nz(row.get("unit"))
@@ -230,6 +264,10 @@ def normalize_row(row: dict) -> dict:
     out["mapping_eligible"] = "Y" if not code else "N"
     out["mapping_exclusion_code"] = code
     out["mapping_exclusion_reason"] = reason
+    gate, action = mapping_gate(row, code)
+    out["mapping_gate"] = gate
+    out["mapping_gate_reason"] = code or "ELIGIBLE"
+    out["enrichment_actions"] = action
     return out
 
 
@@ -247,6 +285,9 @@ DERIVED_FIELDS = [
     "mapping_eligible",
     "mapping_exclusion_code",
     "mapping_exclusion_reason",
+    "mapping_gate",
+    "mapping_gate_reason",
+    "enrichment_actions",
 ]
 
 
@@ -258,7 +299,12 @@ def write_csv(path: Path, rows: list[dict], fields: list[str]):
         writer.writerows(rows)
 
 
-def prepare(input_path: Path, output_path: Path, rejected_path: Path | None = None):
+def prepare(
+    input_path: Path,
+    output_path: Path,
+    rejected_path: Path | None = None,
+    enrich_path: Path | None = None,
+):
     with input_path.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         source_fields = list(reader.fieldnames or [])
@@ -267,9 +313,15 @@ def prepare(input_path: Path, output_path: Path, rejected_path: Path | None = No
     fields = list(dict.fromkeys(source_fields + DERIVED_FIELDS))
     accepted = [row for row in normalized if row["mapping_eligible"] == "Y"]
     rejected = [row for row in normalized if row["mapping_eligible"] != "Y"]
+    enrich = [row for row in normalized if row["mapping_gate"] == "ENRICH"]
+    hard_rejected = [row for row in normalized if row["mapping_gate"] == "REJECT"]
     write_csv(output_path, accepted, fields)
     if rejected_path:
-        write_csv(rejected_path, rejected, fields)
+        # Legacy calls receive every non-READY row. New three-way calls that
+        # also provide enrich_path receive only hard rejects here.
+        write_csv(rejected_path, hard_rejected if enrich_path else rejected, fields)
+    if enrich_path:
+        write_csv(enrich_path, enrich, fields)
     return accepted, rejected
 
 
@@ -278,6 +330,7 @@ def main():
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--rejected-output", default="")
+    parser.add_argument("--enrich-output", default="")
     parser.add_argument("--expect-ready", type=int, default=0)
     args = parser.parse_args()
 
@@ -285,13 +338,20 @@ def main():
         Path(args.input),
         Path(args.output),
         Path(args.rejected_output) if args.rejected_output else None,
+        Path(args.enrich_output) if args.enrich_output else None,
     )
     counts = Counter(row["mapping_exclusion_code"] for row in rejected)
+    gate_counts = Counter(
+        ["READY"] * len(accepted) + [row["mapping_gate"] for row in rejected]
+    )
     print(f"input={len(accepted) + len(rejected)} ready={len(accepted)} rejected={len(rejected)}")
+    print("gate_counts=" + ", ".join(f"{key}:{value}" for key, value in gate_counts.most_common()))
     print("rejection_counts=" + ", ".join(f"{key}:{value}" for key, value in counts.most_common()))
     print(f"saved={args.output}")
     if args.rejected_output:
         print(f"rejected={args.rejected_output}")
+    if args.enrich_output:
+        print(f"enrich={args.enrich_output}")
     if args.expect_ready and len(accepted) != args.expect_ready:
         raise SystemExit(f"expected {args.expect_ready} ready rows, got {len(accepted)}")
 

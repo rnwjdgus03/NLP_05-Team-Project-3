@@ -56,6 +56,7 @@ def test_normalize_row_uses_measurement_level_aliases():
     assert out["unit_dimension"] == "currency"
     assert out["semantic_type"] == "amount"
     assert out["mapping_eligible"] == "Y"
+    assert out["mapping_gate"] == "READY"
 
 
 def test_condition_and_missing_period_are_rejected_with_codes():
@@ -68,9 +69,22 @@ def test_condition_and_missing_period_are_rejected_with_codes():
         )
     )
     assert condition["mapping_exclusion_code"] == "NOT_KOSIS_VALUE"
+    assert condition["mapping_gate"] == "REJECT"
 
     missing_period = normalize_row(measurement_row(measurement_period="-", measurement_prd_se="-"))
     assert missing_period["mapping_exclusion_code"] == "PERIOD_MISSING"
+    assert missing_period["mapping_gate"] == "ENRICH"
+    assert missing_period["enrichment_actions"] == "RESOLVE_PERIOD_FROM_CONTEXT"
+
+
+def test_fallback_and_unknown_scope_are_sent_to_enrichment():
+    fallback = normalize_row(measurement_row(measurement_binding_source="rule_fallback"))
+    assert fallback["mapping_gate"] == "ENRICH"
+    assert fallback["enrichment_actions"] == "CONFIRM_MEASUREMENT_BINDING"
+
+    unknown_scope = normalize_row(measurement_row(claim_domain_scope="기타"))
+    assert unknown_scope["mapping_gate"] == "ENRICH"
+    assert unknown_scope["enrichment_actions"] == "CONFIRM_KOSIS_SCOPE"
 
 
 def test_person_entity_wins_over_airline_context():
@@ -122,3 +136,35 @@ def test_prepare_writes_ready_and_rejected_files(tmp_path):
     assert len(excluded) == 1
     assert list(csv.DictReader(output.open(encoding="utf-8-sig")))[0]["mapping_eligible"] == "Y"
     assert list(csv.DictReader(rejected_output.open(encoding="utf-8-sig")))[0]["mapping_exclusion_code"] == "NOT_KOSIS_VALUE"
+
+
+def test_prepare_writes_three_way_gate_files(tmp_path):
+    source = tmp_path / "source.csv"
+    rows = [
+        measurement_row(),
+        measurement_row(
+            claim_measurement_id="A1-C2-m1",
+            measurement_period="-",
+            measurement_prd_se="-",
+        ),
+        measurement_row(
+            claim_measurement_id="A1-C3-m1",
+            measurement_usage="POLICY_VALUE",
+        ),
+    ]
+    with source.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    ready_path = tmp_path / "ready.csv"
+    enrich_path = tmp_path / "enrich.csv"
+    reject_path = tmp_path / "reject.csv"
+    prepare(source, ready_path, reject_path, enrich_path)
+
+    ready = list(csv.DictReader(ready_path.open(encoding="utf-8-sig")))
+    enrich = list(csv.DictReader(enrich_path.open(encoding="utf-8-sig")))
+    reject = list(csv.DictReader(reject_path.open(encoding="utf-8-sig")))
+    assert [row["mapping_gate"] for row in ready] == ["READY"]
+    assert [row["mapping_gate"] for row in enrich] == ["ENRICH"]
+    assert [row["mapping_gate"] for row in reject] == ["REJECT"]

@@ -132,6 +132,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
     ready = out_dir / f"{stem}_kosis_ready.csv"
+    enrich = out_dir / f"{stem}_kosis_enrich.csv"
     rejected = out_dir / f"{stem}_kosis_rejected.csv"
     table_candidates = out_dir / f"{stem}_kosis_table_candidates.csv"
     top_tables = out_dir / f"{stem}_kosis_top_tables.csv"
@@ -150,6 +151,8 @@ def main():
             ready,
             "--rejected-output",
             rejected,
+            "--enrich-output",
+            enrich,
         ]
     )
     retrieval_command = [

@@ -685,6 +685,18 @@ KOSIS API 사용 시 주의사항은 다음과 같습니다.
 
 상세 폴더 설명은 `docs/file_structure.md`, B팀 기존 파이프라인 기록은 `docs/docs_bteam_pipeline.md`, 선행 연구와 방법론은 `docs_참고문헌_방법론.md`를 참고합니다.
 
+## 문맥 보존형 파이프라인
+
+문장 단위 필터에서 KOSIS 가능성을 함께 판단해 recall이 낮아지는 문제를
+줄이기 위해 `KSS → 중첩 chunk → 넓은 claim span → 조기 BGE → HCX
+measurement → READY/ENRICH/REJECT` 실행 경로를 추가했습니다.
+
+- 통합 실행: `run_contextual_news_kosis_pipeline.py`
+- chunk 생성: `build_news_chunks.py`
+- 넓은 claim span 탐지: `detect_claim_spans_hcx.py`
+- Colab smoke test: [`notebooks/contextual_news_kosis_smoke_colab.ipynb`](notebooks/contextual_news_kosis_smoke_colab.ipynb)
+- 실행 규칙과 산출물: [`docs/contextual_news_kosis_pipeline.md`](docs/contextual_news_kosis_pipeline.md)
+
 ## 브랜치 전략
 
 - `main`: 안정 버전
