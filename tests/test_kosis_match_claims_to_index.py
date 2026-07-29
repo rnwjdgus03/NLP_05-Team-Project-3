@@ -162,6 +162,46 @@ def test_mapping_override_seeds_item_and_each_official_obj_axis():
     assert candidate_decision(1, 1200, 100, selected, meta, claim)[0] == "READY"
 
 
+def test_service_production_override_selects_constant_index():
+    claim = normalized_claim_row(
+        ready_claim(
+            measurement_indicator="서비스업 생산지수",
+            measurement_item="숙박·음식점업",
+            measurement_period="202501",
+            measurement_prd_se="M",
+            claim_text="숙박·음식점업 생산은 지난해 1월보다 3.3% 줄었다.",
+        )
+    )
+    meta = [
+        {"is_item": "Y", "axis_id": "ITEM", "code_id": "T1", "code_name": "경상지수",
+         "unit_name": "2020=100"},
+        {"is_item": "Y", "axis_id": "ITEM", "code_id": "T2", "code_name": "불변지수",
+         "unit_name": "2020=100"},
+        {"is_item": "N", "axis_order": "1", "axis_id": "A", "axis_name": "업종별",
+         "code_id": "I", "code_name": "숙박 및 음식점업"},
+    ]
+    rule = {
+        "rule_id": "service_production_index_m",
+        "indicator_contains": "서비스업 생산지수",
+        "item_contains": "",
+        "prd_se": "M",
+        "org_id": "101",
+        "tbl_id": "DT_1KC2020",
+        "itm_id": "T2",
+        "mapping_type": "rate_from_level",
+        "source_unit": "2020=100",
+    }
+
+    structured = select_structured_meta(meta, claim, [])
+    selected = apply_mapping_override(structured, meta, claim, rule)
+
+    assert selected["selected_itm_id"] == "T2"
+    assert selected["selected_itm_name"] == "불변지수"
+    assert selected["selected_obj_l1"] == "I"
+    assert selected["mapping_type"] == "rate_from_level"
+    assert selected["mapping_override_rule"] == "service_production_index_m"
+
+
 def test_trade_population_and_metric_mismatches_are_hard_rejected():
     semiconductor = normalized_claim_row(ready_claim())
     innovation = table(
