@@ -695,6 +695,8 @@ measurement → READY/ENRICH/REJECT` 실행 경로를 추가했습니다.
 - chunk 생성: `build_news_chunks.py`
 - 넓은 claim span 탐지: `detect_claim_spans_hcx.py`
 - Colab smoke test: [`notebooks/contextual_news_kosis_smoke_colab.ipynb`](notebooks/contextual_news_kosis_smoke_colab.ipynb)
+- 기사 100건 확대 평가: [`notebooks/contextual_news_kosis_eval_100_colab.ipynb`](notebooks/contextual_news_kosis_eval_100_colab.ipynb)
+- 단계별 집계: `evaluate_contextual_kosis_run.py`
 - 실행 규칙과 산출물: [`docs/contextual_news_kosis_pipeline.md`](docs/contextual_news_kosis_pipeline.md)
 
 ## 브랜치 전략

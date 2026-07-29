@@ -247,6 +247,14 @@ def main() -> None:
     if args.verify:
         mapping.append("--verify")
     run(mapping)
+    run(
+        [
+            sys.executable,
+            SCRIPT_DIR / "evaluate_contextual_kosis_run.py",
+            "--run-dir",
+            args.out_dir,
+        ]
+    )
     print(f"pipeline_complete={args.out_dir}", flush=True)
 
 

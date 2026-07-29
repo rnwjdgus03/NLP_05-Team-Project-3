@@ -41,6 +41,11 @@ Colab에서 10개 기사로 처음 확인할 때는
 사용한다. 원문 CSV에서 숫자가 포함된 기사 10개를 고정 seed로 뽑고,
 아래 단계별 산출물과 verdict 분포를 출력한다.
 
+smoke test가 통과한 뒤 기사 100건으로 확대 평가할 때는
+[`notebooks/contextual_news_kosis_eval_100_colab.ipynb`](../notebooks/contextual_news_kosis_eval_100_colab.ipynb)를
+사용한다. `SAMPLE_SIZE`와 `SAMPLE_SEED`로 표본을 고정하며, 중단 후 같은
+실행 셀을 다시 실행하면 HCX 진행 파일을 이어받는다.
+
 ```powershell
 python run_contextual_news_kosis_pipeline.py `
   --articles "data\raw\news_articles.csv" `
@@ -85,6 +90,28 @@ python run_contextual_news_kosis_pipeline.py `
 | `06_mapping_enrich.csv` | 기간·scope·binding 보강 대상 |
 | `06_mapping_reject.csv` | 명확한 KOSIS 범위 밖 |
 | `07_mapping/` | 후보·메타·ITEM/OBJ·실제값 verdict |
+| `08_evaluation_summary.csv` | 단계별 분자·분모·도달률 |
+| `08_evaluation_reasons.csv` | 게이트·매핑·verdict 사유 분포 |
+| `08_evaluation_summary.json` | 자동 처리용 전체 집계 |
+| `08_evaluation_report.md` | 사람이 읽는 평가 보고서 |
+
+## 확대 평가 지표
+
+`evaluate_contextual_kosis_run.py --run-dir <RUN_DIR>`는 Top-K 후보 행을
+분모로 사용하지 않고 measurement별 최종 후보 한 행만 집계한다.
+
+| 지표 | 계산 |
+|---|---|
+| READY 도달률 | `06_mapping_ready measurement / 전체 HCX measurement` |
+| 매핑 READY 전환율 | `validated mapping_status=READY / gate READY` |
+| 실제값 검증 성공률 | `일치+불일치 / validated READY` |
+| 판단불가율 | `판단불가 / verified` |
+| 종단 검증 커버리지 | `일치+불일치 / 전체 HCX measurement` |
+
+정확도를 주장하려면 별도의 사람 라벨 골드셋과 비교해야 한다. 이 확대
+평가의 `일치/불일치` 비율은 파이프라인 산출 분포이며 정답률이 아니다.
+또한 100건 표본은 숫자가 포함된 기사에서 추출하므로 READY 도달률은
+전체 뉴스 기사의 유병률이 아니라 수치 기사 조건부 파이프라인 도달률이다.
 
 ## ENRICH 처리
 
