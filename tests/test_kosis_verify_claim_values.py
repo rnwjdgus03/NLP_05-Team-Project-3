@@ -1,6 +1,7 @@
 from kosis_verify_claim_values import (
     derive_actual,
     infer_comparison_period,
+    item_compatible,
     parse_number,
     unit_factor,
     verify_row,
@@ -60,6 +61,28 @@ def test_rate_from_monthly_flow_uses_previous_year_sum():
     assert current == "202401+202402"
     assert previous == "202301+202302"
     assert "증감률" in reason
+
+
+def test_rate_change_accepts_kosis_index_level_item():
+    row = {
+        "indicator": "서비스업 생산지수",
+        "semantic_type": "rate_change",
+        "mapping_type": "rate_from_level",
+        "unit": "%",
+        "unit_dimension": "rate",
+    }
+    assert item_compatible("불변지수", "2020＝100", row)[0] is True
+
+
+def test_rate_change_rejects_unknown_non_index_level_item():
+    row = {
+        "indicator": "서비스업 생산지수",
+        "semantic_type": "rate_change",
+        "mapping_type": "rate_from_level",
+        "unit": "%",
+        "unit_dimension": "rate",
+    }
+    assert item_compatible("기타 항목", "-", row)[0] is False
 
 
 def test_stock_measurement_uses_latest_not_sum():

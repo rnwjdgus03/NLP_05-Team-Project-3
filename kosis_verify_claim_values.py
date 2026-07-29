@@ -182,11 +182,23 @@ def unit_kind(unit):
     return infer_unit_dimension(canonicalize_unit(unit))
 
 
+def is_index_level_item(item_name, item_unit):
+    raw_unit = str(item_unit or "").strip().lower()
+    name = compact(item_name)
+    return (
+        bool(re.search(r"\d{4}\s*[=＝]\s*100(?:\.0+)?", raw_unit))
+        or "지수" in name
+        or "index" in str(item_name or "").lower()
+    )
+
+
 def item_compatible(item_name, item_unit, row):
     """선택된 ITEM도 뉴스 단위와 지표 의미를 다시 확인한다."""
     claim_unit = row.get('unit', '')
     ck = row.get('unit_dimension') or unit_kind(claim_unit)
     ik = unit_kind(item_unit)
+    if is_index_level_item(item_name, item_unit):
+        ik = 'index'
     text = compact(' '.join(str(row.get(k, '')) for k in ('indicator', 'metric_domain', 'claim_text')))
     name = compact(item_name)
     semantic = row.get('semantic_type', '')
@@ -197,7 +209,7 @@ def item_compatible(item_name, item_unit, row):
     ):
         return False, f'증감률 claim에 일반 비율 ITEM({item_name})이 선택됨'
     if semantic == 'rate_change' and not rate_item:
-        if ik not in {'currency', 'person_count', 'count', 'quantity'}:
+        if ik not in {'currency', 'person_count', 'count', 'quantity', 'index'}:
             return False, f'증감률을 계산할 수 없는 KOSIS ITEM({item_name}, {item_unit})'
     elif rate_claim and not rate_item:
         return False, f'비율 claim에 비율이 아닌 KOSIS 항목({item_name})이 선택됨'
