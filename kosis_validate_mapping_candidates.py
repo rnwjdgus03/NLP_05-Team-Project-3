@@ -253,6 +253,14 @@ def _unit_tokens(value: Any) -> set[str]:
     return {text}
 
 
+def _is_dimensionless_index_row(row: Mapping[str, Any]) -> bool:
+    """Recognize index level ITEMs whose KOSIS unit metadata is blank."""
+    item_name = str(
+        _first(row, "ITM_NM", "itm_name", "item_name", "ITM_NM_ENG")
+    ).strip().lower()
+    return bool(item_name) and ("지수" in item_name or "index" in item_name)
+
+
 def validate_unit_and_period(
     rows: Iterable[Mapping[str, Any]], *, expected_unit: str | None = None,
     required_periods: Sequence[str] | None = None, mapping_type: str = "direct",
@@ -263,9 +271,18 @@ def validate_unit_and_period(
         # The claim unit is derived from two KOSIS level values, so it must not be
         # compared directly with the source ITEM unit (for example % vs thousand USD).
         unit_valid = any(
-            _unit_tokens(unit)
-            and not (_unit_tokens(unit) & {"percent", "percentage_point"})
-            for unit in units
+            (
+                _unit_tokens(_first(row, "UNIT_NM", "UNIT", "unit"))
+                and not (
+                    _unit_tokens(_first(row, "UNIT_NM", "UNIT", "unit"))
+                    & {"percent", "percentage_point"}
+                )
+            )
+            or (
+                not _unit_tokens(_first(row, "UNIT_NM", "UNIT", "unit"))
+                and _is_dimensionless_index_row(row)
+            )
+            for row in rows
         )
     else:
         unit_valid = True if not expected_unit else any(

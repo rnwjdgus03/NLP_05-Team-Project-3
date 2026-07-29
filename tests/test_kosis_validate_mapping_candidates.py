@@ -177,6 +177,33 @@ def test_rate_from_level_accepts_source_level_unit():
     assert result["unit_valid"] is True
 
 
+def test_rate_from_level_accepts_blank_unit_for_index_item():
+    rows = response_rows(unit="")
+    for row in rows:
+        row["ITM_NM"] = "경상지수"
+    result = validate_unit_and_period(
+        rows,
+        expected_unit="%",
+        required_periods=["2023", "2024"],
+        mapping_type="rate_from_level",
+    )
+    assert result["unit_valid"] is True
+
+
+def test_rate_from_level_rejects_blank_unit_for_non_index_item():
+    rows = response_rows(unit="")
+    for row in rows:
+        row["ITM_NM"] = "매출액"
+    result = validate_unit_and_period(
+        rows,
+        expected_unit="%",
+        required_periods=["2023", "2024"],
+        mapping_type="rate_from_level",
+    )
+    assert result["unit_valid"] is False
+    assert result["validation_reason"] == "UNIT_MISMATCH"
+
+
 def test_lexical_candidates_do_not_match_one_character_inside_word():
     ranked = _lexical_candidates(
         [{"code": "ONE", "name": "대"}, {"code": "EXPORT", "name": "수출액"}],
