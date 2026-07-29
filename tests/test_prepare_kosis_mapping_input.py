@@ -1,8 +1,10 @@
 import csv
 
 from prepare_kosis_mapping_input import (
+    align_change_period,
     canonicalize_period,
     canonicalize_unit,
+    expected_base_period,
     normalize_row,
     prepare,
     unit_dimension,
@@ -114,6 +116,36 @@ def test_explicit_comparison_year_beats_incorrect_change_base():
         )
     )
     assert out["comparison_period"] == "2019"
+
+
+def test_change_rate_bound_to_base_period_is_aligned_to_claim_target():
+    row = measurement_row(
+        claim_text=(
+            "숙박·음식점업은 지난해 12월보다 1.4% 늘었지만, "
+            "지난해 1월에 비하면 3.3% 줄었다."
+        ),
+        indicator="서비스업 생산지수",
+        measurement_indicator="서비스업 생산지수",
+        industry_or_item="숙박·음식점업",
+        measurement_item="숙박·음식점업",
+        period="202501",
+        prd_se="M",
+        measurement_period="202401",
+        measurement_prd_se="M",
+        measurement_role="증감률",
+        value="3.3",
+        unit="%",
+        value_type="증감률",
+        change_base="전년동월",
+    )
+
+    assert expected_base_period("202501", "전년동월") == "202401"
+    assert align_change_period(row) == ("202501", "COMPARISON_PERIOD_TO_TARGET")
+    out = normalize_row(row)
+    assert out["raw_measurement_period"] == "202401"
+    assert out["period"] == "202501"
+    assert out["comparison_period"] == "202401"
+    assert out["mapping_gate"] == "READY"
 
 
 def test_prepare_writes_ready_and_rejected_files(tmp_path):

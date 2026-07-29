@@ -169,6 +169,38 @@ def comparison_period(row: dict, semantic: str) -> str:
     return ""
 
 
+def expected_base_period(target_period: str, change_base: str) -> str:
+    """Return the comparison period implied by a target period and change base."""
+    target = nz(target_period)
+    base = nz(change_base)
+    if not target or not base:
+        return ""
+    if base in {"전년동월", "전년동기"} and re.fullmatch(r"(?:19|20)\d{4}", target):
+        return str(int(target[:4]) - 1) + target[4:]
+    if base == "전월" and re.fullmatch(r"(?:19|20)\d{4}", target):
+        year, month = int(target[:4]), int(target[4:])
+        return f"{year - 1}12" if month == 1 else f"{year}{month - 1:02d}"
+    if base == "전년" and re.fullmatch(r"(?:19|20)\d{2}", target):
+        return str(int(target) - 1)
+    return ""
+
+
+def align_change_period(row: dict) -> tuple[str, str]:
+    """Correct a change measurement that was bound to its comparison period."""
+    measurement_period = canonicalize_period(
+        row.get("measurement_period"),
+        row.get("measurement_prd_se"),
+    )
+    claim_period = canonicalize_period(row.get("period"), row.get("prd_se"))
+    role = nz(row.get("measurement_role"))
+    if role not in {"증감률", "증감값"} or not claim_period:
+        return measurement_period, ""
+    base_period = expected_base_period(claim_period, row.get("change_base"))
+    if base_period and measurement_period == base_period:
+        return claim_period, "COMPARISON_PERIOD_TO_TARGET"
+    return measurement_period, ""
+
+
 def exclusion(row: dict, dimension: str, semantic: str):
     measurement_id = nz(row.get("claim_measurement_id"))
     if not measurement_id:
@@ -250,17 +282,21 @@ def normalize_row(row: dict) -> dict:
     out["claim_industry_or_item"] = nz(row.get("industry_or_item"))
     out["claim_period"] = nz(row.get("period"))
     out["claim_prd_se"] = nz(row.get("prd_se"))
+    out["raw_measurement_period"] = nz(row.get("measurement_period"))
     out["indicator"] = nz(row.get("measurement_indicator")) or nz(row.get("indicator"))
     out["industry_or_item"] = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
     out["prd_se"] = nz(row.get("measurement_prd_se"))
-    out["period"] = canonicalize_period(row.get("measurement_period"), out["prd_se"])
+    out["period"], out["period_alignment_status"] = align_change_period(row)
     out["raw_unit"] = raw_unit
     out["canonical_unit"] = canonical_unit
     out["unit"] = canonical_unit
     out["unit_dimension"] = dimension
     out["semantic_type"] = semantic
     out["entity_type"] = entity_type(row)
-    out["comparison_period"] = comparison_period(row, semantic)
+    comparison_row = dict(row)
+    comparison_row["measurement_period"] = out["period"]
+    comparison_row["measurement_prd_se"] = out["prd_se"]
+    out["comparison_period"] = comparison_period(comparison_row, semantic)
     out["mapping_eligible"] = "Y" if not code else "N"
     out["mapping_exclusion_code"] = code
     out["mapping_exclusion_reason"] = reason
@@ -276,6 +312,8 @@ DERIVED_FIELDS = [
     "claim_industry_or_item",
     "claim_period",
     "claim_prd_se",
+    "raw_measurement_period",
+    "period_alignment_status",
     "raw_unit",
     "canonical_unit",
     "unit_dimension",
