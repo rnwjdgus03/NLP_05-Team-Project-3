@@ -1,3 +1,5 @@
+import pytest
+
 from kosis_match_claims_to_index import (
     apply_mapping_override,
     candidate_decision,
@@ -61,6 +63,14 @@ def test_measurement_fields_override_claim_fields():
 def test_rate_claim_can_be_derived_from_level_item():
     claim = normalized_claim_row(ready_claim())
     mapping_type, reason = item_mapping_type(claim, "백만달러", "수출액")
+    assert mapping_type == "rate_from_level"
+    assert "증감률" in reason
+
+
+@pytest.mark.parametrize("unit", ["2020=100", "2020＝100", "2020=100.0", ""])
+def test_rate_claim_can_be_derived_from_index_item(unit):
+    claim = normalized_claim_row(ready_claim(measurement_indicator="서비스업 생산지수"))
+    mapping_type, reason = item_mapping_type(claim, unit, "경상지수")
     assert mapping_type == "rate_from_level"
     assert "증감률" in reason
 

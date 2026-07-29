@@ -661,11 +661,16 @@ def score_structured_meta(row, norm_claim, weighted_tokens):
 
 def meta_unit_dimension(meta_unit, item_name=""):
     """Infer a KOSIS unit dimension, using the ITEM name only for rate items."""
+    raw_unit = str(meta_unit or "").strip().lower()
+    compact_item = compact(item_name)
+    if re.search(r"\d{4}\s*[=＝]\s*100(?:\.0+)?", raw_unit):
+        return "index"
+    if "지수" in compact_item or "index" in str(item_name or "").lower():
+        return "index"
     dimension = infer_unit_dimension(canonicalize_unit(meta_unit))
     if dimension != "unknown":
         return dimension
-    item = compact(item_name)
-    if any(token in item for token in ("비율", "증감률", "증가율", "감소율", "등락률", "구성비")):
+    if any(token in compact_item for token in ("비율", "증감률", "증가율", "감소율", "등락률", "구성비")):
         return "rate"
     return "unknown"
 
@@ -697,7 +702,7 @@ def item_mapping_type(norm_claim, meta_unit, item_name):
             return "direct", ""
         if item_dimension == "rate":
             return "", f"증감률 claim에 일반 비율 ITEM={item_name}"
-        if item_dimension in {"currency", "person_count", "count", "quantity"}:
+        if item_dimension in {"currency", "person_count", "count", "quantity", "index"}:
             return "rate_from_level", "KOSIS 수준값에서 증감률 계산 필요"
         return "", f"증감률을 계산할 수 없는 KOSIS 단위={meta_unit or '-'}"
     if semantic == "absolute_change":
