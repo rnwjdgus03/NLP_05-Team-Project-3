@@ -47,6 +47,7 @@ def output_paths(out_dir: Path) -> dict[str, Path]:
         "ready": out_dir / "06_mapping_ready.csv",
         "enrich": out_dir / "06_mapping_enrich.csv",
         "reject": out_dir / "06_mapping_reject.csv",
+        "in_ready_all": out_dir / "06_in_ready_all.csv",
         "mapping": out_dir / "07_mapping",
     }
 
@@ -74,6 +75,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--measurement-limit", type=int, default=0)
     parser.add_argument("--chunk-size", type=int, default=8)
     parser.add_argument("--overlap", type=int, default=2)
+    parser.add_argument("--lead-sentences", type=int, default=3)
+    parser.add_argument("--local-window", type=int, default=3)
+    parser.add_argument("--related-limit", type=int, default=3)
+    parser.add_argument(
+        "--splitter",
+        choices=["auto", "kss", "regex"],
+        default="kss",
+    )
     parser.add_argument("--sleep", type=float, default=0.5)
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -105,7 +114,7 @@ def main() -> None:
         "--output",
         paths["sentences"],
         "--splitter",
-        "kss",
+        args.splitter,
     ]
     if args.article_limit:
         preprocess.extend(["--limit", args.article_limit])
@@ -126,6 +135,8 @@ def main() -> None:
         args.chunk_size,
         "--overlap",
         args.overlap,
+        "--lead-sentences",
+        args.lead_sentences,
     ]
     if args.force:
         chunks.append("--overwrite")
@@ -164,6 +175,12 @@ def main() -> None:
         paths["spans"],
         "--output",
         paths["contexts"],
+        "--local-window",
+        args.local_window,
+        "--related-limit",
+        args.related_limit,
+        "--lead-sentences",
+        args.lead_sentences,
     ]
     if args.force:
         contexts.append("--overwrite")
@@ -235,6 +252,8 @@ def main() -> None:
             paths["enrich"],
             "--rejected-output",
             paths["reject"],
+            "--all-output",
+            paths["in_ready_all"],
         ]
     )
     if should_stop("gate", args.stop_after):

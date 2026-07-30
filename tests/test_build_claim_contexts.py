@@ -1,6 +1,6 @@
 import json
 
-from build_claim_contexts import build_context_rows
+from build_claim_contexts import build_context_rows, major_target_hints
 
 
 def sentence(article_id, number, text, paragraph_id="2", paragraph_count="3"):
@@ -73,3 +73,27 @@ def test_single_paragraph_uses_bounded_sentence_fallback():
     assert result[0]["lead_context_source"] == "fallback_first_sentences"
     assert "A1-C003" in result[0]["lead_paragraph"]
     assert "A1-C004" not in result[0]["lead_paragraph"]
+
+
+def test_major_target_hints_drop_ids_numbers_particles_and_predicates():
+    rows = [
+        sentence(
+            "A1",
+            1,
+            "국제선 여객이 지난해보다 증가했다.",
+            "1",
+            "1",
+        )
+    ]
+
+    hints = major_target_hints(
+        "LCC 국제선 여객이 9명 증가했다",
+        "[A1-C001] 국제선 여객이 증가했다.",
+        rows,
+    ).split("; ")
+
+    assert "lcc" in hints
+    assert "국제선" in hints
+    assert "여객" in hints
+    assert all("a1" not in hint and not any(c.isdigit() for c in hint) for hint in hints)
+    assert "증가했다" not in hints

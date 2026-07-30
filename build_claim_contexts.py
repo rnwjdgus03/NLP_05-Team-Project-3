@@ -55,7 +55,58 @@ STOPWORDS = {
     "통해",
     "위해",
     "가운데",
+    "인상",
+    "증가",
+    "감소",
+    "확대",
+    "축소",
+    "최대",
+    "최소",
+    "이상",
+    "이하",
+    "크게",
+    "하염없이",
 }
+KOREAN_PARTICLES = (
+    "으로",
+    "에서",
+    "에게",
+    "까지",
+    "부터",
+    "보다",
+    "처럼",
+    "의",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "에",
+    "로",
+    "와",
+    "과",
+    "도",
+    "만",
+)
+PREDICATE_ENDINGS = (
+    "했다",
+    "됐다",
+    "한다",
+    "된다",
+    "있다",
+    "없다",
+    "밝혔다",
+    "나타났다",
+    "올랐다",
+    "내렸다",
+    "늘었다",
+    "줄었다",
+    "증가했다",
+    "감소했다",
+    "잃고",
+    "기다리던",
+)
 
 
 def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
@@ -78,6 +129,22 @@ def tokens(text: str) -> set[str]:
         for token in TOKEN_RE.findall(str(text or ""))
         if token.lower() not in STOPWORDS
     }
+
+
+def normalize_target_token(token: str) -> str:
+    value = token.lower()
+    if any(character.isdigit() for character in value):
+        return ""
+    if value in STOPWORDS or value.endswith(PREDICATE_ENDINGS):
+        return ""
+    if re.fullmatch(r"[가-힣]+", value):
+        for particle in KOREAN_PARTICLES:
+            if value.endswith(particle) and len(value) - len(particle) >= 2:
+                value = value[: -len(particle)]
+                break
+    if len(value) < 2 or value in STOPWORDS:
+        return ""
+    return value
 
 
 def format_rows(rows: Iterable[dict[str, str]]) -> str:
@@ -118,12 +185,8 @@ def major_target_hints(
     def add(text: str, weight: float) -> None:
         nonlocal order
         for token in TOKEN_RE.findall(text or ""):
-            normalized = token.lower()
-            if (
-                normalized in STOPWORDS
-                or normalized.isdigit()
-                or len(normalized) < 2
-            ):
+            normalized = normalize_target_token(token)
+            if not normalized:
                 continue
             scores[normalized] = scores.get(normalized, 0.0) + weight
             first_seen.setdefault(normalized, order)
@@ -224,7 +287,10 @@ def build_context_rows(
         lead = [by_id[item] for item in lead_ids if item in by_id]
         title = str(source.get("title", "") or "").strip()
         lead_paragraph = format_rows(lead_rows)
-        target_hints = major_target_hints(title, lead_paragraph, rows)
+        lead_plain_text = " ".join(
+            str(row.get("claim_text", "") or "").strip() for row in lead_rows
+        )
+        target_hints = major_target_hints(title, lead_plain_text, rows)
         article_context = "\n".join(
             [
                 f"[title] {title}",

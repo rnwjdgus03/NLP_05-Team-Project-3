@@ -58,6 +58,7 @@ COLUMN_ALIASES = {
         "본문",
         "기사본문",
         "기사 본문 전체",
+        "기사 본문(정제)",
         "내용",
     ],
 }
@@ -198,7 +199,8 @@ def clean_article_body(value: object, title: str = "") -> str:
             continue
         cleaned_lines.append(line)
 
-    return MULTI_NEWLINE_RE.sub("\n", "\n".join(cleaned_lines)).strip()
+    cleaned = MULTI_NEWLINE_RE.sub("\n", "\n".join(cleaned_lines)).strip()
+    return LEADING_MEDIA_COUNT_RE.sub("", cleaned, count=1)
 
 
 def split_sentences_regex(text: str) -> list[str]:

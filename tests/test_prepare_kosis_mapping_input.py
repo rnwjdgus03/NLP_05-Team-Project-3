@@ -58,6 +58,7 @@ def test_normalize_row_uses_measurement_level_aliases():
     assert out["unit_dimension"] == "currency"
     assert out["semantic_type"] == "amount"
     assert out["mapping_eligible"] == "Y"
+    assert out["in_ready"] == "Y"
     assert out["mapping_gate"] == "READY"
 
 
@@ -192,11 +193,14 @@ def test_prepare_writes_three_way_gate_files(tmp_path):
     ready_path = tmp_path / "ready.csv"
     enrich_path = tmp_path / "enrich.csv"
     reject_path = tmp_path / "reject.csv"
-    prepare(source, ready_path, reject_path, enrich_path)
+    all_path = tmp_path / "all.csv"
+    prepare(source, ready_path, reject_path, enrich_path, all_path)
 
     ready = list(csv.DictReader(ready_path.open(encoding="utf-8-sig")))
     enrich = list(csv.DictReader(enrich_path.open(encoding="utf-8-sig")))
     reject = list(csv.DictReader(reject_path.open(encoding="utf-8-sig")))
+    all_rows = list(csv.DictReader(all_path.open(encoding="utf-8-sig")))
     assert [row["mapping_gate"] for row in ready] == ["READY"]
     assert [row["mapping_gate"] for row in enrich] == ["ENRICH"]
     assert [row["mapping_gate"] for row in reject] == ["REJECT"]
+    assert [row["in_ready"] for row in all_rows] == ["Y", "N", "N"]

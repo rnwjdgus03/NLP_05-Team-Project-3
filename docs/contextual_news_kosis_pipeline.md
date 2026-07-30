@@ -61,6 +61,11 @@ python run_contextual_news_kosis_pipeline.py `
   --semantic-index "data\indexes\kosis_bge_m3" `
   --early-meta-index "outputs\runs\kosis_meta_full.csv" `
   --out-dir "outputs\runs\contextual_v1" `
+  --chunk-size 8 `
+  --overlap 3 `
+  --lead-sentences 3 `
+  --local-window 3 `
+  --related-limit 3 `
   --device cuda `
   --verify
 ```
@@ -98,6 +103,7 @@ python run_contextual_news_kosis_pipeline.py `
 | `06_mapping_ready.csv` | 즉시 매핑 가능한 measurement |
 | `06_mapping_enrich.csv` | 기간·scope·binding 보강 대상 |
 | `06_mapping_reject.csv` | 명확한 KOSIS 범위 밖 |
+| `06_in_ready_all.csv` | 팀 비교용 전체 measurement와 `in_ready=Y/N` |
 | `07_mapping/` | 후보·메타·ITEM/OBJ·실제값 verdict |
 | `08_evaluation_summary.csv` | 단계별 분자·분모·도달률 |
 | `08_evaluation_reasons.csv` | 게이트·매핑·verdict 사유 분포 |

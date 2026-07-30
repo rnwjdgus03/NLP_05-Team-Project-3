@@ -57,6 +57,12 @@ def test_clean_article_body_stops_before_comments_and_site_footer():
     assert cleaned == "회사는 외부 접근을 막았다고 밝혔다."
 
 
+def test_clean_article_body_removes_leading_media_count_without_byline():
+    cleaned = clean_article_body("5 Passenger volume increased by 3 percent.")
+
+    assert cleaned == "Passenger volume increased by 3 percent."
+
+
 def test_preprocess_articles_assigns_ids_and_sentence_context():
     articles = [
         {

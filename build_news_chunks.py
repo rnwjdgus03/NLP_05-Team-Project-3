@@ -118,7 +118,10 @@ def build_chunks(
             f"[{sentence_id}] {str(row.get('claim_text', '') or '').strip()}"
             for sentence_id, row in zip(lead_ids, lead_rows)
         )
-        target_hints = major_target_hints(title, lead_paragraph, rows)
+        lead_plain_text = " ".join(
+            str(row.get("claim_text", "") or "").strip() for row in lead_rows
+        )
+        target_hints = major_target_hints(title, lead_plain_text, rows)
         article_context = "\n".join(
             [
                 f"[title] {title}",

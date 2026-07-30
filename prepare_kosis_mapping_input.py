@@ -298,6 +298,7 @@ def normalize_row(row: dict) -> dict:
     comparison_row["measurement_prd_se"] = out["prd_se"]
     out["comparison_period"] = comparison_period(comparison_row, semantic)
     out["mapping_eligible"] = "Y" if not code else "N"
+    out["in_ready"] = out["mapping_eligible"]
     out["mapping_exclusion_code"] = code
     out["mapping_exclusion_reason"] = reason
     gate, action = mapping_gate(row, code)
@@ -321,6 +322,7 @@ DERIVED_FIELDS = [
     "entity_type",
     "comparison_period",
     "mapping_eligible",
+    "in_ready",
     "mapping_exclusion_code",
     "mapping_exclusion_reason",
     "mapping_gate",
@@ -342,6 +344,7 @@ def prepare(
     output_path: Path,
     rejected_path: Path | None = None,
     enrich_path: Path | None = None,
+    all_output_path: Path | None = None,
 ):
     with input_path.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -360,6 +363,8 @@ def prepare(
         write_csv(rejected_path, hard_rejected if enrich_path else rejected, fields)
     if enrich_path:
         write_csv(enrich_path, enrich, fields)
+    if all_output_path:
+        write_csv(all_output_path, normalized, fields)
     return accepted, rejected
 
 
@@ -369,6 +374,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--rejected-output", default="")
     parser.add_argument("--enrich-output", default="")
+    parser.add_argument("--all-output", default="")
     parser.add_argument("--expect-ready", type=int, default=0)
     args = parser.parse_args()
 
@@ -377,6 +383,7 @@ def main():
         Path(args.output),
         Path(args.rejected_output) if args.rejected_output else None,
         Path(args.enrich_output) if args.enrich_output else None,
+        Path(args.all_output) if args.all_output else None,
     )
     counts = Counter(row["mapping_exclusion_code"] for row in rejected)
     gate_counts = Counter(
@@ -390,6 +397,8 @@ def main():
         print(f"rejected={args.rejected_output}")
     if args.enrich_output:
         print(f"enrich={args.enrich_output}")
+    if args.all_output:
+        print(f"all={args.all_output}")
     if args.expect_ready and len(accepted) != args.expect_ready:
         raise SystemExit(f"expected {args.expect_ready} ready rows, got {len(accepted)}")
 
