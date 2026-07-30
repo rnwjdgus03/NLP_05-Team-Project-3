@@ -9,9 +9,13 @@
 
 ```text
 기사 원문
-→ KSS 문장 분리
+→ 문단 경계 보존 + KSS 문장 분리
+→ 기사 공통 문맥 생성
+  (제목 + 발행일 + 첫 문단 + 주요 대상 후보)
 → 기사별 5~8문장 중첩 chunk
 → 넓은 수치·통계 claim span 탐지
+→ claim별 문맥 재구성
+  (기사 공통 문맥 + 앞뒤 3문장 + 관련 문장 최대 3개)
 → BGE-M3 Top-20 + reranker
 → Top-5 KOSIS 메타를 HCX 참고 정보로 제공
 → HCX measurement 구조화
@@ -24,7 +28,11 @@
 ## 핵심 원칙
 
 - span 탐지에서는 KOSIS 가능성을 판단하지 않는다.
-- 제목, 기사 날짜, 앞뒤 문장, 원래 sentence ID를 끝까지 보존한다.
+- 제목, 기사 날짜, 문단, 앞뒤 문장, 원래 sentence ID를 끝까지 보존한다.
+- 모든 chunk는 같은 기사의 제목·발행일·첫 문단·주요 대상 후보를 공유한다.
+- claim span 탐지 후 원문 sentence ID로 주변 문맥과 관련 문장을 다시 조립한다.
+- 기사 발행일은 메타데이터이며 measurement period의 기본값으로 쓰지 않는다.
+- 주요 대상 후보는 검색 힌트이며 HCX가 claim 근거를 보고 item을 다시 확정한다.
 - KOSIS 검색 결과는 HCX의 용어 정규화 참고 정보일 뿐 기사 근거가 아니다.
 - 기사에 없는 기간·값·단위를 후보 메타에서 복사하지 않는다.
 - `mapping_eligible=Y`는 `mapping_gate=READY`와 같은 의미로 유지한다.
@@ -83,6 +91,7 @@ python run_contextual_news_kosis_pipeline.py `
 | `02_chunks.csv` | 기사 경계를 넘지 않는 중첩 chunk |
 | `03_claim_spans.csv` | KOSIS 판단 전 넓은 claim span |
 | `03_claim_spans_progress.csv` | HCX chunk 처리 재개 정보 |
+| `03_claim_contexts.csv` | 기사 공통·claim 주변·관련 문장과 근거 sentence ID |
 | `04_early_bge_candidates_top20.csv` | 조기 KOSIS 통계표 후보 |
 | `04_early_bge_context_top5.csv` | HCX에 제공할 압축 후보 메타 |
 | `05_hcx_measurements.csv` | 측정값별 구조화 결과 |
@@ -119,7 +128,7 @@ python run_contextual_news_kosis_pipeline.py `
 
 | action | 처리 |
 |---|---|
-| `RESOLVE_PERIOD_FROM_CONTEXT` | 제목·앞뒤 문장·기사 본문에서 시점 재탐색 |
+| `RESOLVE_PERIOD_FROM_CONTEXT` | 제목·첫 문단·주변/관련 문장에서 시점 재탐색 |
 | `CONFIRM_KOSIS_SCOPE` | 국내 공식 반복 통계인지 확인 |
 | `CONFIRM_MEASUREMENT_BINDING` | fallback 값과 indicator/item 연결 재검토 |
 | `NORMALIZE_UNIT` | 원, 명, 개사, 대 등의 KOSIS 단위 정규화 |

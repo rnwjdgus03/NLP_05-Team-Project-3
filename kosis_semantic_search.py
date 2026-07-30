@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -109,9 +110,18 @@ def build_early_claim_query(claim, neighbor_limit=500):
             return ""
         return value[:limit]
 
+    shared_context = re.sub(
+        r"(?mi)^\[publication_date\][^\n]*(?:\n|$)",
+        "",
+        cleaned("article_context", 1200),
+    ).strip()
     fields = [
         ("claim", cleaned("claim_text", 1200)),
         ("title", cleaned("title", 300)),
+        ("major_targets", cleaned("major_target_hints", 400)),
+        ("shared_article_context", shared_context[:1000]),
+        ("claim_local_context", cleaned("local_context", 1400)),
+        ("related_article_context", cleaned("antecedent_context", 900)),
         ("previous_context", cleaned("prev_sentence", neighbor_limit)),
         ("next_context", cleaned("next_sentence", neighbor_limit)),
     ]

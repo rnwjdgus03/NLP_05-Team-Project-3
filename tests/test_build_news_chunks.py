@@ -45,3 +45,10 @@ def test_chunks_do_not_cross_articles_and_preserve_traceability():
     assert chunks[1]["prev_sentence"] == "sentence 1"
     assert chunks[0]["next_sentence"] == "sentence 9"
     assert all("A2-C" not in row["chunk_text"] for row in chunks[:2])
+    assert chunks[0]["article_context"] == chunks[1]["article_context"]
+    assert "[title] title-A1" in chunks[0]["article_context"]
+    assert json.loads(chunks[0]["article_context_sentence_ids"]) == [
+        "A1-C001",
+        "A1-C002",
+        "A1-C003",
+    ]

@@ -383,6 +383,9 @@ def build_hcx_user_content(
     nxt,
     candidates,
     retrieval_context="",
+    article_context="",
+    local_context="",
+    antecedent_context="",
     previous_result=None,
     issues=None,
 ):
@@ -394,6 +397,26 @@ def build_hcx_user_content(
         next=nxt,
         numeric_candidates=prompt_candidates(candidates),
     )
+    context_sections = [
+        ("Shared article context", article_context),
+        ("Claim-local context", local_context),
+        ("Related sentences from the same article", antecedent_context),
+    ]
+    context_text = "\n\n".join(
+        f"[{label}]\n{str(value).strip()}"
+        for label, value in context_sections
+        if str(value or "").strip() not in {"", "-"}
+    )
+    if context_text:
+        user_content += (
+            "\n\n[Additional article evidence]\n"
+            f"{context_text}\n"
+            "Use this evidence only to resolve the claim subject, item, and "
+            "explicit or relative measurement period. The article publication "
+            "date is metadata, not a measurement period. Major-target hints "
+            "are retrieval hints and must be confirmed against quoted article "
+            "sentences. Never copy a value from outside the target claim span."
+        )
     if retrieval_context and str(retrieval_context).strip() not in {"", "-", "[]"}:
         user_content += RETRIEVAL_CONTEXT_TMPL.format(
             retrieval_context=str(retrieval_context).strip()
@@ -407,7 +430,8 @@ def build_hcx_user_content(
 
 
 def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4,
-             effort="none", previous_result=None, issues=None, retrieval_context=""):
+             effort="none", previous_result=None, issues=None, retrieval_context="",
+             article_context="", local_context="", antecedent_context=""):
     user_content = build_hcx_user_content(
         title=title,
         date=date,
@@ -416,6 +440,9 @@ def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4
         nxt=nxt,
         candidates=candidates,
         retrieval_context=retrieval_context,
+        article_context=article_context,
+        local_context=local_context,
+        antecedent_context=antecedent_context,
         previous_result=previous_result,
         issues=issues,
     )
@@ -466,9 +493,26 @@ def period_is_grounded(period, claim):
     value = norm(period)
     if value == "-":
         return False
+    article_context = re.sub(
+        r"(?mi)^\[publication_date\][^\n]*(?:\n|$)",
+        "",
+        norm(claim.get("article_context")),
+    )
     evidence = " ".join(
-        norm(claim.get(field))
-        for field in ("title", "claim_text", "prev_sentence", "next_sentence")
+        [
+            *[
+                norm(claim.get(field))
+                for field in (
+                    "title",
+                    "claim_text",
+                    "prev_sentence",
+                    "next_sentence",
+                )
+            ],
+            article_context,
+            norm(claim.get("local_context")),
+            norm(claim.get("antecedent_context")),
+        ]
     )
     year_match = re.search(r"(?:19|20)\d{2}", value)
     if not year_match:
@@ -719,6 +763,9 @@ def extract_claim(api_key, model, claim, effort="none"):
         "candidates": candidates,
         "effort": effort,
         "retrieval_context": claim.get("_retrieval_context", ""),
+        "article_context": claim.get("article_context", ""),
+        "local_context": claim.get("local_context", ""),
+        "antecedent_context": claim.get("antecedent_context", ""),
     }
     raw = call_hcx(**common)
     result = parse_json(raw)

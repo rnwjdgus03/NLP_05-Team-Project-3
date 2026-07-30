@@ -29,6 +29,9 @@ OUTPUT_COLUMNS = [
     "title",
     "date",
     "url",
+    "paragraph_id",
+    "paragraph_sentence_index",
+    "paragraph_count",
     "claim_text",
     "prev_sentence",
     "next_sentence",
@@ -280,11 +283,21 @@ def preprocess_articles(
     for article in articles:
         title = _cell(article, columns.get("title"))
         body = clean_article_body(_cell(article, columns["body"]), title=title)
-        sentences = [
-            sentence
-            for sentence in splitter(body)
-            if len(sentence) >= min_chars and VISIBLE_TEXT_RE.search(sentence)
-        ]
+        paragraphs = [line.strip() for line in body.split("\n") if line.strip()]
+        sentence_records = []
+        for paragraph_index, paragraph in enumerate(paragraphs, 1):
+            paragraph_sentences = [
+                sentence
+                for sentence in splitter(paragraph)
+                if len(sentence) >= min_chars and VISIBLE_TEXT_RE.search(sentence)
+            ]
+            for paragraph_sentence_index, sentence in enumerate(
+                paragraph_sentences, 1
+            ):
+                sentence_records.append(
+                    (paragraph_index, paragraph_sentence_index, sentence)
+                )
+        sentences = [record[2] for record in sentence_records]
         if not sentences:
             empty_articles += 1
             continue
@@ -295,7 +308,11 @@ def preprocess_articles(
         date = _cell(article, columns.get("date"))
         url = _cell(article, columns.get("url"))
 
-        for sentence_index, sentence in enumerate(sentences):
+        for sentence_index, (
+            paragraph_id,
+            paragraph_sentence_index,
+            sentence,
+        ) in enumerate(sentence_records):
             if claim_id_style == "article":
                 claim_id = f"{article_id}-{claim_prefix}{sentence_index + 1:03d}"
             else:
@@ -307,6 +324,9 @@ def preprocess_articles(
                     "title": title,
                     "date": date,
                     "url": url,
+                    "paragraph_id": str(paragraph_id),
+                    "paragraph_sentence_index": str(paragraph_sentence_index),
+                    "paragraph_count": str(len(paragraphs)),
                     "claim_text": sentence,
                     "prev_sentence": sentences[sentence_index - 1]
                     if sentence_index > 0

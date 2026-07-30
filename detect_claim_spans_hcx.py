@@ -216,6 +216,16 @@ def call_hcx(api_key: str, model: str, chunk: dict[str, str], retries: int = 4) 
         chunk_text=chunk.get("chunk_text") or "-",
         next_sentence=chunk.get("next_sentence") or "-",
     )
+    article_context = str(chunk.get("article_context", "") or "").strip()
+    if article_context:
+        prompt = (
+            "[Shared article context]\n"
+            f"{article_context}\n\n"
+            "Use the shared context only to resolve the article subject. "
+            "Claim span boundaries must still come from the analyzed chunk, "
+            "and the publication date is not a measurement period.\n\n"
+            f"{prompt}"
+        )
     body = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},

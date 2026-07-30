@@ -7,6 +7,7 @@ def test_numbered_output_contract_is_stable():
     paths = output_paths(Path("run"))
     assert paths["sentences"] == Path("run/01_sentences.csv")
     assert paths["spans"] == Path("run/03_claim_spans.csv")
+    assert paths["contexts"] == Path("run/03_claim_contexts.csv")
     assert paths["ready"] == Path("run/06_mapping_ready.csv")
     assert paths["mapping"] == Path("run/07_mapping")
 

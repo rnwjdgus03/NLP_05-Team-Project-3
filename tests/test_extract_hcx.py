@@ -26,11 +26,17 @@ def test_retrieval_context_is_marked_as_hint_not_article_evidence():
         nxt="-",
         candidates=[],
         retrieval_context='[{"tbl_id":"T1","table_name":"Rate table"}]',
+        article_context="[title] Employment\nLead paragraph.",
+        local_context="[C1] The measured value is 10 percent.",
+        antecedent_context="[C0] In 2024 the baseline was measured.",
     )
 
     assert "KOSIS retrieval hints - not article evidence" in content
     assert '"tbl_id":"T1"' in content
     assert "Never copy a value, period, unit" in content
+    assert "[Additional article evidence]" in content
+    assert "[Shared article context]" in content
+    assert "publication date is metadata" in content
 
 
 def test_normalize_korean_magnitude_numbers():
@@ -234,6 +240,23 @@ def test_ungrounded_period_is_removed_instead_of_using_article_date():
     assert remove_ungrounded_measurement_periods(result, claim) == 1
     assert result["measurements"][0]["measurement_period"] == "-"
     assert result["measurements"][0]["measurement_prd_se"] == "-"
+
+
+def test_publication_date_in_shared_context_does_not_ground_period():
+    claim = {
+        "title": "LCC staffing",
+        "date": "2025-01-01",
+        "claim_text": "The staffing ratio was 27.4 percent.",
+        "prev_sentence": "-",
+        "next_sentence": "-",
+        "article_context": (
+            "[title] LCC staffing\n"
+            "[publication_date] 2025-01-01\n"
+            "[A1-C001] Staffing was discussed."
+        ),
+    }
+
+    assert not period_is_grounded("2025", claim)
 
 
 def test_local_explicit_year_overrides_title_year_for_that_value():

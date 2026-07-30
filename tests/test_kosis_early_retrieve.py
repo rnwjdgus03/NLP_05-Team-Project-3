@@ -37,6 +37,13 @@ def test_early_query_uses_article_context_but_not_publication_date():
             "title": "International aviation",
             "prev_sentence": "The previous sentence.",
             "next_sentence": "The next sentence.",
+            "article_context": (
+                "[title] International aviation\n"
+                "[publication_date] 2025-01-01\nLead paragraph."
+            ),
+            "local_context": "Local passenger context.",
+            "antecedent_context": "In 2024 the baseline was measured.",
+            "major_target_hints": "LCC; passenger",
             "date": "2025-01-01",
         }
     )
@@ -45,6 +52,10 @@ def test_early_query_uses_article_context_but_not_publication_date():
     assert "title: International aviation" in query
     assert "previous_context: The previous sentence." in query
     assert "next_context: The next sentence." in query
+    assert "major_targets: LCC; passenger" in query
+    assert "shared_article_context:" in query
+    assert "claim_local_context: Local passenger context." in query
+    assert "related_article_context:" in query
     assert "2025-01-01" not in query
 
 

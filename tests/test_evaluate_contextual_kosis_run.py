@@ -27,6 +27,10 @@ def test_evaluation_uses_measurements_not_topk_rows_as_denominator(tmp_path):
         [{"claim_id": "C1"}, {"claim_id": "C2"}],
     )
     write_csv(
+        tmp_path / "03_claim_contexts.csv",
+        [{"claim_id": "C1"}, {"claim_id": "C2"}],
+    )
+    write_csv(
         tmp_path / "05_hcx_measurements.csv",
         [
             {"claim_id": "C1", "claim_measurement_id": "M1"},
@@ -105,6 +109,7 @@ def test_evaluation_uses_measurements_not_topk_rows_as_denominator(tmp_path):
     result = evaluate_run(tmp_path)
 
     assert result["counts"]["articles"] == 2
+    assert result["counts"]["claim_contexts"] == 2
     assert result["counts"]["measurements"] == 4
     assert result["counts"]["gate_ready"] == 2
     assert result["counts"]["validated_measurements"] == 2

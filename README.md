@@ -110,6 +110,7 @@ python preprocess_news.py `
 - 한국어 문장 분리
 - 기사별 `article_id` 생성: `A0001`
 - 문장별 `claim_id` 생성: `A0001-C001`
+- 원문 문단 경계 보존: `paragraph_id`, `paragraph_sentence_index`
 - 이전·다음 문장 문맥 보존
 
 본문·제목·날짜·URL 컬럼은 일반적인 한국어·영어 별칭으로 자동 인식합니다. 자동 인식이 안 되면 `--body-col`, `--title-col`, `--date-col`, `--url-col`로 지정합니다.
@@ -118,6 +119,7 @@ python preprocess_news.py `
 
 ```text
 claim_id, article_id, title, date, url,
+paragraph_id, paragraph_sentence_index, paragraph_count,
 claim_text, prev_sentence, next_sentence
 ```
 
@@ -688,12 +690,14 @@ KOSIS API 사용 시 주의사항은 다음과 같습니다.
 ## 문맥 보존형 파이프라인
 
 문장 단위 필터에서 KOSIS 가능성을 함께 판단해 recall이 낮아지는 문제를
-줄이기 위해 `KSS → 중첩 chunk → 넓은 claim span → 조기 BGE → HCX
-measurement → READY/ENRICH/REJECT` 실행 경로를 추가했습니다.
+줄이기 위해 `문단 보존 KSS → 기사 공통 문맥 → 중첩 chunk → 넓은 claim
+span → claim별 문맥 재구성 → 조기 BGE → HCX measurement →
+READY/ENRICH/REJECT` 실행 경로를 추가했습니다.
 
 - 통합 실행: `run_contextual_news_kosis_pipeline.py`
 - chunk 생성: `build_news_chunks.py`
 - 넓은 claim span 탐지: `detect_claim_spans_hcx.py`
+- claim 문맥 재구성: `build_claim_contexts.py`
 - Colab smoke test: [`notebooks/contextual_news_kosis_smoke_colab.ipynb`](notebooks/contextual_news_kosis_smoke_colab.ipynb)
 - 기사 100건 확대 평가: [`notebooks/contextual_news_kosis_eval_100_colab.ipynb`](notebooks/contextual_news_kosis_eval_100_colab.ipynb)
 - 단계별 집계: `evaluate_contextual_kosis_run.py`

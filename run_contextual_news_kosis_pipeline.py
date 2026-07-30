@@ -17,6 +17,7 @@ STAGES = [
     "sentences",
     "chunks",
     "spans",
+    "contexts",
     "retrieval",
     "measurements",
     "gate",
@@ -39,6 +40,7 @@ def output_paths(out_dir: Path) -> dict[str, Path]:
         "chunks": out_dir / "02_chunks.csv",
         "spans": out_dir / "03_claim_spans.csv",
         "span_progress": out_dir / "03_claim_spans_progress.csv",
+        "contexts": out_dir / "03_claim_contexts.csv",
         "early_candidates": out_dir / "04_early_bge_candidates_top20.csv",
         "early_context": out_dir / "04_early_bge_context_top5.csv",
         "measurements": out_dir / "05_hcx_measurements.csv",
@@ -153,11 +155,27 @@ def main() -> None:
     if should_stop("spans", args.stop_after):
         return
 
+    contexts = [
+        sys.executable,
+        SCRIPT_DIR / "build_claim_contexts.py",
+        "--sentences",
+        paths["sentences"],
+        "--spans",
+        paths["spans"],
+        "--output",
+        paths["contexts"],
+    ]
+    if args.force:
+        contexts.append("--overwrite")
+    run_if_missing(paths["contexts"], contexts, args.force)
+    if should_stop("contexts", args.stop_after):
+        return
+
     retrieval = [
         sys.executable,
         SCRIPT_DIR / "kosis_early_retrieve.py",
         "--input",
-        paths["spans"],
+        paths["contexts"],
         "--output-candidates",
         paths["early_candidates"],
         "--output-context",
@@ -187,7 +205,7 @@ def main() -> None:
         sys.executable,
         SCRIPT_DIR / "extract_hcx.py",
         "--input",
-        paths["spans"],
+        paths["contexts"],
         "--retrieval-context",
         paths["early_context"],
         "--output",

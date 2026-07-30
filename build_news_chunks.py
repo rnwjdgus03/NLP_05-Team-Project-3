@@ -14,6 +14,8 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Iterable
 
+from build_claim_contexts import major_target_hints
+
 
 OUTPUT_COLUMNS = [
     "chunk_id",
@@ -27,7 +29,31 @@ OUTPUT_COLUMNS = [
     "chunk_text",
     "prev_sentence",
     "next_sentence",
+    "article_context",
+    "article_context_sentence_ids",
+    "lead_paragraph",
+    "lead_context_source",
+    "major_target_hints",
+    "context_version",
 ]
+
+CONTEXT_VERSION = "article-shared-v2.0"
+
+
+def lead_rows_for_article(
+    rows: list[dict[str, str]], fallback_sentences: int
+) -> tuple[list[dict[str, str]], str]:
+    first_paragraph = str(rows[0].get("paragraph_id", "") or "").strip()
+    paragraph_count = str(rows[0].get("paragraph_count", "") or "").strip()
+    if first_paragraph:
+        selected = [
+            row
+            for row in rows
+            if str(row.get("paragraph_id", "") or "").strip() == first_paragraph
+        ]
+        if paragraph_count not in {"", "0", "1"}:
+            return selected[:fallback_sentences], "first_paragraph"
+    return rows[:fallback_sentences], "fallback_first_sentences"
 
 
 def chunk_ranges(
@@ -69,7 +95,10 @@ def build_chunks(
     chunk_size: int = 8,
     overlap: int = 2,
     min_chunk_size: int = 5,
+    lead_sentences: int = 3,
 ) -> list[dict[str, str]]:
+    if lead_sentences < 1:
+        raise ValueError("lead_sentences must be at least 1")
     articles: OrderedDict[str, list[dict[str, str]]] = OrderedDict()
     for row in sentence_rows:
         article_id = str(row.get("article_id", "") or "").strip()
@@ -81,6 +110,24 @@ def build_chunks(
 
     output: list[dict[str, str]] = []
     for article_id, rows in articles.items():
+        lead_rows, lead_source = lead_rows_for_article(rows, lead_sentences)
+        lead_ids = [str(row["claim_id"]).strip() for row in lead_rows]
+        title = str(rows[0].get("title", "") or "").strip()
+        date = str(rows[0].get("date", "") or "").strip()
+        lead_paragraph = "\n".join(
+            f"[{sentence_id}] {str(row.get('claim_text', '') or '').strip()}"
+            for sentence_id, row in zip(lead_ids, lead_rows)
+        )
+        target_hints = major_target_hints(title, lead_paragraph, rows)
+        article_context = "\n".join(
+            [
+                f"[title] {title}",
+                f"[publication_date] {date or '-'}",
+                f"[lead_source] {lead_source}",
+                f"[major_target_hints] {target_hints or '-'}",
+                lead_paragraph,
+            ]
+        )
         for chunk_number, (start, end) in enumerate(
             chunk_ranges(len(rows), chunk_size, overlap, min_chunk_size),
             1,
@@ -113,6 +160,14 @@ def build_chunks(
                         if end < len(rows)
                         else ""
                     ),
+                    "article_context": article_context,
+                    "article_context_sentence_ids": json.dumps(
+                        lead_ids, ensure_ascii=False
+                    ),
+                    "lead_paragraph": lead_paragraph,
+                    "lead_context_source": lead_source,
+                    "major_target_hints": target_hints,
+                    "context_version": CONTEXT_VERSION,
                 }
             )
     return output
@@ -145,6 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chunk-size", type=int, default=8)
     parser.add_argument("--overlap", type=int, default=2)
     parser.add_argument("--min-chunk-size", type=int, default=5)
+    parser.add_argument("--lead-sentences", type=int, default=3)
     parser.add_argument("--overwrite", action="store_true")
     return parser
 
@@ -162,6 +218,7 @@ def main() -> None:
             chunk_size=args.chunk_size,
             overlap=args.overlap,
             min_chunk_size=args.min_chunk_size,
+            lead_sentences=args.lead_sentences,
         )
     except ValueError as error:
         raise SystemExit(str(error)) from error
