@@ -14,6 +14,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from kosis_scope_gate import gate_decision
+
 
 EMPTY = {"", "-", "nan", "none", "null"}
 SKIP_ROLES = {"이전값", "참고값"}
@@ -302,14 +304,27 @@ def normalize_row(row: dict) -> dict:
     comparison_row["measurement_period"] = out["period"]
     comparison_row["measurement_prd_se"] = out["prd_se"]
     out["comparison_period"] = comparison_period(comparison_row, semantic)
+    # 내용 기반 범위 판정 — HCX 자기 신고 라벨(measurement_usage/claim_domain_scope)만
+    # 믿으면 비트코인 시세나 개별 브랜드 판매가도 그대로 통과한다(실측 확인).
+    scope = gate_decision({**row, "unit": out["unit"]})
+    out.update(scope)
+    if not code and scope["scope_gate_blocked"] == "Y":
+        code = scope["scope_gate_code"]
+        reason = scope["scope_gate_reason"]
+
     out["mapping_eligible"] = "Y" if not code else "N"
     out["in_ready"] = out["mapping_eligible"]
     out["mapping_exclusion_code"] = code
     out["mapping_exclusion_reason"] = reason
-    gate, action = mapping_gate(row, code)
-    out["mapping_gate"] = gate
-    out["mapping_gate_reason"] = code or "ELIGIBLE"
-    out["enrichment_actions"] = action
+    if scope["scope_gate_blocked"] == "Y":
+        out["mapping_gate"] = "REJECT"
+        out["mapping_gate_reason"] = code
+        out["enrichment_actions"] = ""
+    else:
+        gate, action = mapping_gate(row, code)
+        out["mapping_gate"] = gate
+        out["mapping_gate_reason"] = code or "ELIGIBLE"
+        out["enrichment_actions"] = action
     return out
 
 
@@ -333,6 +348,11 @@ DERIVED_FIELDS = [
     "mapping_gate",
     "mapping_gate_reason",
     "enrichment_actions",
+    # 내용 기반 범위 판정 (kosis_scope_gate)
+    "scope_gate_code",
+    "scope_gate_reason",
+    "scope_gate_severity",
+    "scope_gate_blocked",
 ]
 
 
