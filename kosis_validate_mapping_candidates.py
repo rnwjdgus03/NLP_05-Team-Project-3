@@ -19,9 +19,18 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from kosis_chroma_coordinate_search import (
+    DEFAULT_COLLECTION_NAME as DEFAULT_CHROMA_COORDINATE_COLLECTION,
+    CoordinateSearchRuntime,
+    build_coordinate_documents,
+    coordinate_hits_to_candidates,
+    search_coordinate_candidates,
+)
+
 
 READY = "READY"
 NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
+PROVISIONAL = "PROVISIONAL"
 MAPPING_FAILED = "MAPPING_FAILED"
 NO_KOSIS_TABLE = "NO_KOSIS_TABLE"
 API_ERROR = "API_ERROR"
@@ -480,7 +489,7 @@ def choose_or_abstain(
     elif len(ranked) > 1:
         margin = confidence - float(ranked[1].get("final_confidence", ranked[1].get("ranking_score", 0.0)))
         if margin < margin_threshold:
-            status, reason = NEEDS_CONFIRMATION, f"top candidates have small margin ({margin:.4f})"
+            status, reason = PROVISIONAL, f"top candidates have small margin ({margin:.4f})"
     return {"mapping_status": status, "mapping_confidence": confidence,
             "mapping_reason": reason, "selected_combination": first,
             "candidate_count": len(ranked)}
@@ -814,14 +823,36 @@ def main() -> None:
     parser.add_argument("--delay", type=float, default=0.12)
     parser.add_argument("--validate-low-priority", action="store_true",
                         help="Also call KOSIS data API for ALTERNATE candidates with rank >= 3")
+    parser.add_argument("--chroma-coordinate-index", default="",
+                        help="Optional persistent Chroma coordinate index directory for ITEM/OBJ candidate generation")
+    parser.add_argument("--chroma-collection-name", default=DEFAULT_CHROMA_COORDINATE_COLLECTION)
+    parser.add_argument("--chroma-dense-top-k", type=int, default=50)
+    parser.add_argument("--chroma-lexical-top-k", type=int, default=50)
+    parser.add_argument("--chroma-rerank-top-k", type=int, default=20)
+    parser.add_argument("--chroma-validation-top-k", type=int, default=10)
+    parser.add_argument("--no-chroma-reranker", action="store_true",
+                        help="Disable coordinate reranker and use dense+lexical fusion only")
+    parser.add_argument("--chroma-max-documents", type=int, default=0,
+                        help="Limit fallback coordinate documents for quick experiments; 0 means all")
     args = parser.parse_args()
 
     from kosis_api_test import get_stat_data
 
     rows = _read_csv(Path(args.input))
+    all_meta_rows = _read_csv(Path(args.meta_index))
     meta_by_table: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
-    for meta in _read_csv(Path(args.meta_index)):
+    for meta in all_meta_rows:
         meta_by_table[(str(meta.get("org_id", "")), str(meta.get("tbl_id", "")))].append(meta)
+
+    coordinate_runtime = None
+    coordinate_documents = []
+    if str(args.chroma_coordinate_index).strip():
+        coordinate_runtime = CoordinateSearchRuntime(
+            persist_dir=Path(args.chroma_coordinate_index),
+            collection_name=args.chroma_collection_name,
+            use_reranker=not args.no_chroma_reranker,
+        )
+        coordinate_documents = build_coordinate_documents(all_meta_rows, max_documents=args.chroma_max_documents)
     work = rows[:args.limit] if args.limit else rows
     estimated_max = len(work) * max(0, args.max_combinations)
     api_call_limit = max(0, args.api_sample_limit)
@@ -869,6 +900,36 @@ def main() -> None:
             merged = _merge_seeded_candidates(lexical, seeded_obj.get(order, []))
             if any(candidate["semantic_score"] > 0 for candidate in merged):
                 obj_candidates[order] = merged
+
+        if coordinate_runtime is not None:
+            coordinate_hits = search_coordinate_candidates(
+                runtime=coordinate_runtime,
+                fallback_documents=coordinate_documents,
+                claim=row,
+                table_candidates=[row],
+                dense_top_k=args.chroma_dense_top_k,
+                lexical_top_k=args.chroma_lexical_top_k,
+                rerank_top_k=args.chroma_rerank_top_k,
+                validation_top_k=args.chroma_validation_top_k,
+            )
+            chroma_items, chroma_objs = coordinate_hits_to_candidates(coordinate_hits)
+            item_candidates = _merge_seeded_candidates(item_candidates, chroma_items)
+            for order, candidates in chroma_objs.items():
+                obj_candidates[order] = _merge_seeded_candidates(obj_candidates.get(order, []), candidates)
+            row["chroma_coordinate_hits"] = json.dumps(
+                [
+                    {
+                        "coordinate_id": hit.get("coordinate_id", ""),
+                        "tbl_id": hit.get("metadata", {}).get("tbl_id", ""),
+                        "itm_id": hit.get("metadata", {}).get("itm_id", ""),
+                        "obj_path": hit.get("metadata", {}).get("obj_path", ""),
+                        "fusion_score": hit.get("fusion_score", ""),
+                        "reranker_score": hit.get("reranker_score", ""),
+                    }
+                    for hit in coordinate_hits
+                ],
+                ensure_ascii=False,
+            )
         periods = [str(_first(row, "measurement_period", "period")).strip()]
         comparison = str(row.get("comparison_period", "")).strip()
         if not comparison and infer_rate_change_claim(row):

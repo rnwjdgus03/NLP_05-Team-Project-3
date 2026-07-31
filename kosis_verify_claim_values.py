@@ -26,7 +26,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension as infer_unit_dimension
+from kosis_unit_utils import canonicalize_unit, unit_dimension as infer_unit_dimension
 
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:

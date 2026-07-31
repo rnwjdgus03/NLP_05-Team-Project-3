@@ -1,8 +1,7 @@
-"""Run the strict measurement-level KOSIS mapping pipeline.
+"""Run the KOSIS second-stage mapping pipeline.
 
-Unlike the legacy runner, this command never assumes every input row is a
-KOSIS target.  It prepares an eligible measurement file first and only sends a
-candidate to value verification after table/meta matching marks it READY.
+The input CSV is assumed to have already passed the first-stage IN_READY gate
+owned by the upstream team. This runner starts directly from table retrieval.
 """
 
 from __future__ import annotations
@@ -137,8 +136,7 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
-    ready = out_dir / f"{stem}_kosis_ready.csv"
-    rejected = out_dir / f"{stem}_kosis_rejected.csv"
+    ready = input_path
     table_candidates = out_dir / f"{stem}_kosis_table_candidates.csv"
     top_tables = out_dir / f"{stem}_kosis_top_tables.csv"
     meta_index = out_dir / f"{stem}_kosis_meta_index.csv"
@@ -146,18 +144,7 @@ def main():
     validated_candidates = out_dir / f"{stem}_kosis_validated_mappings.csv"
     verified = out_dir / f"{stem}_kosis_verified.csv"
 
-    run(
-        [
-            sys.executable,
-            SCRIPT_DIR / "prepare_kosis_mapping_input.py",
-            "--input",
-            input_path,
-            "--output",
-            ready,
-            "--rejected-output",
-            rejected,
-        ]
-    )
+    print(f"input_assumed_in_ready={ready}", flush=True)
     retrieval_command = [
         sys.executable,
         SCRIPT_DIR / "kosis_match_claims_to_index.py",

@@ -22,11 +22,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from prepare_kosis_mapping_input import (
-    canonicalize_unit,
-    normalize_row as normalize_mapping_row,
-    unit_dimension as infer_unit_dimension,
-)
+from kosis_unit_utils import canonicalize_unit, unit_dimension as infer_unit_dimension
 from kosis_semantic_search import (
     DEFAULT_RERANKER_MODEL,
     SemanticSearchRuntime,
@@ -146,9 +142,13 @@ def get_first(row, *keys):
 
 
 def normalized_claim_row(row):
-    """A팀/HCX 파일마다 다른 컬럼명을 후보 매칭용 표준명으로 맞춘다."""
-    if any(key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")):
-        row = normalize_mapping_row(row)
+    """A팀/HCX/IN_READY 파일마다 다른 컬럼명을 2차 후보 매칭용 표준명으로 맞춘다.
+
+    이 함수는 더 이상 1차 IN_READY 판정을 하지 않는다.
+    팀원이 넘긴 입력을 이미 IN_READY로 보고, 매핑에 필요한 컬럼명만 정규화한다.
+    """
+    canonical_unit = canonicalize_unit(get_first(row, "canonical_unit", "unit", "단위"))
+    dimension = get_first(row, "unit_dimension") or infer_unit_dimension(canonical_unit)
     return {
         "claim_id": get_first(row, "claim_id", "claimId", "id"),
         "claim_measurement_id": get_first(row, "claim_measurement_id", "measurement_id"),
@@ -160,9 +160,9 @@ def normalized_claim_row(row):
         "age_group": get_first(row, "age_group", "연령"),
         "gender": get_first(row, "gender", "성별"),
         "value": get_first(row, "value", "값", "수치"),
-        "unit": get_first(row, "canonical_unit", "unit", "단위"),
+        "unit": canonical_unit,
         "raw_unit": get_first(row, "raw_unit", "unit", "단위"),
-        "unit_dimension": get_first(row, "unit_dimension"),
+        "unit_dimension": dimension,
         "semantic_type": get_first(row, "semantic_type"),
         "entity_type": get_first(row, "entity_type"),
         "value_type": get_first(row, "value_type"),
@@ -171,10 +171,11 @@ def normalized_claim_row(row):
         "measurement_usage": get_first(row, "measurement_usage"),
         "claim_domain_scope": get_first(row, "claim_domain_scope"),
         "measurement_binding_source": get_first(row, "measurement_binding_source"),
-        "mapping_eligible": get_first(row, "mapping_eligible"),
+        "mapping_eligible": get_first(row, "mapping_eligible") or "Y",
         "mapping_exclusion_code": get_first(row, "mapping_exclusion_code"),
         "mapping_exclusion_reason": get_first(row, "mapping_exclusion_reason"),
-        "period": get_first(row, "measurement_period", "period", "작성일", "date"),
+        "period": get_first(row, "measurement_period", "period"),
+        "article_date": get_first(row, "article_date", "작성일", "date"),
         "prd_se": get_first(row, "measurement_prd_se", "prd_se", "주기"),
         "change_base": get_first(row, "change_base"),
         "comparison_period": get_first(row, "comparison_period"),
@@ -258,6 +259,47 @@ def score_text(weighted_tokens, compact_text):
             score += inc * max(1, min(weight, 6))
             hits.append(tok)
     return score, hits
+
+
+TABLE_TERM_INDEX = defaultdict(list)
+
+
+def build_table_term_index(table_rows):
+    TABLE_TERM_INDEX.clear()
+    for row in table_rows:
+        text = f"{row.get('tbl_name','')} {row.get('category_path','')}"
+        terms = set()
+        for token in re.findall(r"[가-힣A-Za-z0-9]+", text):
+            ct = compact(token)
+            if len(ct) >= 2 and ct not in GENERIC_ANCHORS:
+                terms.add(ct)
+        # 품목별수출액처럼 붙어 있는 표명을 위한 주요 부분어 보강
+        compact_text = compact(text)
+        for key in (
+            "수출", "수입", "무역", "취업", "고용", "실업", "물가", "출생", "혼인",
+            "여객", "항공", "은행", "GDP", "아파트", "월세", "가공식품", "소비자",
+            "로봇", "반도체", "자동차", "화장품", "농수산", "석유화학", "바이오",
+        ):
+            ck = compact(key)
+            if ck and ck in compact_text:
+                terms.add(ck)
+        for term in terms:
+            TABLE_TERM_INDEX[term].append(row)
+
+
+def rows_from_table_term_index(terms, hard_limit):
+    seen = set()
+    rows = []
+    for term in terms:
+        for row in TABLE_TERM_INDEX.get(term, []):
+            key = (row.get('org_id',''), row.get('tbl_id',''))
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+            if len(rows) >= hard_limit:
+                return rows
+    return rows
 
 
 def measurement_anchors(claim):
@@ -486,7 +528,7 @@ def score_table(row, tokens, claim):
         elif entity == "organization" and any(token in table_text for token in ("수입현황", "생산현황", "출하현황", "인력현황")):
             score -= 180
 
-    if "항공" in measurement_anchors(norm_claim):
+    if "항공" in anchors:
         if any(token in table_text for token in ("수상여객", "철도여객", "도로여객")):
             return -10**9, []
     score += table_year_penalty(f"{row['tbl_name']} {row['category_path']}", norm_claim.get("period"))
@@ -516,27 +558,23 @@ def domain_filter_terms(claim):
     return list(dict.fromkeys(t for t in out if t))
 
 
-def filtered_tables_for_claim(table_rows, claim, hard_limit=25000):
+def filtered_tables_for_claim(table_rows, claim, hard_limit=1500):
     claim = normalized_claim_row(claim)
     terms = domain_filter_terms(claim)
     if not terms:
-        return table_rows
-    filtered = [
-        r for r in table_rows
-        if any(t in r["_compact_tbl_name"] or t in r["_compact_category_path"] for t in terms)
-    ]
-    if not filtered:
-        return table_rows
-    # 도메인 필터 뒤에도 너무 크면 표명 매칭이 있는 것을 우선한다.
-    if len(filtered) > hard_limit:
-        name_hits = [
-            r for r in filtered
-            if any(t in r["_compact_tbl_name"] for t in terms)
+        focused = f"{claim.get('indicator','')} {claim.get('industry_or_item','')} {claim.get('metric_domain','')}"
+        terms = [
+            compact(token)
+            for token in re.findall(r"[가-힣A-Za-z0-9]+", focused)
+            if len(compact(token)) >= 2 and compact(token) not in GENERIC_ANCHORS
         ]
-        if name_hits:
-            return name_hits[:hard_limit]
-        return filtered[:hard_limit]
-    return filtered
+        terms = list(dict.fromkeys(terms + measurement_anchors(claim)))
+    if not terms:
+        return table_rows[:hard_limit]
+    filtered = rows_from_table_term_index(terms, hard_limit)
+    if not filtered:
+        return table_rows[:hard_limit]
+    return filtered[:hard_limit]
 
 
 def load_meta_index(path: Path):
@@ -1030,7 +1068,7 @@ def main():
     parser.add_argument(
         "--allow-legacy",
         action="store_true",
-        help="measurement 계약이 없는 구형 CSV 허용. 기본은 mapping_eligible=Y만 처리",
+        help="deprecated: 2차 파이프라인은 입력 전체를 이미 IN_READY로 간주",
     )
     args = parser.parse_args()
 
@@ -1040,22 +1078,14 @@ def main():
     out_path = Path(args.out).expanduser() if args.out else claims_path.with_name(f"{claims_path.stem}_kosis_index_candidates.csv")
 
     input_claims, _ = read_csv(claims_path)
-    claims = []
+    claims = list(input_claims)
     excluded = Counter()
-    for claim in input_claims:
-        normalized = normalized_claim_row(claim)
-        eligible = normalized.get("mapping_eligible") == "Y"
-        legacy = "measurement_usage" not in claim and "mapping_eligible" not in claim
-        if eligible or (args.allow_legacy and legacy):
-            claims.append(claim)
-        else:
-            code = normalized.get("mapping_exclusion_code") or "INPUT_CONTRACT_MISSING"
-            excluded[code] += 1
     table_rows = [norm_table_row(r) for r in read_csv(table_path)[0]]
     table_rows = [r for r in table_rows if r["org_id"] and r["tbl_id"]]
     for r in table_rows:
         r["_compact_tbl_name"] = compact(r["tbl_name"])
         r["_compact_category_path"] = compact(r["category_path"])
+    build_table_term_index(table_rows)
     meta_by_table = load_meta_index(meta_path)
 
     precomputed = None
@@ -1086,7 +1116,10 @@ def main():
             print(f"semantic_retrieval=disabled ({exc})")
 
     out = []
-    for claim in claims:
+    total_claims = len(claims)
+    for idx, claim in enumerate(claims, start=1):
+        if idx == 1 or idx % 100 == 0 or idx == total_claims:
+            print(f"table_retrieval_progress={idx}/{total_claims}", flush=True)
         norm_claim = normalized_claim_row(claim)
         # 입력 파일 자체가 이미 is_claim=True 100건으로 선별됐다고 가정한다.
         # is_claim/verifiable_kosis 값은 후보 매핑의 필터로 사용하지 않는다.
@@ -1157,6 +1190,7 @@ def main():
                 "measurement_role": norm_claim.get("measurement_role", ""),
                 "measurement_usage": norm_claim.get("measurement_usage", ""),
                 "period": norm_claim.get("period", ""),
+                "article_date": norm_claim.get("article_date", ""),
                 "prd_se": norm_claim.get("prd_se", ""),
                 "change_base": norm_claim.get("change_base", ""),
                 "comparison_period": norm_claim.get("comparison_period", ""),
@@ -1186,7 +1220,7 @@ def main():
     fields = [
         "claim_id", "claim_measurement_id", "indicator", "metric_domain", "industry_or_item",
         "value", "unit", "raw_unit", "unit_dimension", "semantic_type", "entity_type",
-        "value_type", "direction", "measurement_role", "measurement_usage", "period", "prd_se", "change_base", "comparison_period",
+        "value_type", "direction", "measurement_role", "measurement_usage", "period", "article_date", "prd_se", "change_base", "comparison_period",
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
         "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
