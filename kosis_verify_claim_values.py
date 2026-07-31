@@ -575,6 +575,30 @@ def revision_vintage_risk(row, data_rows, mapping_type, actual_period, previous_
     return revised, article
 
 
+# 수준값: 이 비율을 넘는 차이는 '기사가 틀렸다'보다 '좌표를 잘못 잡았다'로 보는 것이 타당하다.
+# (무역흑자 518억달러를 수입액 6320억달러에 대면 1,120% 가 나온다)
+MISMAPPING_PCT = 300.0
+# 증감률: 분모가 작아 상대오차가 쉽게 폭발한다(8.2% vs 42.5% = 418%).
+# 둘 다 있을 수 있는 증감률이므로 상대오차 대신 **절대 %p 차이**로 본다.
+MISMAPPING_RATE_POINT = 100.0
+
+
+def extreme_error(claim_value, actual_value, threshold=MISMAPPING_PCT, *,
+                  rate_like: bool = False,
+                  rate_threshold: float = MISMAPPING_RATE_POINT) -> bool:
+    """차이가 '기사 오류'로 보기엔 비상식적인가. 그렇다면 매핑 오류를 먼저 의심한다.
+
+    증감률과 수준값은 기준이 달라야 한다. 증감률 8.2% 와 42.5% 는 상대오차 418% 지만
+    둘 다 실재할 수 있는 값이라 매핑 오류로 단정하면 안 된다.
+    """
+    if claim_value is None or actual_value is None:
+        return False
+    if rate_like:
+        return abs(actual_value - claim_value) >= rate_threshold
+    denominator = max(abs(claim_value), 1e-9)
+    return abs(actual_value - claim_value) / denominator * 100 >= threshold
+
+
 def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0):
     """3구간 판정: 일치 / 판정보류(오차밴드) / 불일치.
 
@@ -756,7 +780,19 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         verdict_code = {'일치': 'MATCH', '불일치': 'VALUE_MISMATCH',
                         '판정보류': 'WITHIN_UNCERTAINTY_BAND'}.get(verdict, 'COMPARISON_FAILED')
         verdict_stage = 'comparison'
-        if verdict == '불일치':
+        # 오차가 지나치게 크면 기사 오류보다 우리 좌표 매핑 오류일 가능성이 높다.
+        # 실측: '518억달러 무역흑자'가 수입액 총액에 매핑돼 차이율 1,120%로 '불일치'가 났다.
+        # 팩트체크에서 맞는 기사를 틀렸다고 하는 것이 최악이므로 단정하지 않는다.
+        rate_like = (unit_kind(row.get('unit')) == 'rate'
+                     or mapping_type == 'rate_from_level')
+        if verdict == '불일치' and extreme_error(
+                compare_value, actual_converted, rate_like=rate_like):
+            verdict = '판단불가'
+            verdict_code = 'LIKELY_MISMAPPING'
+            verdict_stage = 'mapping'
+            reason += (f' (차이율이 {MISMAPPING_PCT:.0f}% 를 넘어 좌표 매핑 오류로 의심'
+                       ' — 기사 오류로 단정하지 않고 사람 검토로 보낸다)')
+        elif verdict == '불일치':
             revised, article_date = revision_vintage_risk(
                 row, data_rows, mapping_type, actual_period, previous_period)
             if revised:

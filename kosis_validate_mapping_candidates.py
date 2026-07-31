@@ -807,6 +807,27 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
 
 
 AGGREGATE_ITEM_TOKENS = {"", "-", "전체", "총계", "합계", "총액"}
+# 좌표의 분류축이 '집계'임을 나타내는 이름들
+AGGREGATE_OBJ_NAMES = ("계", "전체", "총계", "합계", "총액", "전국", "소계", "평균", "전산업")
+
+
+def _normalize(value: Any) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", str(value or "")).lower()
+
+
+def selection_is_aggregate(result: Mapping[str, Any] | None,
+                           row: Mapping[str, Any] | None = None) -> bool:
+    """선택된 OBJ 좌표가 집계값인가 (분류축이 비어 있으면 집계로 본다)."""
+    sources = dict(row or {})
+    if result:
+        sources.update({k: v for k, v in result.items() if v not in (None, "")})
+    names = [str(sources.get(f"selected_obj_l{level}_name", "")).strip()
+             for level in (1, 2, 3)]
+    names = [name for name in names if name]
+    if not names:
+        return True
+    return all(_normalize(name) in {_normalize(t) for t in AGGREGATE_OBJ_NAMES}
+               for name in names)
 
 
 def claim_item_matches_selection(row: Mapping[str, Any],
@@ -814,12 +835,18 @@ def claim_item_matches_selection(row: Mapping[str, Any],
     """claim 이 특정 품목·대상을 말하는데 선택된 좌표가 그것과 무관하면 False.
 
     API 응답이 정상이어도 의미가 다른 좌표가 뽑힐 수 있어(예: 반도체 → 인산에스테르)
-    기술 유효성만으로는 자동 확정이 위험하다. 품목 제약이 없는 claim 은 통과시킨다.
+    기술 유효성만으로는 자동 확정이 위험하다.
+
+    2026-07-31 보완: **품목 제약이 없는 claim 을 무조건 통과시키던 구멍**을 막는다.
+    '무역수지', '물가 상승률' 처럼 세부 대상을 특정하지 않은 주장이
+    objL1=건설 / objL1=자가주거비 같은 세부 분류에 붙어 자동 확정됐고,
+    그중 2건은 잘못된 좌표로 '불일치' 판정까지 갔다(실측).
+    → 주장이 세부 대상을 말하지 않으면 좌표도 집계값이어야 한다.
     """
     raw_item = str(_first(row, "industry_or_item", "measurement_item")).strip()
-    normalized_item = re.sub(r"[^0-9A-Za-z가-힣]", "", raw_item).lower()
+    normalized_item = _normalize(raw_item)
     if not normalized_item or raw_item in AGGREGATE_ITEM_TOKENS:
-        return True
+        return selection_is_aggregate(result, row)
     sources = dict(row)
     if result:
         sources.update({k: v for k, v in result.items() if v not in (None, "")})
