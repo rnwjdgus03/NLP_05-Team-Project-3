@@ -949,8 +949,13 @@ def main() -> None:
     parser.add_argument(
         "--trust-downstream-validation",
         action="store_true",
-        help=("상류 표 후보가 REVIEW여도 하류 실측(메타·API·단위·기간)이 모두 통과한 rank-1이면"
-              " READY로 인정한다. 상류 REJECT와 동점 후보는 여전히 사람 확인으로 남긴다."),
+        help=("[더 이상 필요 없음] 2026-07-31부터 기본 동작이다. 기존 명령 호환용으로 남겨둔다."),
+    )
+    parser.add_argument(
+        "--require-upstream-ready",
+        action="store_true",
+        help=("옛 동작 복원: 하류 실측이 전부 통과해도 상류 표 후보가 rank-1 READY가"
+              " 아니면 NEEDS_CONFIRMATION으로 강등한다. 회귀 비교용."),
     )
     parser.add_argument(
         "--fallback-ranks",
@@ -1076,16 +1081,29 @@ def main() -> None:
                 mapping_type=str(row.get("mapping_type") or "direct"),
                 allow_provisional=args.allow_provisional,
             )
-        if (
-            result.get("mapping_status") in {READY, PROVISIONAL}
-            and not (rank == 1 and row.get("candidate_status") == "READY")
-            and not (args.trust_downstream_validation
-                     and downstream_validated_rank1(row, result))
-        ):
+        # 이중 게이트 해제 (2026-07-31)
+        # validate는 이미 공식 메타 코드 + 실제 API 응답 + 단위·기간 정합을 독립 검증한다.
+        # 그래놓고 상류 표 후보가 rank-1 READY가 아니라는 이유로 다시 강등하는 것은
+        # 같은 불확실성을 두 번 요구하는 중복 게이트였다.
+        # 실측: 확정 집합 134건 중 READY가 2건뿐이었고, 기술적으로 완전 유효한 후보가
+        #       TOP1_GATE_ONLY/RANK_ONLY로 대기 중이었다.
+        # 안전 조건은 downstream_validated_rank1()이 그대로 지킨다(rank1·상류 REJECT 제외·
+        # 실측 전항목 통과·의미 가드·점수 마진). --require-upstream-ready로 옛 동작 복원 가능.
+        upstream_decisive = rank == 1 and row.get("candidate_status") == "READY"
+        if args.require_upstream_ready:
+            downstream_decisive = False
+        else:
+            downstream_decisive = downstream_validated_rank1(row, result)
+
+        if (result.get("mapping_status") in {READY, PROVISIONAL}
+                and not upstream_decisive and not downstream_decisive):
             result["mapping_status"] = NEEDS_CONFIRMATION
             result["mapping_reason"] = (
                 "upstream table candidate is not decisive rank-1 READY"
             )
+        elif downstream_decisive and not upstream_decisive:
+            # 어떤 경로로 READY가 됐는지 추적 가능하게 남긴다(감사용).
+            result["ready_path"] = "DOWNSTREAM_VALIDATED"
         result = apply_semantic_ready_gate(row, result)
         if args.fallback_ranks:
             if needs_fallback(result):
