@@ -83,6 +83,15 @@ def test_tax_rate_change_is_rejected():
     assert code == "POLICY_PARAMETER" and severity == REJECT
 
 
+def test_completed_policy_change_is_policy_not_plan():
+    """'확대했다' 는 이미 시행된 제도다 — 계획으로 분류하면 사유가 틀린다."""
+    code, reason, severity = scope_violation(_row(
+        "기업별 외국 인력 도입 허용 비율도 내국인 근로자의 20%에서 30%로 "
+        "2년간 한시적으로 확대했다.", value="30"))
+    assert code == "POLICY_PARAMETER" and severity == REJECT
+    assert "허용 비율" in reason
+
+
 def test_quota_is_rejected():
     code, _, severity = scope_violation(_row(
         "지난해 9월 전국 가축방역관 정원은 1061명이었다.", unit="명", value="1061"))
