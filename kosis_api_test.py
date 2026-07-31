@@ -14,10 +14,39 @@ import re
 import json
 import requests
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 load_dotenv()  # 같은 폴더(또는 상위 폴더)의 .env 파일을 읽어서 환경변수로 등록
 
 API_KEY = os.environ.get("KOSIS_API_KEY")
+
+# KOSIS 서버는 간헐적으로 연결을 끊는다(RemoteDisconnected / Read timed out).
+# 재시도가 없으면 같은 입력으로 돌려도 결과가 실행마다 달라져 재현성이 깨진다.
+# 실측: 검증 9건 중 3건이 네트워크 오류로 실패해 verdict 분포가 바뀌었다.
+RETRY_TOTAL = 4
+RETRY_BACKOFF = 1.0        # 1s → 2s → 4s → 8s (지수 백오프)
+REQUEST_TIMEOUT = 20
+
+
+def _build_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=RETRY_TOTAL,
+        connect=RETRY_TOTAL,
+        read=RETRY_TOTAL,
+        backoff_factor=RETRY_BACKOFF,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=8)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+SESSION = _build_session()
 
 
 def _require_api_key():
@@ -65,7 +94,7 @@ def get_list(vw_cd="MT_ZTITLE", parent_id=""):
         "parentListId": parent_id,
         "format": "json",
     }
-    res = requests.get(LIST_URL, params=params, timeout=10)
+    res = SESSION.get(LIST_URL, params=params, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     return _parse_kosis_json(res.text)
 
@@ -96,7 +125,7 @@ def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3,
         if py_key in extra and api_key not in extra:
             extra[api_key] = extra.pop(py_key)
     params.update(extra)
-    res = requests.get(DATA_URL, params=params, timeout=10)
+    res = SESSION.get(DATA_URL, params=params, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     return _parse_kosis_json(res.text)
 
@@ -117,7 +146,7 @@ def get_meta(org_id, tbl_id, meta_type="ITM"):
         "tblId": tbl_id,
         "format": "json",
     }
-    res = requests.get(META_URL, params=params, timeout=10)
+    res = SESSION.get(META_URL, params=params, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     return _parse_kosis_json(res.text)
 

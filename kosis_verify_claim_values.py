@@ -941,8 +941,17 @@ def main():
         try:
             verified = verify_row(row, meta_cache, args.delay)
         except Exception as exc:
+            # verdict_code 를 비워두면 집계에서 빈 문자열 버킷이 생겨 원인 추적이 끊긴다.
+            # 네트워크 계열은 재시도 후에도 실패한 것이므로 별도 코드로 구분한다.
+            network = isinstance(exc, (ConnectionError, TimeoutError)) or any(
+                token in type(exc).__name__ for token in ('Connection', 'Timeout', 'HTTP'))
             verified = dict(row)
-            verified.update({'verdict': '판단불가', 'verdict_reason': f'검증기 내부 오류: {exc}'})
+            verified.update({
+                'verdict': '판단불가',
+                'verdict_code': 'KOSIS_API_ERROR' if network else 'VERIFIER_INTERNAL_ERROR',
+                'verdict_stage': 'api' if network else 'verifier',
+                'verdict_reason': f'검증기 내부 오류: {exc}',
+            })
         out_rows.append(verified)
         print(f"{i}/{len(rows)} {verified.get('claim_id','')} {verified.get('tbl_id','')} -> {verified.get('verdict','')}: {verified.get('verdict_reason','')[:120]}", flush=True)
 
