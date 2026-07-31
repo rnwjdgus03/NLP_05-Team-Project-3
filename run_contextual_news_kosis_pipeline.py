@@ -77,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overlap", type=int, default=2)
     parser.add_argument("--lead-sentences", type=int, default=3)
     parser.add_argument("--local-window", type=int, default=3)
+    parser.add_argument("--previous-window", type=int)
+    parser.add_argument("--next-window", type=int)
     parser.add_argument("--related-limit", type=int, default=3)
     parser.add_argument(
         "--splitter",
@@ -184,6 +186,10 @@ def main() -> None:
     ]
     if args.force:
         contexts.append("--overwrite")
+    if args.previous_window is not None:
+        contexts.extend(["--previous-window", args.previous_window])
+    if args.next_window is not None:
+        contexts.extend(["--next-window", args.next_window])
     run_if_missing(paths["contexts"], contexts, args.force)
     if should_stop("contexts", args.stop_after):
         return

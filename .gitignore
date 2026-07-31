@@ -26,3 +26,8 @@ data/indexes/
 outputs/runs/*.csv
 outputs/runs/*.json
 outputs/runs/**
+
+# 로컬 분석 캐시 / 대용량 실행 산출물
+.codex_analysis/
+outputs/*/
+!outputs/gold/

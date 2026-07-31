@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 
 READY = "READY"
+PROVISIONAL = "PROVISIONAL"
 NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
 MAPPING_FAILED = "MAPPING_FAILED"
 NO_KOSIS_TABLE = "NO_KOSIS_TABLE"
@@ -288,12 +289,31 @@ def validate_unit_and_period(
         unit_valid = True if not expected_unit else any(
             _unit_tokens(expected_unit) & _unit_tokens(unit) for unit in units
         )
+    # KOSIS 응답/메타에 단위 자체가 없으면 '불일치'가 아니라 '미상'이다.
+    # 자동 확정은 여전히 막되(unit_valid=False 유지), 사유를 구분해 잘못된 원인 분석을 막는다.
+    # 단, rate_from_level/difference_from_level 에서 단위 없음은 '지수가 아닌 항목의 증감률 계산 근거 없음'
+    # 이라는 의도적 거부이므로 기존대로 UNIT_MISMATCH 를 유지한다.
+    unit_unknown = (
+        mapping_type not in {"rate_from_level", "difference_from_level"}
+        and bool(expected_unit)
+        and not unit_valid
+        and not any(_unit_tokens(u) for u in units)
+    )
     available = {str(_first(row, "PRD_DE", "PRD", "period")) for row in rows}
     required = {str(x) for x in required_periods or [] if x not in (None, "")}
     missing = sorted(required - available)
+    if missing:
+        reason = "PERIOD_MISSING"
+    elif unit_unknown:
+        reason = "UNIT_UNKNOWN"
+    elif not unit_valid:
+        reason = "UNIT_MISMATCH"
+    else:
+        reason = ""
     return {"unit_valid": unit_valid, "period_valid": not missing,
+            "unit_unknown": unit_unknown,
             "available_periods": sorted(available - {""}), "missing_periods": missing,
-            "validation_reason": "PERIOD_MISSING" if missing else ("UNIT_MISMATCH" if not unit_valid else "")}
+            "validation_reason": reason}
 
 
 def rank_valid_combinations(combinations: Iterable[Mapping[str, Any]], *, unit_penalty: float = 0.15,
@@ -320,6 +340,7 @@ def rank_valid_combinations(combinations: Iterable[Mapping[str, Any]], *, unit_p
 def choose_or_abstain(
     ranked: Sequence[Mapping[str, Any]], *, margin_threshold: float = 0.10,
     ready_threshold: float = 0.01, high_risk_missing: Sequence[str] | None = None,
+    allow_provisional: bool = False,
 ) -> dict[str, Any]:
     """Choose one candidate only with sufficient evidence and separation."""
     ranked = list(ranked)
@@ -342,7 +363,8 @@ def choose_or_abstain(
     elif len(ranked) > 1:
         margin = confidence - float(ranked[1].get("final_confidence", ranked[1].get("ranking_score", 0.0)))
         if margin < margin_threshold:
-            status, reason = NEEDS_CONFIRMATION, f"top candidates have small margin ({margin:.4f})"
+            status = PROVISIONAL if allow_provisional else NEEDS_CONFIRMATION
+            reason = f"top candidates have small margin ({margin:.4f})"
     return {"mapping_status": status, "mapping_confidence": confidence,
             "mapping_reason": reason, "selected_combination": first,
             "candidate_count": len(ranked)}
@@ -355,7 +377,7 @@ def validate_mapping_candidates(
     expected_unit: str | None = None, required_periods: Sequence[str] | None = None,
     prd_se: str = "Y", item_top_k: int = 3, obj_top_k: int = 2,
     max_combinations: int = 20, margin_threshold: float = 0.10,
-    mapping_type: str = "direct",
+    mapping_type: str = "direct", allow_provisional: bool = False,
 ) -> dict[str, Any]:
     """Small orchestration helper. It performs at most ``max_combinations`` calls."""
     item_candidates = list(item_candidates or [])
@@ -401,7 +423,11 @@ def validate_mapping_candidates(
                            "api_error": f"{type(exc).__name__}: {exc}"})
         attempted.append(result)
     ranked = rank_valid_combinations(attempted)
-    decision = choose_or_abstain(ranked, margin_threshold=margin_threshold)
+    decision = choose_or_abstain(
+        ranked,
+        margin_threshold=margin_threshold,
+        allow_provisional=allow_provisional,
+    )
     required_period_set = {str(value) for value in required_periods or [] if value not in (None, "")}
     if (
         mapping_type in {"rate_from_level", "difference_from_level"}
@@ -437,7 +463,7 @@ def validate_mapping_candidates(
         "default_reason": selected.get("default_reason", ""),
         "default_risk": selected.get("default_risk", "NONE"),
     }
-    for level in range(1, 4):
+    for level in range(1, 9):
         output[f"selected_obj_l{level}"] = selected.get(f"objL{level}", "")
         output[f"selected_obj_l{level}_name"] = selected.get(f"objL{level}_name", "")
     return output
@@ -591,7 +617,161 @@ def build_obj_context(row: Mapping[str, Any]) -> str:
     return " ".join(dict.fromkeys(scopes))
 
 
-def resolve_table_ambiguity(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _semantic_compact(*values: Any) -> str:
+    text = " ".join(str(value or "") for value in values).lower()
+    return re.sub(r"[^0-9a-z\uac00-\ud7a3%]+", "", text)
+
+
+def _semantic_selected_text(
+    row: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> str:
+    selected = result.get("selected_combination")
+    selected = selected if isinstance(selected, Mapping) else {}
+    values = [
+        row.get("tbl_name", ""),
+        row.get("category_path", ""),
+        result.get("selected_itm_name", ""),
+        selected.get("itm_name", ""),
+    ]
+    for level in range(1, 9):
+        values.extend([
+            result.get(f"selected_obj_l{level}_name", ""),
+            selected.get(f"objL{level}_name", ""),
+        ])
+    return _semantic_compact(*values)
+
+
+SEMANTIC_ANCHOR_GROUPS = (
+    (
+        "FISCAL_SCOPE_MISMATCH",
+        (
+            "\uae30\ud68d\uc7ac\uc815\ubd80",
+            "\uc7ac\uc815\ub3d9\ud5a5",
+            "\uad6d\uac00\uc7ac\uc815",
+            "\uc815\ubd80\ucd1d\uc218\uc785",
+            "\ub204\uacc4\ucd1d\uc218\uc785",
+        ),
+        ("\uc7ac\uc815", "\uc138\uc785", "\uc138\ucd9c", "\uc815\ubd80", "\uad6d\uac00"),
+    ),
+    (
+        "DELINQUENCY_CONCEPT_MISMATCH",
+        (
+            "\uac1a\uc9c0\ubabb",
+            "\ubbf8\uc0c1\ud658",
+            "\uc5f0\uccb4",
+            "\ubd80\uc2e4\ucc44\uad8c",
+            "\ucc44\ubb34\ubd88\uc774\ud589",
+        ),
+        (
+            "\ubbf8\uc0c1\ud658",
+            "\uc5f0\uccb4",
+            "\ubd80\uc2e4",
+            "\ucc44\ubb34\ubd88\uc774\ud589",
+            "\uc0c1\ud658\ubd88\ub2a5",
+        ),
+    ),
+    (
+        "SALES_CONCEPT_MISMATCH",
+        ("\ud310\ub9e4", "\ud310\ub9e4\ub7c9", "\ud310\ub9e4\ub300\uc218"),
+        ("\ud310\ub9e4", "\ub4f1\ub85d", "\ub300\uc218"),
+    ),
+    (
+        "INTERMEDIATE_GOODS_SCOPE_MISMATCH",
+        ("\uc911\uac04\uc7ac",),
+        ("\uc911\uac04\uc7ac",),
+    ),
+    (
+        "US_SCOPE_MISMATCH",
+        ("\ub300\ubbf8\uc218\ucd9c", "\ubbf8\uad6d\uc218\ucd9c", "\ubbf8\uad6d\ub0b4"),
+        ("\ub300\ubbf8", "\ubbf8\uad6d"),
+    ),
+    (
+        "CHINA_SCOPE_MISMATCH",
+        ("\ub300\uc911\uc218\ucd9c", "\uc911\uad6d\uc218\ucd9c", "\uc911\uad6d\ub0b4"),
+        ("\ub300\uc911", "\uc911\uad6d"),
+    ),
+    (
+        "IMPORTED_CAR_SCOPE_MISMATCH",
+        ("\uc218\uc785\ucc28",),
+        ("\uc218\uc785\ucc28", "\uc790\ub3d9\ucc28", "\uc2b9\uc6a9\ucc28"),
+    ),
+)
+
+
+def semantic_ready_gate(
+    row: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require claim-to-table semantic anchors before automatic READY."""
+    claim_text = _semantic_compact(
+        row.get("claim_text", ""),
+        _first(row, "indicator", "measurement_indicator"),
+        row.get("metric_domain", ""),
+    )
+    mapped_text = _semantic_selected_text(row, result)
+    reasons: list[str] = []
+
+    if not mapped_text:
+        reasons.append("SEMANTIC_MAPPING_CONTEXT_MISSING")
+
+    for reason, claim_terms, mapped_terms in SEMANTIC_ANCHOR_GROUPS:
+        if any(term in claim_text for term in claim_terms) and not any(
+            term in mapped_text for term in mapped_terms
+        ):
+            reasons.append(reason)
+
+    age_pattern = (
+        r"(?:^|[^0-9\ub9cc\uc5b5\uc870])(\d{1,2})\ub300"
+        r"(?:\uc774\uc0c1|\uc774\ud558|\ucde8\uc5c5|\uc778\uad6c|\uc0ac\ub78c|"
+        r"\uc5ec\uc131|\ub0a8\uc131|\uac1c\uc778|\uadfc\ub85c|\uac00\uad6c|"
+        r"\uc18c\ube44|\uc18c\ub4dd)"
+    )
+    for age in re.findall(age_pattern, claim_text):
+        if f"{age}\ub300" not in mapped_text:
+            reasons.append("AGE_SCOPE_MISMATCH")
+            break
+
+    selected = result.get("selected_combination")
+    selected = selected if isinstance(selected, Mapping) else {}
+    for level in range(1, 9):
+        obj_name = _semantic_compact(
+            result.get(f"selected_obj_l{level}_name", ""),
+            selected.get(f"objL{level}_name", ""),
+        )
+        if (
+            re.search(r"\d+(?:\ub9cc|\uc5b5)?(?:\uc6d0|\uba85|\uc138)?(?:\ubbf8\ub9cc|\uc774\uc0c1|~|-)\d*", obj_name)
+            and obj_name not in claim_text
+        ):
+            reasons.append("UNGROUNDED_NUMERIC_OBJ_SCOPE")
+            break
+
+    reasons = list(dict.fromkeys(reasons))
+    return {
+        "semantic_gate_valid": not reasons,
+        "semantic_gate_reason": reasons[0] if reasons else "",
+        "semantic_gate_details": ";".join(reasons),
+    }
+
+
+def apply_semantic_ready_gate(
+    row: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> dict[str, Any]:
+    output = dict(result)
+    gate = semantic_ready_gate(row, output)
+    output.update(gate)
+    if output.get("mapping_status") in {READY, PROVISIONAL} and not gate["semantic_gate_valid"]:
+        output["mapping_status"] = NEEDS_CONFIRMATION
+        output["mapping_reason"] = gate["semantic_gate_reason"]
+    return output
+
+
+def resolve_table_ambiguity(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    allow_provisional: bool = False,
+) -> list[dict[str, Any]]:
     """Apply the Mapping-end cross-table abstention rule to a Top-K slice."""
     outputs = [dict(row) for row in rows]
     by_measurement: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -601,7 +781,14 @@ def resolve_table_ambiguity(rows: Sequence[Mapping[str, Any]]) -> list[dict[str,
     for candidates in by_measurement.values():
         ready = [row for row in candidates if row.get("mapping_status") == READY]
         if len(ready) > 1:
-            for row in ready:
+            ready.sort(key=_rank_of)
+            for index, row in enumerate(ready):
+                if allow_provisional and index == 0:
+                    row["mapping_status"] = PROVISIONAL
+                    row["mapping_reason"] = (
+                        "multiple technically valid coordinates; top candidate is provisional"
+                    )
+                    continue
                 row["mapping_status"] = NEEDS_CONFIRMATION
                 row["mapping_reason"] = (
                     "multiple table/ITEM/OBJ mappings are technically valid"
@@ -619,6 +806,106 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
     return ""
 
 
+AGGREGATE_ITEM_TOKENS = {"", "-", "전체", "총계", "합계", "총액"}
+
+
+def claim_item_matches_selection(row: Mapping[str, Any],
+                                 result: Mapping[str, Any] | None = None) -> bool:
+    """claim 이 특정 품목·대상을 말하는데 선택된 좌표가 그것과 무관하면 False.
+
+    API 응답이 정상이어도 의미가 다른 좌표가 뽑힐 수 있어(예: 반도체 → 인산에스테르)
+    기술 유효성만으로는 자동 확정이 위험하다. 품목 제약이 없는 claim 은 통과시킨다.
+    """
+    raw_item = str(_first(row, "industry_or_item", "measurement_item")).strip()
+    normalized_item = re.sub(r"[^0-9A-Za-z가-힣]", "", raw_item).lower()
+    if not normalized_item or raw_item in AGGREGATE_ITEM_TOKENS:
+        return True
+    sources = dict(row)
+    if result:
+        sources.update({k: v for k, v in result.items() if v not in (None, "")})
+    selected = " ".join(str(sources.get(key, "")) for key in (
+        "selected_itm_name", "selected_obj_l1_name", "selected_obj_l2_name",
+        "selected_obj_l3_name", "kosis_obj_l1_name", "tbl_name",
+    ))
+    normalized_selected = re.sub(r"[^0-9A-Za-z가-힣]", "", selected).lower()
+    if not normalized_selected:
+        return True
+    if normalized_item in normalized_selected or normalized_selected in normalized_item:
+        return True
+    return any(len(token) >= 2 and re.sub(r"[^0-9A-Za-z가-힣]", "", token).lower() in normalized_selected
+               for token in re.findall(r"[가-힣A-Za-z]{2,}", raw_item))
+
+
+def downstream_validated_rank1(row: Mapping[str, Any], result: Mapping[str, Any]) -> bool:
+    """상류 표 후보가 REVIEW여도 하류 실측 검증이 모두 통과한 rank-1이면 decisive로 인정.
+
+    상류(kosis_match)의 REVIEW는 '표 이름 점수만으로는 확신 못 함'이라는 보수적 신호인데,
+    validate는 그 뒤에 공식 메타 코드 검증 + 실제 API 응답 + 단위·기간 정합까지 확인한다.
+    실측이 전부 통과했다면 상류의 불확실성은 이미 해소된 것이므로 READY를 유지한다.
+
+    안전 조건(모두 필요):
+      - rank 1
+      - 상류가 REJECT가 아님 (REJECT는 '의미상 맞는 ITEM 없음' 등 의미 실패라 존중)
+      - 하류 실측: 메타 코드 유효 + API 응답 코드 일치 + 단위 유효 + 기간 유효
+      - 상류 1·2위 점수차가 최소 마진 이상 (동점 표는 여전히 사람 확인)
+    """
+    if _rank_of(row) != 1:
+        return False
+    if str(row.get("candidate_status", "")).strip().upper() == "REJECT":
+        return False
+    checks = (
+        result.get("item_meta_valid", result.get("metadata_valid")),
+        result.get("obj_meta_valid", result.get("metadata_valid")),
+        result.get("response_code_valid"),
+        result.get("unit_valid"),
+        result.get("period_valid"),
+    )
+    if not all(str(value).strip().lower() in {"true", "1", "y", "yes"} for value in checks):
+        return False
+    # 의미 가드: 기술적으로 유효해도 claim 품목과 무관한 좌표는 신뢰하지 않는다.
+    # (실측 오매핑: 농수산식품 수출 → '건조기(농산물용의 것)', 반도체 → '인산에스테르 및 그 염…')
+    if not claim_item_matches_selection(row, result):
+        return False
+    try:
+        score = float(str(row.get("candidate_score", "")))
+        runner_up = float(str(row.get("candidate_runner_up_score", "")))
+    except (TypeError, ValueError):
+        return True  # 점수 정보가 없으면 실측 통과만으로 인정
+    return (score - runner_up) >= max(5.0, score * 0.01)
+
+
+def _rank_of(row: Mapping[str, Any]) -> int:
+    try:
+        return int(float(str(row.get("candidate_rank", "999"))))
+    except (TypeError, ValueError):
+        return 999
+
+
+FALLBACK_TRIGGER_REASONS = (
+    "EMPTY_RESPONSE", "RESPONSE_CODE_MISMATCH", "INVALID_COMBINATION",
+    "ITEM_UNRESOLVED", "OBJ_UNRESOLVED", "NO_KOSIS_TABLE", "INVALID_REQUEST",
+)
+
+
+def measurement_key(row: Mapping[str, Any]) -> str:
+    return str(row.get("claim_measurement_id") or row.get("claim_id") or "").strip()
+
+
+def needs_fallback(result: Mapping[str, Any]) -> bool:
+    """상위 후보가 '기술적으로 못 쓰는' 상태인가 → 다음 순위 표로 폴백할 가치가 있는지.
+
+    NEEDS_CONFIRMATION(사람 확인 대기)은 이미 쓸 수 있는 좌표를 찾은 것이므로 폴백하지 않는다.
+    빈 응답·코드 불일치·조합 불가처럼 그 표로는 값을 못 얻는 경우에만 다음 후보를 평가한다.
+    """
+    status = str(result.get("mapping_status") or "")
+    if status in (READY, PROVISIONAL, NEEDS_CONFIRMATION):
+        return False
+    reason = str(result.get("mapping_reason") or result.get("status_reason") or "")
+    return any(token in reason for token in FALLBACK_TRIGGER_REASONS) or status in (
+        MAPPING_FAILED, NO_KOSIS_TABLE, API_ERROR, "EMPTY_RESPONSE",
+    )
+
+
 def _previous_year_period(period: str) -> str:
     value = str(period or "").strip()
     if not re.fullmatch(r"\d{4}(?:\d{2})?", value):
@@ -627,7 +914,7 @@ def _previous_year_period(period: str) -> str:
 
 
 def required_periods_for_row(row: Mapping[str, Any]) -> list[str]:
-    periods = [str(row.get("period", "")).strip()]
+    periods = [str(_first(row, "period", "measurement_period")).strip()]
     comparison = str(row.get("comparison_period", "")).strip()
     if comparison:
         periods.append(comparison)
@@ -659,6 +946,36 @@ def main() -> None:
         action="store_true",
         help="Evaluate rank 3+ candidates for a Top-K experiment instead of marking them low priority.",
     )
+    parser.add_argument(
+        "--trust-downstream-validation",
+        action="store_true",
+        help=("상류 표 후보가 REVIEW여도 하류 실측(메타·API·단위·기간)이 모두 통과한 rank-1이면"
+              " READY로 인정한다. 상류 REJECT와 동점 후보는 여전히 사람 확인으로 남긴다."),
+    )
+    parser.add_argument(
+        "--fallback-ranks",
+        action="store_true",
+        help=("measurement별로 상위 후보가 빈 응답·조합 불가로 실패하면 다음 순위 표를 자동 평가한다"
+              " (첫 성공 채택). 저순위는 폴백이 필요할 때만 API를 호출한다."),
+    )
+    parser.add_argument(
+        "--allow-provisional",
+        action="store_true",
+        help=(
+            "메타·API·기간·단위가 유효하지만 1·2위 ITEM/OBJ 조합 점수차가 작은 "
+            "rank-1 후보를 PROVISIONAL로 분리한다. PROVISIONAL은 actual_value "
+            "자동 verdict 대상이 아니다."
+        ),
+    )
+    parser.add_argument(
+        "--strict-seeded-coordinate",
+        action="store_true",
+        help=(
+            "selected_itm_id/selected_obj_l<n> 좌표만 API로 검증한다. Chroma 좌표 검색 "
+            "출력처럼 이미 좌표가 확정된 후보에서 검증기가 lexical 조합을 다시 만드는 "
+            "것을 막는다."
+        ),
+    )
     args = parser.parse_args()
 
     from kosis_api_test import get_stat_data
@@ -670,13 +987,20 @@ def main() -> None:
     work = rows[:args.limit] if args.limit else rows
     estimated = len(work) * max(0, args.max_combinations)
     print(f"candidate_rows={len(work)} max_combinations_per_row={args.max_combinations} estimated_api_calls<={estimated}")
+    # --fallback-ranks: measurement별로 순위대로 평가하다가 상위가 기술적으로 실패하면
+    # 다음 순위를 이어서 평가한다(첫 성공 채택). 성공 이후의 남은 저순위는 호출하지 않는다.
+    fallback_state: dict[str, bool] = {}
+    if args.fallback_ranks:
+        work = sorted(work, key=lambda r: (measurement_key(r), _rank_of(r)))
+
     outputs: list[dict[str, Any]] = []
     for row in work:
-        try:
-            rank = int(str(row.get("candidate_rank", "999")))
-        except ValueError:
-            rank = 999
+        rank = _rank_of(row)
+        mkey = measurement_key(row)
         priority_reason = "" if args.evaluate_all_ranks else low_priority_reason(row)
+        if priority_reason and args.fallback_ranks and fallback_state.get(mkey, True):
+            # 이 measurement가 아직 성공하지 못했다면 저순위도 폴백 대상으로 평가한다.
+            priority_reason = ""
         if priority_reason:
             outputs.append({
                 **row,
@@ -686,22 +1010,46 @@ def main() -> None:
                 "api_valid_combination_count": 0,
             })
             continue
+        if args.fallback_ranks and not fallback_state.get(mkey, True):
+            # 앞 순위에서 이미 사용 가능한 좌표를 찾음 → 추가 API 호출 없이 스킵
+            outputs.append({
+                **row,
+                "mapping_status": NOT_EVALUATED,
+                "mapping_reason": "FALLBACK_NOT_NEEDED",
+                "attempted_combination_count": 0,
+                "api_valid_combination_count": 0,
+            })
+            continue
         key = (str(row.get("org_id", "")), str(row.get("tbl_id", "")))
         meta_rows = meta_by_table.get(key, [])
         grouped = group_official_meta(meta_rows)
         claim_text = build_claim_context(row)
         obj_text = build_obj_context(row)
-        item_candidates = _merge_seeded_candidates(
-            _lexical_candidates(grouped["items"], claim_text),
-            _seeded_item_candidates(row),
-        )
+        seeded_items = _seeded_item_candidates(row)
+        if args.strict_seeded_coordinate:
+            coordinate_score = 1.0 / max(rank, 1)
+            item_candidates = [
+                {**candidate, "semantic_score": coordinate_score}
+                for candidate in seeded_items
+            ]
+        else:
+            item_candidates = _merge_seeded_candidates(
+                _lexical_candidates(grouped["items"], claim_text),
+                seeded_items,
+            )
         seeded_obj = _seeded_obj_candidates(row, grouped)
         obj_candidates = {}
         for order, axis in grouped["axes"].items():
-            candidates = _merge_seeded_candidates(
-                _lexical_candidates(axis["values"], obj_text),
-                seeded_obj.get(order, []),
-            )
+            if args.strict_seeded_coordinate:
+                candidates = [
+                    {**candidate, "semantic_score": coordinate_score}
+                    for candidate in seeded_obj.get(order, [])
+                ]
+            else:
+                candidates = _merge_seeded_candidates(
+                    _lexical_candidates(axis["values"], obj_text),
+                    seeded_obj.get(order, []),
+                )
             if any(candidate["semantic_score"] > 0 for candidate in candidates):
                 obj_candidates[order] = candidates
         periods = required_periods_for_row(row)
@@ -722,20 +1070,39 @@ def main() -> None:
                 org_id=key[0], tbl_id=key[1], meta_rows=meta_rows,
                 item_candidates=item_candidates, obj_candidates=obj_candidates,
                 data_fetcher=fetch, expected_unit=row.get("unit"), required_periods=periods,
-                prd_se=str(row.get("prd_se") or "Y"), item_top_k=args.item_top_k,
+                prd_se=str(_first(row, "prd_se", "measurement_prd_se", default="Y")),
+                item_top_k=args.item_top_k,
                 obj_top_k=args.obj_top_k, max_combinations=args.max_combinations,
-                mapping_type=str(row.get("mapping_type") or "direct"))
+                mapping_type=str(row.get("mapping_type") or "direct"),
+                allow_provisional=args.allow_provisional,
+            )
         if (
-            result.get("mapping_status") == READY
+            result.get("mapping_status") in {READY, PROVISIONAL}
             and not (rank == 1 and row.get("candidate_status") == "READY")
+            and not (args.trust_downstream_validation
+                     and downstream_validated_rank1(row, result))
         ):
             result["mapping_status"] = NEEDS_CONFIRMATION
             result["mapping_reason"] = (
                 "upstream table candidate is not decisive rank-1 READY"
             )
+        result = apply_semantic_ready_gate(row, result)
+        if args.fallback_ranks:
+            if needs_fallback(result):
+                fallback_state[mkey] = True   # 계속 다음 순위 평가
+                if rank > 1:
+                    result["fallback_attempt"] = "Y"
+            else:
+                if rank > 1:
+                    result["fallback_recovered"] = "Y"
+                    result["fallback_attempt"] = "Y"
+                fallback_state[mkey] = False  # 사용 가능한 좌표 확보 → 이후 순위 스킵
         outputs.append({**row, **result})
     if not args.skip_table_ambiguity:
-        outputs = resolve_table_ambiguity(outputs)
+        outputs = resolve_table_ambiguity(
+            outputs,
+            allow_provisional=args.allow_provisional,
+        )
     _write_csv(Path(args.output), outputs)
     print(f"validated_rows={len(outputs)} output={args.output}")
 

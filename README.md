@@ -664,6 +664,10 @@ python measurement_regression.py audit `
 - `kosis_semantic_search.py`: dense retrieval, RRF hybrid fusion, 다국어 cross-encoder rerank
 - `kosis_match_claims_to_index.py`: measurement 중심 통계표·ITEM·OBJ 후보와 READY/REVIEW/REJECT 판정
 - `kosis_build_meta_index.py`: 상위 통계표의 KOSIS 메타 long index 생성
+- `kosis_build_chroma_meta_index.py`: 공식 메타의 ITEM/OBJ 좌표를 ChromaDB에 영속 저장
+- `kosis_chroma_hybrid_search.py`: 표 Top-K 내부 좌표를 BGE-M3 + lexical + reranker로 검색
+- `kosis_validate_mapping_candidates.py`: 공식 메타·KOSIS API로 2차 READY/PROVISIONAL 판정
+- `evaluate_chroma_hybrid_mapping.py`: 동일 표본의 좌표 recall, READY precision, API/verdict 도달률 평가
 - `kosis_verify_claim_values.py`: READY 후보 실제값 조회와 단계별 verdict code 생성
 - `run_kosis_measurement_pipeline.py`: 준비·후보·메타·검증 통합 러너
 - `kosis_table_search.py`: 로컬 통계표 인덱스 생성 및 후보 검색
@@ -680,6 +684,31 @@ KOSIS API 사용 시 주의사항은 다음과 같습니다.
 - 응답이 한 건이면 배열이 아니라 객체로 올 수 있어 리스트 정규화가 필요합니다.
 - 실제값 호출 전에 메타 API로 분류축과 항목 코드를 확인합니다.
 - 상세 파라미터는 `docs/kosis_param_guide.md`를 참고합니다.
+
+### ITEM/OBJ 좌표 하이브리드 실험
+
+기존 비교에서 lexical 단독이 우세했던 대상은 **TBL_ID 통계표 검색**이다. 이번
+ChromaDB 실험은 상류에서 얻은 통계표 Top-K 안에서 **ITEM/OBJ 좌표를 찾는 다음 단계**라
+평가 대상을 섞지 않는다.
+
+```text
+1차 READY measurement
+→ 상류 TBL_ID Top-5 제한
+→ Chroma metadata hard filter
+→ BGE-M3 dense Top-50 + lexical Top-50
+→ RRF 결합
+→ BGE reranker Top-20
+→ 좌표 Top-10
+→ 공식 메타 + KOSIS API 검증
+→ READY / PROVISIONAL / NEEDS_CONFIRMATION / MAPPING_FAILED
+→ READY만 실제값 verdict
+```
+
+`PROVISIONAL`은 API·기간·단위·좌표가 유효하지만 ITEM/OBJ 상위 조합의 점수차가
+작을 때만 선택적으로 생성하며 자동 verdict에 사용하지 않습니다. Colab 실행은
+[`notebooks/kosis_chroma_hybrid_second_ready_colab.ipynb`](notebooks/kosis_chroma_hybrid_second_ready_colab.ipynb),
+상세 계약과 A/B/C 평가 기준은
+[`docs/chroma_hybrid_mapping_20260731.md`](docs/chroma_hybrid_mapping_20260731.md)를 참고합니다.
 
 ## Legacy와 이력
 

@@ -531,6 +531,50 @@ def signed_claim_value(row, magnitude):
     return magnitude
 
 
+def _compact_date(value):
+    """'2026-02-25' / '20260225' → 'YYYYMMDD'. 8자리 미만이면 빈 문자열."""
+    digits = re.sub(r'[^0-9]', '', str(value or ''))
+    return digits[:8] if len(digits) >= 8 else ''
+
+
+def latest_revision_date(data_rows, periods):
+    """판정에 실제 사용된 시점(periods)의 KOSIS 행에서 가장 늦은 LST_CHN_DE(개정일)."""
+    wanted = {str(p) for p in periods if p}
+    dates = []
+    for r in data_rows or []:
+        if wanted and str(r.get('PRD_DE', '')) not in wanted:
+            continue
+        d = _compact_date(r.get('LST_CHN_DE'))
+        if d:
+            dates.append(d)
+    return max(dates) if dates else ''
+
+
+def revision_vintage_risk(row, data_rows, mapping_type, actual_period, previous_period):
+    """불일치를 통계 개정(빈티지) 위험으로 보류할지. 전 조건 충족 시 (개정일, 기사일) 반환.
+
+    조건(전부 필요 — 모든 불일치를 보류하지 않기 위한 명시 조건):
+      1) 파생 증감률 판정 (rate_from_level 또는 value_type=증감률)
+         — 수준값 개정이 계산된 증감률을 크게 바꾸므로 개정 민감도가 가장 높음
+      2) 기사 작성일 파싱 가능
+      3) 사용된 KOSIS 행의 LST_CHN_DE(개정일)가 기사일보다 '이후'
+         — 기사 당시 공표치가 이후 개정되었을 가능성
+      4) 관측 시점이 기사 시점보다 과거 또는 동월 — 미래 기간은 별개 문제
+    """
+    if mapping_type != 'rate_from_level' and str(row.get('value_type') or '').strip() != '증감률':
+        return '', ''
+    article = _compact_date(row.get('date'))
+    if not article:
+        return '', ''
+    revised = latest_revision_date(data_rows, [actual_period, previous_period])
+    if not revised or revised <= article:
+        return '', ''
+    target = str(actual_period or '')
+    if len(target) >= 6 and target[:6] > article[:6]:
+        return '', ''
+    return revised, article
+
+
 def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0):
     """3구간 판정: 일치 / 판정보류(오차밴드) / 불일치.
 
@@ -691,6 +735,15 @@ def verify_row(row, meta_cache, delay):
         verdict_code = {'일치': 'MATCH', '불일치': 'VALUE_MISMATCH',
                         '판정보류': 'WITHIN_UNCERTAINTY_BAND'}.get(verdict, 'COMPARISON_FAILED')
         verdict_stage = 'comparison'
+        if verdict == '불일치':
+            revised, article_date = revision_vintage_risk(
+                row, data_rows, mapping_type, actual_period, previous_period)
+            if revised:
+                verdict = '판정보류'
+                verdict_code = 'REVISION_VINTAGE_RISK'
+                reason += (f' (KOSIS 개정일 {revised} > 기사일 {article_date}:'
+                           f' 기사 당시 공표치가 이후 개정되었을 수 있어 보류)')
+                out['kosis_lst_chn_de'] = revised
 
     reason_parts = [reason, item_reason, obj_reason, agg_reason, unit_reason]
     if period_note:
@@ -771,7 +824,7 @@ def main():
         'claim_value_numeric', 'kosis_obj_l1', 'kosis_obj_l1_name', 'kosis_itm_id', 'kosis_itm_name',
         'kosis_unit', 'kosis_prd_se', 'kosis_period_used', 'kosis_previous_period_used',
         'kosis_actual_raw', 'kosis_actual_value', 'kosis_rows_used', 'value_diff',
-        'default_applied', 'default_reason',
+        'default_applied', 'default_reason', 'kosis_lst_chn_de',
         'verdict', 'verdict_code', 'verdict_stage', 'verdict_reason',
     ]
     final_fields = list(dict.fromkeys(fields + extra_fields))

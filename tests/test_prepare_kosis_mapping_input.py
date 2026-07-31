@@ -90,6 +90,19 @@ def test_fallback_and_unknown_scope_are_sent_to_enrichment():
     assert unknown_scope["enrichment_actions"] == "CONFIRM_KOSIS_SCOPE"
 
 
+def test_only_target_role_is_hard_rejected():
+    target = normalize_row(measurement_row(measurement_role="목표값"))
+    assert target["mapping_exclusion_code"] == "TARGET_VALUE_NOT_OBSERVED"
+    assert target["mapping_gate"] == "REJECT"
+    assert target["in_ready"] == "N"
+
+    for role in ("이전값", "참고값"):
+        reviewable = normalize_row(measurement_row(measurement_role=role))
+        assert reviewable["mapping_exclusion_code"] == "ROLE_NOT_DIRECT_TARGET"
+        assert reviewable["mapping_gate"] == "ENRICH"
+        assert reviewable["in_ready"] == "N"
+
+
 def test_person_entity_wins_over_airline_context():
     out = normalize_row(
         measurement_row(

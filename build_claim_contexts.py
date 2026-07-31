@@ -244,8 +244,18 @@ def build_context_rows(
     local_window: int = 3,
     related_limit: int = 3,
     lead_sentences: int = 3,
+    previous_window: int | None = None,
+    next_window: int | None = None,
 ) -> list[dict[str, str]]:
-    if local_window < 0 or related_limit < 0 or lead_sentences < 1:
+    previous_window = local_window if previous_window is None else previous_window
+    next_window = local_window if next_window is None else next_window
+    if (
+        local_window < 0
+        or previous_window < 0
+        or next_window < 0
+        or related_limit < 0
+        or lead_sentences < 1
+    ):
         raise ValueError("invalid context window settings")
 
     articles: OrderedDict[str, list[dict[str, str]]] = OrderedDict()
@@ -270,8 +280,8 @@ def build_context_rows(
         else:
             start = end = 0
 
-        local_start = max(0, start - local_window)
-        local_end = min(len(rows), end + local_window + 1)
+        local_start = max(0, start - previous_window)
+        local_end = min(len(rows), end + next_window + 1)
         local_indices = set(range(local_start, local_end))
         related = related_indices(
             rows,
@@ -328,7 +338,10 @@ def build_context_rows(
                     },
                     ensure_ascii=False,
                 ),
-                "context_version": CONTEXT_VERSION,
+                "context_version": (
+                    f"{CONTEXT_VERSION}-prev{previous_window}-next{next_window}"
+                    f"-related{related_limit}-lead{lead_sentences}"
+                ),
             }
         )
         output.append(row)
@@ -351,6 +364,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--spans", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--local-window", type=int, default=3)
+    parser.add_argument(
+        "--previous-window",
+        type=int,
+        help="Number of sentences before the evidence span. Defaults to --local-window.",
+    )
+    parser.add_argument(
+        "--next-window",
+        type=int,
+        help="Number of sentences after the evidence span. Defaults to --local-window.",
+    )
     parser.add_argument("--related-limit", type=int, default=3)
     parser.add_argument("--lead-sentences", type=int, default=3)
     parser.add_argument("--overwrite", action="store_true")
@@ -374,6 +397,8 @@ def main() -> None:
             local_window=args.local_window,
             related_limit=args.related_limit,
             lead_sentences=args.lead_sentences,
+            previous_window=args.previous_window,
+            next_window=args.next_window,
         )
     except ValueError as error:
         raise SystemExit(str(error)) from error

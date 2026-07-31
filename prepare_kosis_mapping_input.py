@@ -16,7 +16,8 @@ from pathlib import Path
 
 
 EMPTY = {"", "-", "nan", "none", "null"}
-SKIP_ROLES = {"이전값", "참고값", "목표값"}
+SKIP_ROLES = {"이전값", "참고값"}
+TARGET_ROLES = {"목표값"}
 
 
 def nz(value) -> str:
@@ -215,6 +216,8 @@ def exclusion(row: dict, dimension: str, semantic: str):
     if source != "hcx":
         return "BINDING_NOT_CONFIRMED", f"measurement_binding_source={source or '-'}"
     role = nz(row.get("measurement_role"))
+    if role in TARGET_ROLES:
+        return "TARGET_VALUE_NOT_OBSERVED", f"measurement_role={role}"
     if role in SKIP_ROLES:
         return "ROLE_NOT_DIRECT_TARGET", f"measurement_role={role}"
     if parse_number(row.get("value")) is None:
@@ -261,6 +264,8 @@ def mapping_gate(row: dict, code: str) -> tuple[str, str]:
             return "ENRICH", "CLASSIFY_MEASUREMENT_USAGE"
         return "REJECT", ""
     if code == "RANK_NOT_DIRECTLY_COMPARABLE":
+        return "REJECT", ""
+    if code == "TARGET_VALUE_NOT_OBSERVED":
         return "REJECT", ""
     action = ENRICHMENT_ACTIONS.get(code)
     if action:

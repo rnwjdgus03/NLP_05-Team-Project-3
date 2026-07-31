@@ -5,6 +5,7 @@ from kosis_validate_mapping_candidates import (
     MAPPING_FAILED,
     NEEDS_CONFIRMATION,
     NOT_EVALUATED,
+    PROVISIONAL,
     READY,
     build_candidate_combinations,
     build_claim_context,
@@ -14,6 +15,7 @@ from kosis_validate_mapping_candidates import (
     _merge_seeded_candidates,
     _seeded_item_candidates,
     _seeded_obj_candidates,
+    apply_semantic_ready_gate,
     choose_or_abstain,
     group_official_meta,
     low_priority_reason,
@@ -308,6 +310,20 @@ def test_two_close_valid_combinations_need_confirmation():
     assert "small margin" in decision["mapping_reason"]
 
 
+def test_two_close_valid_combinations_can_be_provisional():
+    base = {**one_combination(), "response_code_valid": True,
+            "unit_valid": True, "period_valid": True}
+    second = {**base, "itm_id": "I_RATE", "itm_name": "고용률",
+              "semantic_score": base["semantic_score"] - 0.02}
+    decision = choose_or_abstain(
+        rank_valid_combinations([base, second]),
+        margin_threshold=0.1,
+        allow_provisional=True,
+    )
+    assert decision["mapping_status"] == PROVISIONAL
+    assert "small margin" in decision["mapping_reason"]
+
+
 def test_api_error_and_empty_response_have_distinct_outcomes():
     kwargs = dict(
         org_id="ORG",
@@ -410,6 +426,18 @@ def test_table_ambiguity_is_recomputed_for_each_top_k_slice():
     assert {row["mapping_status"] for row in top2} == {NEEDS_CONFIRMATION}
 
 
+def test_table_ambiguity_can_keep_top_coordinate_as_provisional():
+    rows = [
+        {"claim_measurement_id": "m1", "candidate_rank": "1",
+         "mapping_status": READY},
+        {"claim_measurement_id": "m1", "candidate_rank": "2",
+         "mapping_status": READY},
+    ]
+    resolved = resolve_table_ambiguity(rows, allow_provisional=True)
+    assert resolved[0]["mapping_status"] == PROVISIONAL
+    assert resolved[1]["mapping_status"] == NEEDS_CONFIRMATION
+
+
 def test_rank_three_alternate_is_not_evaluated():
     assert low_priority_reason({
         "candidate_rank": "3",
@@ -420,3 +448,129 @@ def test_rank_three_alternate_is_not_evaluated():
         "candidate_status": "ALTERNATE",
     }) == ""
     assert NOT_EVALUATED == "NOT_EVALUATED"
+
+
+@pytest.mark.parametrize(
+    ("row", "result", "reason"),
+    [
+        (
+            {
+                "claim_text": "60\ub300 \uc774\uc0c1 \uac1c\uc778\uc0ac\uc5c5\uc790\uc758 \ub300\ucd9c\uc794\uc561\uc774 \uc99d\uac00\ud588\ub2e4.",
+                "indicator": "\uac1c\uc778\uc0ac\uc5c5\uc790 \ub300\ucd9c\uc794\uc561",
+                "tbl_name": "\uac1c\uc778\uc0ac\uc5c5\uc790\uc758 \ub300\ucd9c\uc794\uc561\ubcc4 \ub300\ucd9c",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\uac1c\uc778\uc0ac\uc5c5\uc790 \ub300\ucd9c",
+                "selected_combination": {
+                    "objL1_name": "1~2\uc5b5\uc6d0 \ubbf8\ub9cc",
+                },
+            },
+            "AGE_SCOPE_MISMATCH",
+        ),
+        (
+            {
+                "claim_text": "\uae30\ud68d\uc7ac\uc815\ubd80 \uc7ac\uc815\ub3d9\ud5a5\uc5d0 \ub530\ub974\uba74 \ub204\uacc4 \ucd1d\uc218\uc785\uc740 542\uc870\uc6d0\uc774\ub2e4.",
+                "indicator": "\ucd1d\uc218\uc785",
+                "tbl_name": "\uc5f0\uac04 \ucd1d \uc218\uc785\uc561",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\ud3c9\uade0",
+                "selected_combination": {"objL1_name": "\uc804\uccb4"},
+            },
+            "FISCAL_SCOPE_MISMATCH",
+        ),
+        (
+            {
+                "claim_text": "\ub300\ubbf8 \uc911\uac04\uc7ac \uc218\ucd9c \ube44\uc911\uc740 51.2%\ub2e4.",
+                "indicator": "\ub300\ubbf8 \uc218\ucd9c \ube44\uc911",
+                "tbl_name": "\ucca8\ub2e8\uc138\ub77c\ubbf9\uc218\ucd9c/\uae30\uc5c5\ucd1d\uc218\ucd9c \ube44\uc911",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\ube44\uc911",
+                "selected_combination": {"objL1_name": "\uacf5\uad6c \ubc0f \uc5f0\ub9c8\uc7ac"},
+            },
+            "INTERMEDIATE_GOODS_SCOPE_MISMATCH",
+        ),
+        (
+            {
+                "claim_text": "\uc804\uccb4 \uc218\uc785\ucc28 \ud310\ub9e4\ub294 2.9% \uac10\uc18c\ud588\ub2e4.",
+                "indicator": "\uc218\uc785\ucc28 \ud310\ub9e4 \uc99d\uac10\ub960",
+                "tbl_name": "\ud488\ubaa9\ubcc4 \uc218\ucd9c\uc561, \uc218\uc785\uc561",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\uc218\uc785\uc561",
+                "selected_combination": {"objL1_name": "\ucd1d\uc561"},
+            },
+            "SALES_CONCEPT_MISMATCH",
+        ),
+        (
+            {
+                "claim_text": "\ube5a\uc744 \uac1a\uc9c0 \ubabb\ud55c \uc790\uc601\uc5c5\uc790\uac00 35% \ub298\uc5c8\ub2e4.",
+                "indicator": "\uc790\uc601\uc5c5\uc790 \ubd80\ucc44 \ubbf8\uc0c1\ud658 \ube44\uc728",
+                "tbl_name": "\uc790\uc601\uc5c5\uc790\uc758 \ubd80\ucc44 \ucd1d\uc561",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\ubd80\ucc44\ucd1d\uc561",
+                "selected_combination": {"objL1_name": "\uc804\uccb4"},
+            },
+            "DELINQUENCY_CONCEPT_MISMATCH",
+        ),
+        (
+            {
+                "claim_text": "\ub300\uc911 \uc218\ucd9c\uc740 2010\ub144 1168\uc5b5\ub2ec\ub7ec\uc600\ub2e4.",
+                "indicator": "\uc218\ucd9c\uc561",
+                "tbl_name": "\uc218\ucd9c \ubc0f \uc218\uc785\uc561",
+            },
+            {
+                "mapping_status": READY,
+                "selected_itm_name": "\uc218\ucd9c\uc561",
+                "selected_combination": {"objL1_name": "\ubc18\ub3c4\uccb4"},
+            },
+            "CHINA_SCOPE_MISMATCH",
+        ),
+    ],
+)
+def test_semantic_ready_gate_demotes_known_false_ready(row, result, reason):
+    gated = apply_semantic_ready_gate(row, result)
+    assert gated["mapping_status"] == NEEDS_CONFIRMATION
+    assert gated["mapping_reason"] == reason
+    assert gated["semantic_gate_valid"] is False
+
+
+def test_semantic_ready_gate_keeps_grounded_mapping_ready():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "2024\ub144 \ubc18\ub3c4\uccb4 \uc218\ucd9c\uc561\uc740 100\uc5b5\ub2ec\ub7ec\uc600\ub2e4.",
+            "indicator": "\ubc18\ub3c4\uccb4 \uc218\ucd9c\uc561",
+            "tbl_name": "\ud488\ubaa9\ubcc4 \uc218\ucd9c\uc561",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "\uc218\ucd9c\uc561",
+            "selected_combination": {"objL1_name": "\ubc18\ub3c4\uccb4"},
+        },
+    )
+    assert gated["mapping_status"] == READY
+    assert gated["semantic_gate_valid"] is True
+    assert gated["semantic_gate_reason"] == ""
+
+
+def test_vehicle_count_suffix_is_not_treated_as_age_scope():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "2023\ub144 27\ub9cc1034\ub300\uc5d0\uc11c 26\ub9cc3288\ub300\ub85c \uac10\uc18c\ud588\ub2e4.",
+            "indicator": "\uc790\ub3d9\ucc28 \ud310\ub9e4\ub300\uc218",
+            "tbl_name": "\uc790\ub3d9\ucc28 \ub4f1\ub85d\ub300\uc218",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "\ub4f1\ub85d\ub300\uc218",
+            "selected_combination": {"objL1_name": "\uc804\uccb4"},
+        },
+    )
+    assert "AGE_SCOPE_MISMATCH" not in gated["semantic_gate_details"]

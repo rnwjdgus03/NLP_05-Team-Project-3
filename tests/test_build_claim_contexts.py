@@ -97,3 +97,23 @@ def test_major_target_hints_drop_ids_numbers_particles_and_predicates():
     assert "여객" in hints
     assert all("a1" not in hint and not any(c.isdigit() for c in hint) for hint in hints)
     assert "증가했다" not in hints
+
+
+def test_previous_and_next_windows_can_be_controlled_independently():
+    rows = [
+        sentence("A1", number, f"Sentence {number}.", "1", "1")
+        for number in range(1, 8)
+    ]
+
+    result = build_context_rows(
+        rows,
+        [span("A1", 5, "Sentence 5.")],
+        previous_window=2,
+        next_window=0,
+        related_limit=0,
+    )
+
+    ids = json.loads(result[0]["context_sentence_ids"])
+    assert ids["local"] == ["A1-C003", "A1-C004", "A1-C005"]
+    assert "A1-C006" not in result[0]["local_context"]
+    assert "prev2-next0" in result[0]["context_version"]
