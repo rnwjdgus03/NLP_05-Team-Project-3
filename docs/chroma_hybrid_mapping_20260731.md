@@ -27,14 +27,17 @@
 1. 상류 통계표 검색 결과에서 **TBL_ID Top-5** 확보
 2. **검색 전에** Chroma metadata hard filter 적용
    - `tbl_id ∈ Top-5`
-   - `prd_se` 호환 (좌표 주기가 비어 있으면 배제하지 않음)
-   - `unit_dimension` 호환 (단, `rate_from_level`/`difference_from_level` 은 수준값에서 계산하므로 예외)
+   - `unit_dimension` 호환 — 단 **주장 차원이 파생값(rate/증감폭)이면 배제하지 않는다**
+     (수준값에서 계산하므로). `person_count`↔`count` 처럼 이름만 다른 차원은 정규화해 통합한다.
+   - `prd_se` 는 **hard filter 에서 제외**한다. 좌표의 `prd_se` 는 표당 하나만 채워지는데
+     KOSIS 표는 월·분기·연 주기를 동시에 갖는 경우가 많다. 배제 대신 **순위 강등**으로만 쓴다.
 3. BGE-M3 dense Top-50
 4. lexical Top-50 (동일 필터를 통과한 좌표 풀 대상, 표별 최대 4,000개로 균등 수집)
 5. dense + lexical 합치기 → **coordinate_id 로 중복 제거**
 6. RRF 결합 (`kosis_semantic_search.reciprocal_rank_fusion` 재사용)
 7. BGE reranker 로 Top-20 재정렬
-8. **Top-10 만** KOSIS API 조합 검증으로 전달
+8. 주기 불일치 후보를 **뒤로 강등**(정렬 키 1순위, 점수 곱셈 아님 — 리랭커 로짓은 음수가 될 수 있다)
+9. **Top-10 만** KOSIS API 조합 검증으로 전달
 
 Chroma 경로에서는 `--strict-seeded-coordinate`를 사용해 각 후보가 제시한
 `selected_itm_id + selected_obj_l<n>` 좌표를 그대로 1회 검증한다. 검증기가
@@ -128,6 +131,64 @@ verdict 도달 수·비율, 평균 검색·리랭킹 시간, KOSIS API 호출 �
 
 `READY 수동 검수 Precision` 도 골드나 사람 검수 없이는 산출하지 않는다.
 
+## 1차 Colab 실행 결과 (2026-07-31, 골드 없음)
+
+동일 177 measurement. **개선을 주장할 수 없는 결과다.**
+
+| 지표 | A 베이스라인 | C Chroma 하이브리드 |
+|---|---|---|
+| 후보가 생긴 measurement | 177 | 168 |
+| API-valid measurement | **105 (59.3%)** | **89 (50.3%)** |
+| 2차 READY | 2 | 0 |
+| KOSIS API 호출 | 813 | 1,670 |
+| 평균 검색 / 리랭킹 | — | 0.238s / 0.021s |
+
+주의해서 읽을 것:
+
+- **READY 2 vs 0 은 비교 지표가 아니다.** 양쪽 다 `--trust-downstream-validation` 없이
+  돌아 상류 rank-1 게이트에 눌렸다. 진단상 `TOP1_GATE_ONLY 18 + RANK_ONLY 17` 이 대기 중이다.
+- `recovery_class` 분포가 A 와 거의 같다(ITEM_OBJ_FIXABLE 72→73, UNIT_FIX_ONLY 41→41).
+  좌표를 2배 넓게 던지고도 **실패 구조가 바뀌지 않았다.**
+- **`api_valid` 는 정확도 지표가 아니다.** 둘 다 api-valid 인 79건 중 좌표가 일치하는 건 31건뿐.
+  나머지 48건은 서로 다른 좌표인데 둘 다 KOSIS 가 값을 돌려줬다. 어느 쪽이 맞는지는 골드로만 판정된다.
+
+### 실패 원인 분해 (정답 좌표 110개 기준)
+
+A 가 API 로 코드 일치까지 확인한 좌표가 C 의 Top-10 에 들어 있었는지로 측정했다
+(골드 대용 프록시). 좌표 재현율 Top-10 = **29.5%**(느슨) / 19.0%(엄격).
+
+| 원인 | 건수 | 성격 |
+|---|---|---|
+| `PASSED_FILTER` | 47 (43%) | 필터·인덱스 모두 통과 → **검색·순위 실패** |
+| `UNIT_DIM_FILTER` | 25 (23%) | 버그 (아래) |
+| `NOT_IN_INDEX` | 21 (19%) | 축 상한 40 절단 |
+| `PRD_SE_FILTER` | 17 (15%) | 표 단위 `prd_se` 의 한계 |
+
+후보가 0개였던 12건은 **PRD_SE 8 + UNIT_DIM 4 = 100% 필터** 때문이었다.
+인덱스 커버리지는 문제가 아니었다(ITEM 165/165, 표 상한 도달 1/74).
+
+### 적용한 수정 3건
+
+1. **rate 예외 복구** — 예외를 `mapping_type` 에만 걸어 둔 게 잘못이었다.
+   `mapping_type` 은 `item_mapping_type(claim, meta_unit, item_name)` 이 KOSIS 아이템 단위를
+   봐야 정해지는 (주장, 좌표) 쌍의 값이라 검색 단계의 주장 레코드에는 **항상 비어 있었다**.
+   즉 예외가 한 번도 작동하지 않았다. 이제 주장 차원이 파생값이면 무조건 허용한다. (~18건)
+2. **`prd_se` hard filter 제거 → 순위 강등** (17건)
+3. **`person_count` → `count` 차원 정규화** (3건)
+
+`(currency, rate)` 3건과 `(count, currency)` 1건은 **완화하지 않았다.** 주장이 수준값인데
+좌표가 %면 그 좌표에서 금액을 얻을 수 없고, `response_code_valid` 는 코드 일치만 보증할 뿐
+값의 정당성을 보증하지 않는다. 실측 4건에 맞추려고 필터를 무력화하지 않는다.
+
+회귀 테스트: `tests/test_hard_filter_relaxation.py` (완화가 '전부 통과'로 번지지 않는지 함께 고정).
+
+### 이 수정으로도 남는 것
+
+최대 회수 가능은 110건 중 **63건**이고, **47건(43%)은 그대로 남는다.**
+필터도 인덱스도 통과했는데 BGE-M3 + reranker 가 Top-10 에 못 올린 건들이다.
+이건 임베딩 검색 자체의 한계이며, 원 저장소의 이전 실험(lexical recall@5 62.5% >
+BGE-M3 58.3%, 임베딩 단독 히트 0건)과 방향이 일치한다.
+
 ## 한계 (정직한 기록)
 
 1. **성능 개선을 아직 주장할 수 없다.** 로컬에는 GPU·Chroma 가 없어 fixture 단위 검증만 했다.
@@ -140,7 +201,13 @@ verdict 도달 수·비율, 평균 검색·리랭킹 시간, KOSIS API 호출 �
 
 ## 다음 실험
 
-1. 177 measurement 골드 좌표(`gold_tbl_id/gold_itm_id/gold_obj_l1`) 확보 → recall 실측
-2. A/B/C 비교 후 EMPTY_RESPONSE 186건이 좌표 문제인지 데이터 부재인지 분리
-3. PROVISIONAL 승격 규칙 구현 및 수동 검수 Precision 측정
-4. `--fallback-ranks`(저순위 폴백)와 Chroma 후보의 상호작용 확인
+1. 수정 3건 반영 후 재실행 → 좌표 재현율이 29.5% 에서 얼마나 오르는지 실측
+2. 177 measurement 골드 좌표(`gold_tbl_id/gold_itm_id/gold_obj_l1`) 확보 → recall 실측.
+   **좌표가 서로 다른데 둘 다 api-valid 인 48건이 골드가 필요한 직접적 근거다.**
+3. `--axis-value-limit` 40 → 300 (좌표 76,916 → 117,880, +53%) 로 `NOT_IN_INDEX` 21건 회수
+4. C 를 `--trust-downstream-validation` 으로 재실행해 회수판 13건과 like-for-like 비교
+5. PROVISIONAL 승격 규칙 구현 및 수동 검수 Precision 측정
+
+진단 재현 스크립트: `colab_cell11_why_chroma_missed.py`(원인 분류),
+`colab_cell12_index_coverage.py`(인덱스 커버리지), `colab_cell13_which_filter.py`(술어 특정).
+셋 다 KOSIS API 호출 없이 기존 CSV 만 읽는다.

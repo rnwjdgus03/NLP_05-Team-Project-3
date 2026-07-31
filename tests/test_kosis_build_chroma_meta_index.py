@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pytest
 
 from kosis_build_chroma_meta_index import build_documents
@@ -94,6 +96,28 @@ def test_build_documents_deduplicates_ids():
         META_FIXTURE + META_FIXTURE, axis_value_limit=40, max_coordinates_per_table=100)
     assert len(ids) == len(set(ids))
     assert len(ids) == len(documents) == len(metadatas)
+
+
+def test_table_cap_is_shared_fairly_so_no_item_is_starved():
+    """표 상한이 앞쪽 ITEM 에 몰리면 뒤쪽 itm_id 가 인덱스에서 통째로 사라진다.
+
+    축 값이 많은 표에서 --axis-value-limit 를 올릴 때 실제로 터지는 굶주림이라,
+    ITEM 마다 최소 몫을 보장한다.
+    """
+    rows = [{"org_id": "1", "tbl_id": "T", "axis_id": "ITEM", "code_id": f"I{i}",
+             "code_name": f"항목{i}", "is_item": "Y", "unit_name": "명"}
+            for i in range(4)]
+    rows += [{"org_id": "1", "tbl_id": "T", "axis_id": "A", "axis_order": "1",
+              "code_id": f"a{j}", "code_name": f"지역{j}", "is_item": "N"}
+             for j in range(50)]
+
+    coordinates = build_coordinates(rows, axis_value_limit=50,
+                                    max_coordinates_per_table=40)
+    covered = {c["itm_id"] for c in coordinates}
+    assert covered == {"I0", "I1", "I2", "I3"}, "모든 ITEM 이 좌표를 가져야 한다"
+    assert len(coordinates) <= 40, "표 상한은 그대로 지켜져야 한다"
+    per_item = Counter(c["itm_id"] for c in coordinates)
+    assert set(per_item.values()) == {10}, "예산이 ITEM 별로 균등 분배돼야 한다"
 
 
 def test_axis_value_limit_keeps_aggregate_first():

@@ -32,9 +32,11 @@ from kosis_meta_coordinates import (
     build_chroma_where,
     build_coordinate_query,
     build_coordinates,
+    claim_prd_se,
     coordinate_document,
     coordinate_metadata,
     passes_hard_filter,
+    prd_se_compatible,
     read_csv_rows,
 )
 from kosis_semantic_search import (
@@ -181,6 +183,9 @@ def build_output_row(claim: Mapping[str, Any], table: Mapping[str, Any],
         "fusion_score": candidate.get("fusion_score", ""),
         "reranker_score": candidate.get("reranker_score", ""),
         "final_rank_score": candidate.get("final_rank_score", ""),
+        # 주기가 안 맞아 강등된 후보인지 (배제하지 않고 기록만 한다)
+        "prd_se_match": candidate.get("prd_se_match", ""),
+        "coordinate_prd_se": meta.get("prd_se", ""),
     })
     for level in range(1, MAX_AXIS + 1):
         row[f"selected_obj_l{level}"] = meta.get(f"obj_l{level}", "")
@@ -333,16 +338,24 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         for candidate, score in zip(fused, scores):
             candidate["reranker_score"] = float(score)
             candidate["final_rank_score"] = float(score)
-        fused.sort(key=lambda c: -c["final_rank_score"])
     else:
         for candidate in fused:
             candidate["final_rank_score"] = candidate.get("fusion_score", 0.0)
+
+    # 주기 불일치는 '배제'가 아니라 '강등'이다. 점수 스케일(리랭커 로짓은 음수 가능)에
+    # 흔들리지 않도록 곱셈 감점 대신 정렬 키의 1순위로만 쓴다.
+    wanted_prd_se = claim_prd_se(claim)
+    for candidate in fused:
+        candidate["prd_se_match"] = prd_se_compatible(
+            wanted_prd_se, (candidate.get("metadata") or {}).get("prd_se", ""))
+    fused.sort(key=lambda c: (0 if c["prd_se_match"] else 1, -c["final_rank_score"]))
 
     stats = {
         "query": query,
         "dense_count": len(dense),
         "lexical_count": len(lexical),
         "fused_count": len(fused),
+        "prd_se_demoted": sum(1 for c in fused if not c["prd_se_match"]),
         "search_seconds": search_seconds,
         "rerank_seconds": rerank_seconds,
     }

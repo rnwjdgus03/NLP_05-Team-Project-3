@@ -135,7 +135,14 @@ def build_coordinates(
             for order, axis in axes
         ]
         made = 0
-        for item in table["items"]:
+        items = table["items"]
+        # 표 상한을 ITEM 개수로 나눠 **모든 ITEM 이 최소 몫을 갖도록** 한다.
+        # 2026-07-31 이전에는 상한이 표 누적이라 앞쪽 ITEM 이 예산을 다 쓰면
+        # 뒤쪽 itm_id 는 좌표가 0개가 되어 그 ITEM 은 검증 대상조차 될 수 없었다.
+        # (axis_value_limit 을 올릴 때 이 굶주림이 실제로 터진다.)
+        per_item_budget = max(1, max_coordinates_per_table // max(1, len(items)))
+        for item in items:
+            made_for_item = 0
             # 축이 없으면 빈 조합 하나, 있으면 축별 후보의 데카르트 곱.
             # itertools.product 는 소모되므로 item 마다 새로 만든다.
             selections: Iterable[tuple] = (
@@ -143,7 +150,7 @@ def build_coordinates(
                 if axis_choices else [()]
             )
             for selected in selections:
-                if made >= max_coordinates_per_table:
+                if made_for_item >= per_item_budget or made >= max_coordinates_per_table:
                     break
                 obj_codes = {order: value["code"]
                              for (order, _), value in zip(axis_choices, selected)}
@@ -172,6 +179,7 @@ def build_coordinates(
                     "axis_ids": axis_ids,
                 })
                 made += 1
+                made_for_item += 1
             if made >= max_coordinates_per_table:
                 break
     return coordinates
@@ -264,25 +272,62 @@ def build_coordinate_query(claim: Mapping[str, Any], *, claim_text_limit: int = 
 # hard filter
 # --------------------------------------------------------------------------
 
-def prd_se_compatible(claim_prd_se: str, coordinate_prd_se: str) -> bool:
-    """주기 호환. 좌표 주기 정보가 없으면 배제하지 않는다(메타에 주기가 없는 표가 많다)."""
-    claim_value = _text(claim_prd_se).upper()
+def claim_prd_se(claim: Mapping[str, Any]) -> str:
+    """주장의 수록주기 (필드명이 두 가지라 한 곳에서 읽는다)."""
+    return _first(claim, "measurement_prd_se", "prd_se")
+
+
+def prd_se_compatible(claim_prd_se_value: str, coordinate_prd_se: str) -> bool:
+    """주기 호환 여부.
+
+    2026-07-31: 이 함수는 더 이상 **hard filter 로 쓰지 않는다**(순위 강등 신호로만 쓴다).
+    좌표의 prd_se 는 표당 하나의 값으로만 채워지는데 KOSIS 표는 월·분기·연 수록주기를
+    동시에 갖는 경우가 많아, 이걸로 배제하면 정답 좌표까지 통째로 사라진다.
+    실측: 정답 좌표 17건이 (M↔Y, Q↔Y) 불일치로 배제됐고 그중 8건은 후보가 0개가 됐다.
+    """
+    claim_value = _text(claim_prd_se_value).upper()
     coordinate_value = _text(coordinate_prd_se).upper()
     if not claim_value or not coordinate_value:
         return True
     return claim_value == coordinate_value
 
 
+# 사실상 같은 차원인데 이름만 다른 것들을 하나로 모은다.
+DIMENSION_ALIASES = {
+    "person_count": "count",
+    "persons": "count",
+    "people": "count",
+    "case_count": "count",
+    "quantity": "count",
+}
+
+# 증감률/증감폭 주장은 KOSIS 수준값(통화·개수·지수)에서 계산해야 하므로
+# 좌표의 단위 차원으로 배제하면 안 된다.
+DERIVED_DIMENSIONS = {"rate", "rate_point", "percentage_point", "difference"}
+DERIVED_MAPPING_TYPES = {"rate_from_level", "difference_from_level"}
+
+
+def normalize_dimension(dimension: str) -> str:
+    value = _text(dimension).lower()
+    return DIMENSION_ALIASES.get(value, value)
+
+
 def unit_dimension_compatible(claim_dimension: str, coordinate_dimension: str,
                               mapping_type: str = "") -> bool:
     """단위 차원 호환.
 
-    증감률(rate_from_level)은 수준값에서 계산하므로 KOSIS 단위가 통화/개수여도 호환이다.
+    2026-07-31 수정: 예외 조건을 mapping_type 에만 걸어두면 **작동하지 않는다**.
+    mapping_type 은 (주장, 좌표) 쌍에서 KOSIS 아이템 단위를 봐야 정해지는 값이라
+    검색 단계의 주장 레코드에는 비어 있다. 실측에서 rate 주장 18건이 이 때문에
+    수준값 좌표와 호환 불가로 잘렸다. 이제 **주장 차원이 파생값이면 무조건 허용**한다.
+
     차원을 확정할 수 없으면(unknown/빈값) 배제하지 않는다 — 배제는 API 검증 단계 책임.
     """
-    claim_value = _text(claim_dimension).lower()
-    coordinate_value = _text(coordinate_dimension).lower()
-    if _text(mapping_type).lower() in {"rate_from_level", "difference_from_level"}:
+    if _text(mapping_type).lower() in DERIVED_MAPPING_TYPES:
+        return True
+    claim_value = normalize_dimension(claim_dimension)
+    coordinate_value = normalize_dimension(coordinate_dimension)
+    if claim_value in DERIVED_DIMENSIONS:
         return True
     if not claim_value or not coordinate_value:
         return True
@@ -297,14 +342,15 @@ def build_chroma_where(claim: Mapping[str, Any], tbl_ids: Sequence[str]) -> dict
     ids = [t for t in dict.fromkeys(_text(t) for t in tbl_ids) if t]
     if ids:
         clauses.append({"tbl_id": {"$in": ids}})
-    prd_se = _first(claim, "measurement_prd_se", "prd_se")
-    if prd_se:
-        # 좌표 주기가 비어 있는 문서를 배제하지 않기 위해 '' 도 허용한다.
-        clauses.append({"prd_se": {"$in": [prd_se, ""]}})
-    mapping_type = _first(claim, "mapping_type")
-    dimension = _first(claim, "unit_dimension")
-    if dimension and mapping_type not in {"rate_from_level", "difference_from_level"}:
-        clauses.append({"unit_dimension": {"$in": [dimension, "", "unknown"]}})
+    # prd_se 는 hard filter 에서 제외한다(표당 단일 값이라 신뢰할 수 없음). 순위 강등으로만 반영.
+    mapping_type = _text(_first(claim, "mapping_type")).lower()
+    dimension = normalize_dimension(_first(claim, "unit_dimension"))
+    if (dimension and dimension not in DERIVED_DIMENSIONS
+            and mapping_type not in DERIVED_MAPPING_TYPES):
+        allowed = sorted({dimension, "", "unknown"} |
+                         {alias for alias, target in DIMENSION_ALIASES.items()
+                          if target == dimension})
+        clauses.append({"unit_dimension": {"$in": allowed}})
     if not clauses:
         return {}
     if len(clauses) == 1:
@@ -314,12 +360,12 @@ def build_chroma_where(claim: Mapping[str, Any], tbl_ids: Sequence[str]) -> dict
 
 def passes_hard_filter(claim: Mapping[str, Any], metadata: Mapping[str, Any],
                        tbl_ids: Sequence[str]) -> bool:
-    """Chroma where 와 동일한 규칙의 로컬 검증용 필터(테스트·fallback 경로)."""
+    """Chroma where 와 동일한 규칙의 로컬 검증용 필터(테스트·fallback 경로).
+
+    prd_se 는 여기서 배제하지 않는다. `prd_se_compatible` 은 순위 강등에만 쓴다.
+    """
     ids = {_text(t) for t in tbl_ids if _text(t)}
     if ids and _text(metadata.get("tbl_id")) not in ids:
-        return False
-    if not prd_se_compatible(_first(claim, "measurement_prd_se", "prd_se"),
-                            _text(metadata.get("prd_se"))):
         return False
     return unit_dimension_compatible(
         _first(claim, "unit_dimension"),
