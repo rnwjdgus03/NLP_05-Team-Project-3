@@ -2,6 +2,7 @@
 #
 # 셀 12 결론: 정답 좌표 85%가 인덱스에 있었는데 후보로 안 나왔다.
 #             → build_chroma_where / passes_hard_filter 를 그대로 재현해 범인을 특정한다.
+import json
 from collections import Counter, defaultdict
 
 import pandas as pd
@@ -37,8 +38,21 @@ for r in read_csv_rows(f"{RUN}/05_hcx_measurements_kosis_table_candidates.csv"):
     if key[1] and val:
         prd_by_tbl.setdefault(key, val)
 
-coords = build_coordinates(meta, axis_value_limit=40,
-                           max_coordinates_per_table=4000,
+# 상한을 하드코딩하면 인덱스와 다른 좌표를 재현하게 된다 → manifest 에서 읽는다.
+man = {}
+for path in ("data/indexes/kosis_meta_chroma/chroma_manifest.json",
+             f"{OUT}/kosis_meta_chroma_index/chroma_manifest.json"):
+    try:
+        man = json.load(open(path, encoding="utf-8"))
+        break
+    except (FileNotFoundError, OSError):
+        continue
+AXIS_LIMIT = int(man.get("axis_value_limit", 40))
+TABLE_CAP = int(man.get("max_coordinates_per_table", 4000))
+print(f"manifest 상한: axis_value_limit={AXIS_LIMIT} max_coordinates_per_table={TABLE_CAP}")
+
+coords = build_coordinates(meta, axis_value_limit=AXIS_LIMIT,
+                           max_coordinates_per_table=TABLE_CAP,
                            prd_se_by_table=prd_by_tbl)
 print(f"좌표 재현 {len(coords):,}개 | 표별 prd_se 매핑 {len(prd_by_tbl)}개")
 
@@ -84,24 +98,24 @@ for _, r in A_ok.iterrows():
     prd_ok = prd_se_compatible(claim_prd, coord_prd) if md else None
     unit_ok = unit_dimension_compatible(claim_dim, coord_dim, mapping_type) if md else None
 
+    # 주의: prd_se 는 2026-07-31 부터 hard filter 가 아니라 '순위 강등' 신호다.
+    #       배제 사유로 세면 검색 실패를 필터 탓으로 잘못 돌리게 된다.
     if md is None:
         reason = "NOT_IN_INDEX"
     elif not in_top5:
         reason = "TBL_NOT_IN_TOP5"
-    elif not prd_ok:
-        reason = "PRD_SE_FILTER"
     elif not unit_ok:
         reason = "UNIT_DIM_FILTER"
+    elif not prd_ok:
+        reason = "PASSED_FILTER_DEMOTED"  # 후보엔 남았고 뒤로 밀렸을 뿐
     else:
         reason = "PASSED_FILTER"          # 필터는 통과 → 검색/순위 문제
 
     # 해당 measurement 의 Top-5 표 전체에서 필터 생존 좌표 수
-    survivors = 0
-    for t in top5:
-        for m in md_by_tbl.get(t, []):
-            if (prd_se_compatible(claim_prd, m["prd_se"])
-                    and unit_dimension_compatible(claim_dim, m["unit_dimension"], mapping_type)):
-                survivors += 1
+    # 생존 = 실제 hard filter 통과 (prd_se 는 배제하지 않으므로 제외)
+    survivors = sum(
+        1 for t in top5 for m in md_by_tbl.get(t, [])
+        if unit_dimension_compatible(claim_dim, m["unit_dimension"], mapping_type))
 
     rows.append({
         "claim_measurement_id": mid,
@@ -118,14 +132,15 @@ for _, r in A_ok.iterrows():
 f = pd.DataFrame(rows).drop_duplicates(["claim_measurement_id", "tbl_id"])
 f.to_csv(f"{OUT}/which_filter_rejected.csv", index=False, encoding="utf-8-sig")
 
-print(f"\n=== 실패 좌표 {len(f)}개를 자른 술어 ===")
+print(f"\n=== 실패 좌표 {len(f)}개의 원인 ===")
+print("  (PASSED_FILTER* = 필터·인덱스 통과 → 순수 검색·순위 실패)")
 print(f["reject_reason"].value_counts().to_string())
 print("\n=== 실패 유형 × 자른 술어 ===")
 print(pd.crosstab(f["failure_class"], f["reject_reason"]).to_string())
 
-prd = f[f["reject_reason"] == "PRD_SE_FILTER"]
+prd = f[f["reject_reason"] == "PASSED_FILTER_DEMOTED"]
 if len(prd):
-    print(f"\n=== prd_se 로 잘린 {len(prd)}건: 주장 주기 vs 좌표 주기 ===")
+    print(f"\n=== prd_se 불일치로 '강등'된 {len(prd)}건 (배제 아님): 주장 주기 vs 좌표 주기 ===")
     print(Counter(zip(prd["claim_prd_se"], prd["coord_prd_se"])).most_common())
 
 und = f[f["reject_reason"] == "UNIT_DIM_FILTER"]

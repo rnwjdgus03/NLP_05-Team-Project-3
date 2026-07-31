@@ -600,7 +600,23 @@ def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.
     return '불일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
 
 
-def verify_row(row, meta_cache, delay):
+def pin_item(meta_rows, row):
+    """`selected_itm_id` 를 그대로 쓴다(후보 좌표를 있는 그대로 검증할 때).
+
+    기본 경로인 `choose_item` 은 메타에서 ITEM 을 다시 고르기 때문에,
+    'A 후보 좌표 vs C 후보 좌표' 처럼 **좌표를 고정해 비교**할 때는 쓸 수 없다.
+    """
+    wanted = str(row.get('selected_itm_id', '')).strip()
+    if not wanted:
+        return None, 'selected_itm_id 없음(고정 검증 불가)'
+    for meta in meta_rows:
+        if str(meta.get('ITM_ID', '')).strip() == wanted:
+            return meta, f"ITEM 고정={meta.get('ITM_NM', '')}[{wanted}]"
+    return None, f'selected_itm_id={wanted} 가 메타에 없음'
+
+
+def verify_row(row, meta_cache, delay, use_pinned_item=False):
+    """use_pinned_item=True 면 ITEM 을 다시 고르지 않고 selected_itm_id 를 그대로 쓴다."""
     out = dict(row)
     out['default_applied'] = 'N'
     out['default_reason'] = ''
@@ -644,9 +660,14 @@ def verify_row(row, meta_cache, delay):
         time.sleep(delay)
     meta_rows = meta_cache[key]
 
-    item, item_reason = choose_item(meta_rows, row)
-    if not item:
-        return mark_unverifiable(out, 'NO_COMPATIBLE_ITEM', 'metadata', item_reason)
+    if use_pinned_item:
+        item, item_reason = pin_item(meta_rows, row)
+        if not item:
+            return mark_unverifiable(out, 'ITEM_NOT_IN_META', 'metadata', item_reason)
+    else:
+        item, item_reason = choose_item(meta_rows, row)
+        if not item:
+            return mark_unverifiable(out, 'NO_COMPATIBLE_ITEM', 'metadata', item_reason)
     has_obj_axis = any(meta.get('OBJ_ID') != 'ITEM' for meta in meta_rows)
     if has_obj_axis and not str(row.get('selected_obj_l1', '')).strip():
         return mark_unverifiable(out, 'OBJ_UNRESOLVED', 'metadata', 'selected_obj_l1이 확정되지 않음')

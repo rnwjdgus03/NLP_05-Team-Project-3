@@ -26,8 +26,10 @@ def norm(v):
 
 # ── 실행에 쓴 상한을 manifest 에서 그대로 읽는다 ───────────────────────────
 man = {}
-for path in (f"{OUT}/kosis_meta_chroma_index/chroma_manifest.json",
-             "data/indexes/kosis_meta_chroma/chroma_manifest.json"):
+# 이번 실행으로 갓 만든 로컬 manifest 를 먼저 본다.
+# Drive 사본은 '지난 실행'의 상한값일 수 있어 뒤로 미룬다.
+for path in ("data/indexes/kosis_meta_chroma/chroma_manifest.json",
+             f"{OUT}/kosis_meta_chroma_index/chroma_manifest.json"):
     try:
         man = json.load(open(path, encoding="utf-8"))
         print("manifest:", path)
