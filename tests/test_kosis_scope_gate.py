@@ -194,3 +194,52 @@ def test_review_severity_does_not_block():
 def test_clean_claim_reports_no_code():
     decision = gate_decision(_row("12월 수출은 614억달러로 6.6% 증가했다.", unit="%", value="6.6"))
     assert decision["scope_gate_code"] == "" and decision["scope_gate_blocked"] == "N"
+
+
+# --------------------------------------------------------------------------
+# 파생 지표 — 두 항목의 연산이 필요해 단일 좌표로 조회 불가
+# --------------------------------------------------------------------------
+
+SHARED_SENTENCE = ("작년 한국의 수입액은 전년보다 1.6% 감소한 6320억달러로, "
+                   "518억달러의 무역 흑자를 기록했다.")
+
+
+def test_trade_balance_indicator_is_rejected():
+    """관세청 수출입 표엔 수출액·수입액만 있고 무역수지 항목이 없다(메타 조회 확인).
+
+    그런데 '무역수지' 가 이름에 든 표는 대부분 기술무역수지라 오매핑을 부른다.
+    """
+    code, _, severity = scope_violation(_row(
+        SHARED_SENTENCE, measurement_indicator="무역 흑자",
+        unit="달러", value="51800000000"))
+    assert code == "DERIVED_INDICATOR" and severity == REJECT
+
+
+def test_same_sentence_other_measurements_survive():
+    """문장으로 판정하면 정상 매핑까지 버린다 — 지표 필드로만 봐야 한다."""
+    for indicator, value in (("수입액", "632000000000"), ("수입액 증감률", "1.6")):
+        code, _, _ = scope_violation(_row(
+            SHARED_SENTENCE, measurement_indicator=indicator,
+            unit="달러", value=value))
+        assert code == "", f"{indicator} 가 잘못 차단됐다"
+
+
+def test_balance_types_that_exist_in_kosis_are_kept():
+    """경상수지·재정수지는 국제수지 표에 항목으로 실재한다 — 막으면 안 된다."""
+    for indicator in ("경상수지", "재정수지", "상품수지"):
+        code, _, _ = scope_violation(_row(
+            f"{indicator}는 100억달러였다.", measurement_indicator=indicator,
+            unit="달러", value="10000000000"))
+        assert code == "", f"{indicator} 가 잘못 차단됐다"
+
+
+def test_indicator_field_variants_are_read():
+    code, _, _ = scope_violation({"claim_text": SHARED_SENTENCE,
+                                  "indicator": "무역수지", "unit": "달러",
+                                  "value": "51800000000"})
+    assert code == "DERIVED_INDICATOR"
+
+
+def test_missing_indicator_is_not_judged():
+    code, _, _ = scope_violation(_row("어떤 문장", measurement_indicator=""))
+    assert code != "DERIVED_INDICATOR"

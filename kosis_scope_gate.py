@@ -47,6 +47,21 @@ PLAN = ("하겠다", "겠다고", "계획", "목표로", "추진하기로", "집
 POLICY_PARAM = ("세율", "개별소비세", "관세율", "부가세율", "법인세율", "소득세율",
                 "정원", "허용 비율", "한도", "요율", "공제율", "지원 비율")
 
+# 두 항목의 연산으로만 얻어지는 지표. 우리 파이프라인은 '한 좌표 = 한 값' 구조라
+# 표현할 수 없다 (mapping_type 의 difference_from_level 은 같은 항목의 '시점 간' 차이다).
+#
+# 실측 근거:
+#   '518억달러 무역 흑자' → 관세청 수출입 통계(DT_1R11001_FRM101)에는 수출액·수입액만
+#   있고 무역수지 항목이 없다(메타 조회로 확인). 그런데 표 이름에 '무역수지'가 들어간
+#   표는 대부분 **기술무역수지**라, 문자열이 겹쳐 엉뚱한 표가 상위에 올라온다.
+#   실제로 '기관유형별 산업별 기술무역수지 / objL1=건설' 로 오매핑됐다.
+#   실버가 좌표 10~12개를 조회했지만 값을 재현한 것은 하나도 없었다.
+#
+# 주의: 목록은 관측된 사례에서만 뽑았다. 경상수지·재정수지처럼 KOSIS 에 항목으로
+#       존재하는 수지는 넣지 않는다(국제수지 표에 실재한다).
+DERIVED_INDICATOR = ("무역수지", "무역 수지", "무역흑자", "무역 흑자",
+                     "무역적자", "무역 적자", "수출입 격차", "수출입 차이")
+
 # 파생 차액을 나타내는 표현 (어간으로 잡는다 — 올랐다/올렸다/올린 등 활용형이 많다)
 DIFFERENCE_HINT = ("올랐", "올렸", "올린", "내렸", "내린", "인상", "인하",
                    "늘었", "늘렸", "줄었", "줄였", "높였", "낮췄", "낮아",
@@ -72,6 +87,15 @@ def _has(text: str, words) -> str:
     for word in words:
         if word in low:
             return word
+    return ""
+
+
+def _first(row: Mapping[str, Any], *names: str) -> str:
+    """여러 후보 컬럼 중 값이 있는 첫 번째를 돌려준다."""
+    for name in names:
+        value = _text(row.get(name))
+        if value:
+            return value
     return ""
 
 
@@ -172,8 +196,27 @@ def derived_difference(claim_text: str, row: Mapping[str, Any]):
     return None
 
 
+def derived_indicator(claim_text: str, row: Mapping[str, Any]):
+    """두 항목의 연산이 필요한 지표 (예: 무역수지 = 수출액 − 수입액).
+
+    **claim_text 가 아니라 measurement 의 지표 필드만 본다.** 문장으로 판정하면
+    '수입액은 …6320억달러로, 518억달러의 무역 흑자를 기록했다' 한 문장에서 나온
+    수입액·수입 증감률까지 같이 버리게 된다(실측에서 그 둘은 정상 매핑이었다).
+    """
+    indicator = _lower(_first(row, "measurement_indicator", "indicator"))
+    if not indicator:
+        return None
+    hit = _has(indicator, DERIVED_INDICATOR)
+    if hit:
+        return ("DERIVED_INDICATOR",
+                f"'{hit}' 는 두 항목의 차이로만 얻어지는 값 — 단일 좌표로 조회할 수 없음",
+                REJECT)
+    return None
+
+
 DETECTORS = (foreign_market, global_scope, forecast_or_plan,
-             policy_parameter, branded_product_price, derived_difference)
+             policy_parameter, branded_product_price, derived_difference,
+             derived_indicator)
 
 
 def scope_violation(row: Mapping[str, Any]) -> tuple[str, str, str]:
