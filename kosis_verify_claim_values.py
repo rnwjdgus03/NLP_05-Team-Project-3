@@ -516,19 +516,39 @@ def signed_claim_value(row, magnitude):
         return abs(magnitude)
     if any(w in direction for w in DECREASE_WORDS):
         return -abs(magnitude)
-    # direction 없음: 값 '바로 뒤'에 방향어가 붙을 때만 부호 적용 (예: '1.6% 감소').
-    # '1.4%로 계속 감소 중'처럼 떨어져 있으면 추세 서술이므로 건드리지 않는다.
     text = str(row.get('claim_text') or '')
     key = str(row.get('measurement_text') or '').strip() or str(row.get('value') or '').strip()
     idx = text.find(key) if key and key != '-' else -1
     if idx < 0:
         return magnitude
+
+    # 원문에 마이너스가 명시된 경우 (예: '9월(-0.4%)·10월(-0.2%)').
+    # 추출은 크기만 저장해서 부호가 사라진다. 방향어보다 이 신호가 더 확실하므로 먼저 본다.
+    # 실측: '작년 9월(-0.4%)…3개월 연속 전월 대비 감소' 에서 '감소'는 값에서 20자 넘게
+    # 떨어져 있어 방향어 규칙이 닿지 않았고, 부호가 없는 +0.4 로 비교돼 차이가 부풀었다.
+    if _explicit_minus_before(text, idx):
+        return -abs(magnitude)
+
+    # 값 '바로 뒤'에 방향어가 붙을 때만 부호 적용 (예: '1.6% 감소').
+    # '1.4%로 계속 감소 중'처럼 떨어져 있으면 추세 서술이므로 건드리지 않는다.
     after = text[idx + len(key): idx + len(key) + 6]  # 값 바로 뒤 6자
     if any(w in after for w in DECREASE_WORDS):
         return -abs(magnitude)
     if any(w in after for w in INCREASE_WORDS):
         return abs(magnitude)
     return magnitude
+
+
+# 값 바로 앞의 마이너스: '-0.4' / '△0.4' / '▲0.4'(하락 표기) 를 허용한다.
+# 여는 괄호·공백은 건너뛰되, 다른 문자가 끼면 이 값의 부호가 아니라고 본다.
+_MINUS_MARKS = ('-', '−', '－', '▲', '△', '↓')
+
+
+def _explicit_minus_before(text: str, idx: int) -> bool:
+    cursor = idx - 1
+    while cursor >= 0 and text[cursor] in ' (（[':
+        cursor -= 1
+    return cursor >= 0 and text[cursor] in _MINUS_MARKS
 
 
 def _compact_date(value):
