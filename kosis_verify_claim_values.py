@@ -550,16 +550,76 @@ def latest_revision_date(data_rows, periods):
     return max(dates) if dates else ''
 
 
-def revision_vintage_risk(row, data_rows, mapping_type, actual_period, previous_period):
+# 잠정치가 확정치로 바뀔 수 있는 기간. 이보다 오래된 관측은 이미 확정으로 보고
+# 개정을 핑계로 쓰지 않는다. (무역통계 2~3개월, 산업활동동향 1~2개월, 국민계정 1~2년)
+REVISION_WINDOW_MONTHS = 24
+# 잠정→확정 개정은 통상 소폭이다. 이보다 큰 차이를 '개정 때문'이라 하면 판정 회피가 된다.
+REVISION_MAX_RATE_POINT = 3.0     # 증감률: 절대 %p
+REVISION_MAX_LEVEL_PCT = 10.0     # 수준값: 상대 %
+
+
+def _period_end_month(period) -> str:
+    """관측 시점의 마지막 달을 YYYYMM 으로. 연간이면 12월로 본다."""
+    digits = re.sub(r'[^0-9]', '', str(period or ''))
+    if len(digits) >= 6:
+        return digits[:6]
+    if len(digits) == 4:
+        return digits + '12'
+    return ''
+
+
+def months_between(article_date: str, period) -> int | None:
+    """관측 시점 종료 → 기사일까지 몇 개월인가. 판단 불가면 None."""
+    end = _period_end_month(period)
+    article = _compact_date(article_date)
+    if not end or len(article) < 6:
+        return None
+    ay, am = int(article[:4]), int(article[4:6])
+    py, pm = int(end[:4]), int(end[4:6])
+    return (ay - py) * 12 + (am - pm)
+
+
+def within_revision_window(article_date: str, actual_period,
+                           months: int = REVISION_WINDOW_MONTHS) -> bool:
+    """기사가 '아직 개정될 수 있는 시점'의 값을 다뤘는가.
+
+    LST_CHN_DE 는 표 전체의 최종 수정일이라 월간 표는 갱신될 때마다 바뀐다.
+    그래서 '개정일 > 기사일'만 보면 최근 기사는 거의 전부 보류가 된다.
+    실제 개정 위험은 **관측 시점이 아직 잠정치 구간에 있을 때** 생긴다.
+    """
+    gap = months_between(article_date, actual_period)
+    if gap is None:
+        return True          # 판단 불가하면 기존처럼 보수적으로 통과시킨다
+    return 0 <= gap <= months
+
+
+def revision_explains_gap(claim_value, actual_value, rate_like: bool) -> bool:
+    """차이 크기가 잠정→확정 개정으로 설명될 만한가.
+
+    설명 못 할 크기까지 개정 탓으로 돌리면 보류가 판정 회피 수단이 된다.
+    """
+    if claim_value is None or actual_value is None:
+        return True          # 크기를 모르면 기존 동작 유지
+    gap = abs(actual_value - claim_value)
+    if rate_like:
+        return gap <= REVISION_MAX_RATE_POINT
+    denominator = max(abs(claim_value), 1e-9)
+    return gap / denominator * 100 <= REVISION_MAX_LEVEL_PCT
+
+
+def revision_vintage_risk(row, data_rows, mapping_type, actual_period, previous_period,
+                          *, claim_value=None, actual_value=None, rate_like=None):
     """불일치를 통계 개정(빈티지) 위험으로 보류할지. 전 조건 충족 시 (개정일, 기사일) 반환.
 
     조건(전부 필요 — 모든 불일치를 보류하지 않기 위한 명시 조건):
       1) 파생 증감률 판정 (rate_from_level 또는 value_type=증감률)
-         — 수준값 개정이 계산된 증감률을 크게 바꾸므로 개정 민감도가 가장 높음
       2) 기사 작성일 파싱 가능
       3) 사용된 KOSIS 행의 LST_CHN_DE(개정일)가 기사일보다 '이후'
-         — 기사 당시 공표치가 이후 개정되었을 가능성
-      4) 관측 시점이 기사 시점보다 과거 또는 동월 — 미래 기간은 별개 문제
+      4) 관측 시점이 기사 시점보다 과거 또는 동월
+      5) [2026-07-31 추가] 관측 시점이 아직 **잠정치 구간**에 있다
+         — 3)만으로는 최근 기사가 거의 전부 보류된다(실측 9건 중 5건).
+      6) [2026-07-31 추가] 차이 크기가 **개정으로 설명될 만한 범위**다
+         — 설명 못 할 차이까지 보류하면 판정 회피가 된다.
     """
     if mapping_type != 'rate_from_level' and str(row.get('value_type') or '').strip() != '증감률':
         return '', ''
@@ -571,6 +631,13 @@ def revision_vintage_risk(row, data_rows, mapping_type, actual_period, previous_
         return '', ''
     target = str(actual_period or '')
     if len(target) >= 6 and target[:6] > article[:6]:
+        return '', ''
+    if not within_revision_window(article, actual_period):
+        return '', ''
+    if rate_like is None:
+        rate_like = (mapping_type == 'rate_from_level'
+                     or str(row.get('value_type') or '').strip() == '증감률')
+    if not revision_explains_gap(claim_value, actual_value, rate_like):
         return '', ''
     return revised, article
 
@@ -794,7 +861,9 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
                        ' — 기사 오류로 단정하지 않고 사람 검토로 보낸다)')
         elif verdict == '불일치':
             revised, article_date = revision_vintage_risk(
-                row, data_rows, mapping_type, actual_period, previous_period)
+                row, data_rows, mapping_type, actual_period, previous_period,
+                claim_value=compare_value, actual_value=actual_converted,
+                rate_like=rate_like)
             if revised:
                 verdict = '판정보류'
                 verdict_code = 'REVISION_VINTAGE_RISK'

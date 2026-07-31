@@ -122,3 +122,79 @@
 - `test_diagnose_validated_mappings.py`, `test_revision_vintage_risk.py`,
   `test_validate_fallback_ranks.py`, `test_recover_downstream_validated.py`,
   `test_recover_item_semantics.py`
+
+---
+
+# 후속 (2026-07-31 오후) — 평가 집합 정정과 이중 게이트 해제
+
+앞 절의 수치는 **1차 READY 177 건** 위에서 잰 것이다. 그 집합에 KOSIS 로 검증할 수
+없는 주장이 섞여 있었음이 이후 확인되어, 집합을 다시 짜고 게이트를 고쳤다.
+
+## 1. 평가 집합 정정 (177 → 134)
+
+실버 대조(후보 좌표 5~12개를 전부 KOSIS 조회)에서 값이 재현된 건은 8건뿐이었고,
+`NO_MATCH` 다수가 비트코인 시세·나스닥 지수·롤렉스 판매가·정부 전망치·세율처럼
+**KOSIS 에 존재할 수 없는 값**이었다.
+
+원인은 게이트가 `measurement_usage` / `claim_domain_scope` 라는 **HCX 자기 신고
+라벨만** 보고 독립 검증이 없었던 것. `kosis_scope_gate` 로 주장 내용을 직접 판정해
+43건을 제외했다(**오탐 0** — 값이 재현된 12건은 모두 유지).
+
+집합은 `evaluation_set_v2_manifest.json` 에 입력·출력 sha256 과 규칙 스냅샷을 박아
+잠갔다. 규칙을 고치면 manifest 가 달라지므로 "어떤 집합에서 잰 숫자냐"를 추적할 수 있다.
+
+## 2. 이중 게이트 해제
+
+validate 는 공식 메타 코드 + 실제 API 응답 + 단위·기간을 **이미 독립 검증**하는데,
+그 뒤에 상류 표 후보가 rank-1 READY 가 아니라는 이유로 다시 강등했다.
+같은 불확실성을 두 번 요구하는 중복 게이트였다.
+
+기본 동작을 뒤집고 `--require-upstream-ready` 로 옛 동작을 복원할 수 있게 했다.
+안전 조건(rank1 · 상류 REJECT 제외 · 실측 전항목 통과 · 의미 가드 · 점수 마진)은 그대로다.
+
+## 3. 해제 직후 드러난 오매핑과 이중 방어
+
+READY 12건을 검수하니 4건이 오매핑이었고 **2건이 자동 '불일치'까지 갔다.**
+팩트체크에서 맞는 기사를 틀렸다고 하는 것이 최악이므로 두 겹으로 막았다.
+
+| 방어 | 내용 |
+|---|---|
+| ① 집계 규칙 (확정 단계) | 주장이 세부 대상을 말하지 않으면 좌표도 집계값이어야 한다. `무역수지→objL1=건설`, `물가 상승률→objL1=자가주거비` 차단 |
+| ② 극단 오차 (판정 단계) | 차이가 비상식적이면 `불일치` 대신 `LIKELY_MISMAPPING`(판단불가). 무역흑자 518억달러를 수입액 6320억달러에 대면 1,120% |
+
+**②의 기준을 값 종류별로 갈랐다.** 증감률은 분모가 작아 상대오차가 쉽게 폭발하므로
+(8.2% vs 42.5% = 418%) 상대오차 대신 **절대 %p** 로 본다. 실제로 계절조정지수
+증감률 2건이 차이율 253%·472% 였지만 절대 차이는 1.01%p·0.94%p 로 작아
+`REVISION_VINTAGE_RISK` 판정 기회를 지켰다.
+
+또한 의미 가드가 `recover_downstream_validated.py` 에 **복사돼 있어** validate 쪽만
+고쳤을 때 회수 경로에 반영되지 않았다. 구현을 하나로 합치고, 두 경로가 어긋나면
+실패하는 테스트를 넣었다(`test_recovery_path_uses_the_same_guard_as_validate`).
+
+## 4. 최종 결과 (확정 집합 134 기준)
+
+| | 해제 전 | 해제 후 |
+|---|---|---|
+| READY | 2 | **9** |
+| NEEDS_CONFIRMATION | 72 | 65 |
+| MAPPING_FAILED | 60 | 60 |
+| API-valid | 88 | 88 |
+
+verdict 9건: **일치 3 / 판정보류 5(전부 REVISION_VINTAGE_RISK) / 판단불가 1(LIKELY_MISMAPPING) / 불일치 0**
+
+일치 3건의 차이율은 0.028% · 0.037% · 0.131% 로 정밀하다.
+
+## 5. 남은 한계
+
+1. **골드가 없다.** 위 9건이 '맞는 좌표'라는 보증은 없다. 실버로 값까지 재현된 건은 1건뿐이다.
+2. 확정 집합 134 에도 오염이 남아 있다. tier 별 좌표 재현율이
+   `NEAR_MISS 61.5%` vs `NO_MATCH 28.9%` 로 갈리므로, 기업별 실적·일별 시세·부처 백서 등
+   범위 밖 주장이 더 있다.
+3. 게이트는 문장 단위라 전망 문장에 섞인 실적치가 함께 제외될 수 있다(실측 오탐은 0).
+4. READY 9/134 = 6.7%. 자동 확정률 자체는 여전히 낮다.
+
+**테스트**: 전체 **398 passed**
+- 신규: `test_kosis_scope_gate.py`, `test_prepare_scope_gate_wiring.py`,
+  `test_lock_evaluation_set.py`, `test_dual_gate_release.py`, `test_mismapping_guards.py`,
+  `test_build_silver_coordinates.py`, `test_export_labeling_packet.py`,
+  `test_diagnose_claim_quality.py`
