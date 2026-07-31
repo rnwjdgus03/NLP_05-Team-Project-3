@@ -5,11 +5,44 @@ READY 12건을 검수했더니 4건이 오매핑이었고, 그중 2건이 자동
   ① 주장이 세부 대상을 말하지 않으면 좌표도 집계값이어야 한다  (확정 단계)
   ② 차이율이 비상식적으로 크면 매핑 오류를 먼저 의심한다        (판정 단계)
 """
+import recover_downstream_validated as recover
 from kosis_validate_mapping_candidates import (
     claim_item_matches_selection,
     selection_is_aggregate,
 )
 from kosis_verify_claim_values import MISMAPPING_PCT, extreme_error
+
+
+# --------------------------------------------------------------------------
+# ⓪ 가드가 두 벌이면 반드시 어긋난다 — 한 구현을 공유하는지 고정
+# --------------------------------------------------------------------------
+
+MISMAPPINGS = [
+    # (row, result) — 실측에서 READY 로 통과했던 오매핑들
+    ({"indicator": "무역수지", "measurement_item": ""},
+     {"selected_itm_name": "기관유형별 산업별 기술무역수지 추이",
+      "selected_obj_l1_name": "건설"}),
+    ({"indicator": "물가 상승률", "measurement_item": ""},
+     {"selected_itm_name": "소비자물가지수", "selected_obj_l1_name": "자가주거비"}),
+    ({"indicator": "농수산식품 수출", "measurement_item": "농수산식품"},
+     {"selected_itm_name": "건조기(농산물용의 것)",
+      "selected_obj_l1_name": "건조기(농산물용의 것)"}),
+]
+
+
+def test_recovery_path_uses_the_same_guard_as_validate():
+    """회수 스크립트에 가드가 복사돼 있어서 한쪽만 고쳐졌던 사고를 막는다."""
+    for row, result in MISMAPPINGS:
+        merged = {**row, **result}
+        assert claim_item_matches_selection(merged) is False
+        assert recover.item_semantics_ok(merged) is False, "회수 경로가 validate 와 어긋났다"
+
+
+def test_both_paths_agree_on_valid_mappings():
+    merged = {"indicator": "반도체 수출", "measurement_item": "반도체",
+              "selected_itm_name": "수출액", "selected_obj_l1_name": "반도체"}
+    assert claim_item_matches_selection(merged) is True
+    assert recover.item_semantics_ok(merged) is True
 
 
 # --------------------------------------------------------------------------

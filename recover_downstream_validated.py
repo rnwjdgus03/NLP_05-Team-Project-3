@@ -26,6 +26,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from kosis_validate_mapping_candidates import claim_item_matches_selection
+
 TRIGGER_REASON = "upstream table candidate is not decisive rank-1 READY"
 RECOVERED_REASON = "downstream metadata/API/unit/period validation passed for rank-1 candidate"
 
@@ -54,29 +56,14 @@ def _norm(value) -> str:
 
 
 def item_semantics_ok(row) -> bool:
-    """claim이 특정 품목·대상을 말하는데 선택된 OBJ가 그것과 무관하면 회수하지 않는다.
+    """의미 가드는 validate 와 **같은 구현을 쓴다**(복제 금지).
 
-    실측 사례: '농수산식품 수출' → OBJ '건조기(농산물용의 것)',
-              '반도체 수출' → OBJ '인산에스테르 및 그 염...' 처럼
-    API 응답은 정상이지만 의미가 전혀 다른 좌표가 선택될 수 있다.
-    기술 유효성(response_code_valid)만으로는 이를 막지 못하므로 별도 가드를 둔다.
+    2026-07-31: 여기에 같은 로직이 복사돼 있어서, validate 쪽 가드를 고쳐도
+    회수 경로에는 반영되지 않았다. 실측에서 '무역수지'→objL1=건설,
+    '물가 상승률'→objL1=자가주거비 오매핑이 그대로 READY 로 통과했다.
+    가드가 두 벌이면 반드시 어긋나므로 하나로 합친다.
     """
-    item = _norm(row.get("industry_or_item") or row.get("measurement_item"))
-    if not item or item in {"-", "전체", "총계", "합계"}:
-        return True  # 품목 제약이 없는 claim은 총계 좌표가 정상
-    selected = " ".join(str(row.get(key, "")) for key in (
-        "kosis_obj_l1_name", "selected_obj_l1_name", "selected_obj_l2_name",
-        "selected_obj_l3_name", "selected_itm_name", "tbl_name",
-    ))
-    selected_norm = _norm(selected)
-    if not selected_norm:
-        return True
-    if item in selected_norm or selected_norm in item:
-        return True
-    # 부분 일치(2글자 이상 토큰 공유)도 허용 — '석유화학' vs '석유화학제품'
-    return any(len(token) >= 2 and token in selected_norm
-               for token in re.findall(r"[가-힣A-Za-z]{2,}", str(
-                   row.get("industry_or_item") or row.get("measurement_item") or "")))
+    return claim_item_matches_selection(row)
 
 
 def can_recover(row) -> bool:
