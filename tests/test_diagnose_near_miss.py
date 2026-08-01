@@ -97,9 +97,14 @@ def test_zero_claim_does_not_divide_by_zero():
     assert code == "LARGE_GAP"
 
 
-def test_fixable_set_covers_only_bug_causes():
-    """반올림·개정은 버그가 아니므로 '고치면 승격' 으로 세면 안 된다."""
-    assert FIXABLE == {"SIGN_MISMATCH", "SCALE_MISMATCH"}
+def test_fixable_covers_only_our_side_problems():
+    """'고치면 비교 가능' 은 우리 쪽 결함만 세야 한다.
+
+    반올림·개정·좌표오류는 우리가 고칠 수 있는 게 아니므로 넣지 않는다.
+    """
+    assert FIXABLE == {"SIGN_MISMATCH", "SCALE_MISMATCH", "UNIT_UNCONVERTIBLE"}
+    for not_ours in ("DISPLAY_ROUNDING", "SMALL_GAP", "LARGE_GAP", "NO_DATA_IN_PERIOD"):
+        assert not_ours not in FIXABLE
 
 
 # --------------------------------------------------------------------------
@@ -156,3 +161,67 @@ def test_rounding_is_not_marked_fixable():
     result = diagnose(SILVER, review)
     assert result[0]["cause"] == "DISPLAY_ROUNDING"
     assert result[0]["fixable"] == "N"
+
+
+# --------------------------------------------------------------------------
+# 부호 적용 결과를 읽는다 (2026-08-01 수정)
+#
+# review CSV 의 claim_value 는 **부호 적용 전** 원본이다. 그대로 비교하면
+# 정상 판정을 SIGN_MISMATCH 로 오분류한다 — 실측에서 2건이 그렇게 잘못 잡혔다.
+# 검증기가 실제로 쓴 값은 verdict_reason 에 '(방향부호 적용: claim=-1.6)' 로 남는다.
+# --------------------------------------------------------------------------
+
+from diagnose_near_miss import effective_claim_value, no_value_cause
+
+
+def test_signed_claim_is_read_from_verdict_reason():
+    value, raw = effective_claim_value(
+        {"claim_value": "1.6",
+         "verdict_reason": "차이=0.0815 (방향부호 적용: claim=-1.6) (KOSIS 개정일…)"})
+    assert value == -1.6 and raw == "-1.6"
+
+
+def test_raw_value_is_used_when_no_sign_applied():
+    value, raw = effective_claim_value({"claim_value": "6838", "verdict_reason": "차이=1.9"})
+    assert value == 6838.0 and raw == "6838"
+
+
+def test_real_case_is_rounding_not_sign_mismatch():
+    """실측 오분류 재현: 기사 1.6(원본) / KOSIS -1.68 → 부호 적용하면 반올림 수준."""
+    row = {"claim_value": "1.6", "kosis_actual_value": "-1.68151038036",
+           "verdict_reason": "차이=0.0815104 (방향부호 적용: claim=-1.6)"}
+    value, raw = effective_claim_value(row)
+    code, _ = classify_gap(value, float(row["kosis_actual_value"]), raw)
+    assert code == "DISPLAY_ROUNDING"
+
+
+# --------------------------------------------------------------------------
+# 값이 없는 경우의 원인을 가른다 — 좌표 문제와 섞지 않는다
+# --------------------------------------------------------------------------
+
+def test_unit_failure_is_separated_from_coordinate_problem():
+    code, why = no_value_cause(
+        {"verdict_code": "UNIT_UNCERTAIN", "verdict_reason": "단위 비호환 → 후보 유지"})
+    assert code == "UNIT_UNCONVERTIBLE" and "좌표 문제가 아니다" in why
+
+
+def test_missing_period_data_is_its_own_cause():
+    code, _ = no_value_cause(
+        {"verdict_code": "ACTUAL_DERIVATION_FAILED", "verdict_reason": "조회 데이터 없음"})
+    assert code == "NO_DATA_IN_PERIOD"
+
+
+def test_unknown_cause_keeps_the_code_for_tracing():
+    code, why = no_value_cause({"verdict_code": "SOMETHING_NEW", "verdict_reason": ""})
+    assert code == "NO_VALUE_OTHER" and "SOMETHING_NEW" in why
+
+
+def test_unit_failure_counts_as_fixable():
+    """단위 변환은 우리 쪽 문제다 — 사람이 라벨할 대상이 아니다."""
+    assert "UNIT_UNCONVERTIBLE" in FIXABLE
+
+
+def test_comparable_candidate_wins_over_unit_failed_one():
+    rows = [_row("M1", 100, "", verdict_reason="단위 비호환", tbl_id="T_UNIT"),
+            _row("M1", 100, 101, tbl_id="T_OK")]
+    assert best_row(rows)["tbl_id"] == "T_OK"

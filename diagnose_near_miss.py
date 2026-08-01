@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -40,7 +41,8 @@ SCALE_TOLERANCE = 0.02
 # 상대오차가 이 이내면 잠정치·개정으로 설명 가능한 수준으로 본다.
 SMALL_GAP_PCT = 10.0
 
-FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH"}
+# 우리 쪽을 고치면 비교가 가능해지는 원인들(좌표 문제가 아니다).
+FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH", "UNIT_UNCONVERTIBLE"}
 
 
 def text(value) -> str:
@@ -58,12 +60,43 @@ def number(value):
         return None
 
 
+# 검증기는 방향어를 보고 부호를 붙인 뒤 비교하는데, 그 결과를 verdict_reason 에만 남긴다.
+# review CSV 의 claim_value 는 **부호 적용 전** 원본이라 그대로 비교하면
+# 정상 판정을 'SIGN_MISMATCH' 로 오분류한다(실측: 1.6 vs -1.68 을 부호 문제로 오판).
+SIGNED_CLAIM = re.compile(r"방향부호 적용:\s*claim\s*=\s*(-?\d[\d,]*(?:\.\d+)?)")
+
+
+def effective_claim_value(row):
+    """검증기가 실제로 비교에 쓴 기사 값. 부호 적용 결과가 있으면 그것을 쓴다."""
+    found = SIGNED_CLAIM.search(text(row.get("verdict_reason")))
+    if found:
+        return number(found.group(1)), found.group(1)
+    raw = text(row.get("claim_value"))
+    return number(raw), raw
+
+
 def display_ulp(raw: str) -> float:
     """기사에 적힌 자릿수의 최소 단위. '1.6' → 0.1, '2' → 1."""
     raw = text(raw).replace(",", "").lstrip("-+")
     if "." in raw:
         return 10 ** -len(raw.split(".", 1)[1])
     return 1.0
+
+
+def no_value_cause(row) -> tuple[str, str]:
+    """KOSIS 값이 비어 비교 자체를 못 한 경우의 원인을 verdict 기록에서 읽는다.
+
+    실측에서 NEAR_MISS 30건 중 20건이 여기였다. '좌표가 틀렸다' 가 아니라
+    **단위를 못 맞춰 비교를 못 한 것**이 대부분이라, 좌표 문제와 섞어 세면 안 된다.
+    """
+    code = text(row.get("verdict_code"))
+    reason = text(row.get("verdict_reason"))
+    if code == "UNIT_UNCERTAIN" or "단위 비호환" in reason:
+        return ("UNIT_UNCONVERTIBLE",
+                "단위를 변환하지 못해 값 비교 자체가 불가 — 좌표 문제가 아니다")
+    if "조회 데이터 없음" in reason or code == "ACTUAL_DERIVATION_FAILED":
+        return "NO_DATA_IN_PERIOD", "해당 시점 데이터가 없음"
+    return "NO_VALUE_OTHER", f"값 없음 ({code or '사유 미기록'})"
 
 
 def classify_gap(claim_value, actual_value, claim_raw: str) -> tuple[str, str]:
@@ -99,10 +132,14 @@ def classify_gap(claim_value, actual_value, claim_raw: str) -> tuple[str, str]:
 
 
 def best_row(rows):
-    """차이가 가장 작은 좌표 하나를 고른다(그 measurement 의 최선 후보)."""
+    """차이가 가장 작은 좌표 하나를 고른다(그 measurement 의 최선 후보).
+
+    값이 있는 후보를 우선한다 — 단위 변환에 실패한 후보가 앞서면
+    비교 가능한 좌표가 있는데도 'NO_VALUE' 로 집계된다.
+    """
     scored = []
     for row in rows:
-        claim = number(row.get("claim_value"))
+        claim, _ = effective_claim_value(row)
         actual = number(row.get("kosis_actual_value"))
         if claim is None or actual is None or claim == 0:
             continue
@@ -126,15 +163,18 @@ def diagnose(silver_rows, review_rows) -> list[dict]:
         row = best_row(grouped[mid])
         if row is None:
             continue
-        claim_raw = text(row.get("claim_value"))
-        claim, actual = number(claim_raw), number(row.get("kosis_actual_value"))
+        claim, claim_raw = effective_claim_value(row)
+        actual = number(row.get("kosis_actual_value"))
         code, why = classify_gap(claim, actual, claim_raw)
+        if code == "NO_VALUE":
+            code, why = no_value_cause(row)
         out.append({
             "claim_measurement_id": mid,
             "cause": code,
             "fixable": "Y" if code in FIXABLE else "N",
             "why": why,
             "claim_value": claim_raw,
+            "claim_value_raw": text(row.get("claim_value")),
             "kosis_actual_value": text(row.get("kosis_actual_value")),
             "tbl_id": text(row.get("tbl_id")),
             "tbl_name": text(row.get("tbl_name"))[:40],
@@ -169,10 +209,12 @@ def main() -> None:
     print(f"NEAR_MISS {len(rows)}건 원인 분류\n")
     for cause, n in causes.most_common():
         print(f"  {cause:<18} {n:>3}")
-    print(f"\n버그 수정으로 승격 가능: {fixable}건 (SIGN_MISMATCH / SCALE_MISMATCH)")
+    print(f"\n우리 쪽 수정으로 비교 가능해지는 건: {fixable}건")
+    print("  (UNIT_UNCONVERTIBLE / SIGN_MISMATCH / SCALE_MISMATCH — 좌표 문제가 아님)")
     print("DISPLAY_ROUNDING 은 판정 허용오차를 재검토하면 승격 후보다.")
 
-    for cause in ("SIGN_MISMATCH", "SCALE_MISMATCH", "DISPLAY_ROUNDING"):
+    for cause in ("UNIT_UNCONVERTIBLE", "SIGN_MISMATCH", "SCALE_MISMATCH",
+              "DISPLAY_ROUNDING"):
         picked = [r for r in rows if r["cause"] == cause]
         if not picked:
             continue
