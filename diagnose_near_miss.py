@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""NEAR_MISS 가 왜 정확히 안 맞았는지 산술로 분류한다 (판단 아님, API 0회).
+
+배경: `NEAR_MISS` 는 "값이 오차밴드 안까지 갔는데 정확히는 안 맞았다" 는 뜻이라
+**좌표는 맞을 가능성이 높다.** 실제로 산업활동동향 건은 좌표가 처음부터 맞았고
+우리 쪽 부호 처리가 틀려서 차이가 1.01%p 로 부풀어 있었다(고친 뒤 0.21%p).
+
+그런 계통적 원인이 더 있으면, 사람이 라벨하는 대신 **버그를 고쳐서 골드를 늘릴 수 있다.**
+이 스크립트는 원인을 추정하지 않고 **산술로 분류만** 한다.
+
+분류 (measurement 당 차이가 가장 작은 좌표 기준)
+  SIGN_MISMATCH      부호만 다르고 크기는 비슷 → 방향 처리 문제. 고치면 승격 가능
+  SCALE_MISMATCH     비율이 10의 거듭제곱 → 단위 배율 문제. 고치면 승격 가능
+  DISPLAY_ROUNDING   차이가 기사 표시 자릿수 한 단위 이내 → 기사 반올림
+  SMALL_GAP          상대오차가 작음 → 잠정치·개정으로 설명 가능
+  LARGE_GAP          그 외 → 좌표가 틀렸을 가능성이 높다
+
+사용법:
+  python diagnose_near_miss.py \
+    --silver silver_coordinates.csv \
+    --review needs_human_review.csv \
+    --output near_miss_diagnosis.csv
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import math
+from collections import Counter, defaultdict
+from pathlib import Path
+
+from kosis_meta_coordinates import read_csv_rows
+
+TARGET_TIERS = {"NEAR_MISS"}
+
+# 부호가 다르면서 크기가 이 범위 안이면 '부호만 틀렸다' 로 본다.
+SIGN_RATIO_LOW, SIGN_RATIO_HIGH = 0.7, 1.4
+# 비율이 10^k 에 이만큼 이내로 붙으면 단위 배율 문제로 본다.
+SCALE_TOLERANCE = 0.02
+# 상대오차가 이 이내면 잠정치·개정으로 설명 가능한 수준으로 본다.
+SMALL_GAP_PCT = 10.0
+
+FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH"}
+
+
+def text(value) -> str:
+    value = str(value or "").strip()
+    return "" if value.lower() in {"nan", "none"} else value
+
+
+def number(value):
+    raw = text(value).replace(",", "")
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def display_ulp(raw: str) -> float:
+    """기사에 적힌 자릿수의 최소 단위. '1.6' → 0.1, '2' → 1."""
+    raw = text(raw).replace(",", "").lstrip("-+")
+    if "." in raw:
+        return 10 ** -len(raw.split(".", 1)[1])
+    return 1.0
+
+
+def classify_gap(claim_value, actual_value, claim_raw: str) -> tuple[str, str]:
+    """두 값의 관계를 산술로만 분류한다."""
+    if claim_value is None or actual_value is None:
+        return "NO_VALUE", "값이 없어 비교 불가"
+    if claim_value == 0:
+        return "LARGE_GAP", "기사 값이 0 이라 비율 계산 불가"
+
+    gap = abs(actual_value - claim_value)
+    ratio = abs(actual_value) / abs(claim_value)
+
+    if (actual_value < 0) != (claim_value < 0):
+        if SIGN_RATIO_LOW <= ratio <= SIGN_RATIO_HIGH:
+            return ("SIGN_MISMATCH",
+                    f"부호만 다름 (크기 비율 {ratio:.2f}) — 방향 처리 문제")
+
+    if ratio > 0:
+        exponent = round(math.log10(ratio))
+        if exponent != 0 and abs(ratio - 10 ** exponent) <= 10 ** exponent * SCALE_TOLERANCE:
+            return ("SCALE_MISMATCH",
+                    f"비율이 10^{exponent} 에 근접({ratio:.4g}) — 단위 배율 문제")
+
+    ulp = display_ulp(claim_raw)
+    if gap <= ulp:
+        return ("DISPLAY_ROUNDING",
+                f"차이 {gap:.4g} 가 기사 표시 단위({ulp:g}) 이내 — 반올림 수준")
+
+    pct = gap / abs(claim_value) * 100
+    if pct <= SMALL_GAP_PCT:
+        return "SMALL_GAP", f"상대오차 {pct:.2f}% — 잠정치·개정으로 설명 가능"
+    return "LARGE_GAP", f"상대오차 {pct:.2f}% — 좌표가 틀렸을 가능성"
+
+
+def best_row(rows):
+    """차이가 가장 작은 좌표 하나를 고른다(그 measurement 의 최선 후보)."""
+    scored = []
+    for row in rows:
+        claim = number(row.get("claim_value"))
+        actual = number(row.get("kosis_actual_value"))
+        if claim is None or actual is None or claim == 0:
+            continue
+        scored.append((abs(actual - claim) / abs(claim), row))
+    if not scored:
+        return rows[0] if rows else None
+    scored.sort(key=lambda pair: pair[0])
+    return scored[0][1]
+
+
+def diagnose(silver_rows, review_rows) -> list[dict]:
+    tier_of = {text(r.get("claim_measurement_id")): text(r.get("tier")) for r in silver_rows}
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for row in review_rows:
+        mid = text(row.get("claim_measurement_id"))
+        if tier_of.get(mid) in TARGET_TIERS and text(row.get("verdict")) == "판정보류":
+            grouped[mid].append(row)
+
+    out = []
+    for mid in sorted(grouped):
+        row = best_row(grouped[mid])
+        if row is None:
+            continue
+        claim_raw = text(row.get("claim_value"))
+        claim, actual = number(claim_raw), number(row.get("kosis_actual_value"))
+        code, why = classify_gap(claim, actual, claim_raw)
+        out.append({
+            "claim_measurement_id": mid,
+            "cause": code,
+            "fixable": "Y" if code in FIXABLE else "N",
+            "why": why,
+            "claim_value": claim_raw,
+            "kosis_actual_value": text(row.get("kosis_actual_value")),
+            "tbl_id": text(row.get("tbl_id")),
+            "tbl_name": text(row.get("tbl_name"))[:40],
+            "selected_itm_name": text(row.get("selected_itm_name"))[:30],
+            "selected_obj_l1": text(row.get("selected_obj_l1")),
+            "mapping_type": text(row.get("mapping_type")),
+            "candidates_examined": len(grouped[mid]),
+            "claim_text": text(row.get("claim_text"))[:110],
+        })
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--silver", required=True)
+    ap.add_argument("--review", required=True)
+    ap.add_argument("--output", required=True)
+    args = ap.parse_args()
+
+    rows = diagnose(read_csv_rows(args.silver), read_csv_rows(args.review))
+    if not rows:
+        raise SystemExit("NEAR_MISS 가 없다. 입력을 확인할 것.")
+
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    with open(args.output, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    causes = Counter(r["cause"] for r in rows)
+    fixable = sum(1 for r in rows if r["fixable"] == "Y")
+    print(f"NEAR_MISS {len(rows)}건 원인 분류\n")
+    for cause, n in causes.most_common():
+        print(f"  {cause:<18} {n:>3}")
+    print(f"\n버그 수정으로 승격 가능: {fixable}건 (SIGN_MISMATCH / SCALE_MISMATCH)")
+    print("DISPLAY_ROUNDING 은 판정 허용오차를 재검토하면 승격 후보다.")
+
+    for cause in ("SIGN_MISMATCH", "SCALE_MISMATCH", "DISPLAY_ROUNDING"):
+        picked = [r for r in rows if r["cause"] == cause]
+        if not picked:
+            continue
+        print(f"\n=== {cause} ({len(picked)}건) ===")
+        for r in picked[:8]:
+            print(f"  기사 {r['claim_value']:>14} vs KOSIS {r['kosis_actual_value'][:14]:>14}"
+                  f"  [{r['tbl_id']}] {r['selected_itm_name']}")
+            print(f"    {r['why']}")
+            print(f"    {r['claim_text'][:90]}")
+
+    large = [r for r in rows if r["cause"] == "LARGE_GAP"]
+    if large:
+        print(f"\n=== LARGE_GAP ({len(large)}건) — 좌표가 틀렸을 가능성 ===")
+        for r in large[:8]:
+            print(f"  {r['why']} | [{r['tbl_id']}] {r['selected_itm_name']}")
+            print(f"    {r['claim_text'][:90]}")
+
+    print(f"\n저장: {args.output}")
+
+
+if __name__ == "__main__":
+    main()
