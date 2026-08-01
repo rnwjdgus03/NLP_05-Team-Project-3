@@ -122,3 +122,55 @@ def test_probe_derives_mapping_type_when_missing():
 def test_probe_does_not_overwrite_candidate_own_fields():
     probe = silver.build_probe_row(_cand(period="202412", value="100"), CLAIM)
     assert probe["period"] == "202412" and probe["value"] == "100"
+
+
+# --------------------------------------------------------------------------
+# 재현 좌표를 '전부' 기록한다 (2026-08-01 수정)
+#
+# 이전에는 winners[0] 하나만 저장해서 SILVER_AMBIGUOUS 인데도 정답이 하나로 좁혀졌다.
+# 골드 16건을 만들었더니 '복수 정답 0건' 으로 나와 발견됨 — AMBIGUOUS 4건이
+# 사실상 단일 정답으로 굳어 정당한 좌표를 찾아도 오답으로 세고 있었다.
+# --------------------------------------------------------------------------
+
+def _winner(tbl, itm, obj, **kw):
+    row = {"coordinate_key": (tbl, itm, obj), "tbl_id": tbl,
+           "selected_itm_id": itm, "selected_obj_l1": obj,
+           "selected_obj_l2": "", "selected_obj_l3": "", "sources": "A"}
+    row.update(kw)
+    return row
+
+
+def test_multiple_reproducing_coordinates_are_all_kept():
+    merged = silver.merge_winner_fields(
+        [_winner("T_A", "I1", "1"), _winner("T_B", "I2", "2")])
+    assert merged["tbl_id"] == "T_A|T_B"
+    assert merged["selected_itm_id"] == "I1|I2"
+
+
+def test_single_coordinate_has_no_pipe():
+    merged = silver.merge_winner_fields([_winner("T_A", "I1", "1")])
+    assert merged["tbl_id"] == "T_A"
+
+
+def test_duplicate_coordinate_is_recorded_once():
+    merged = silver.merge_winner_fields(
+        [_winner("T_A", "I1", "1"), _winner("T_A", "I1", "1")])
+    assert merged["tbl_id"] == "T_A"
+
+
+def test_empty_field_is_not_joined_as_empty_string():
+    merged = silver.merge_winner_fields([_winner("T_A", "I1", "")])
+    assert merged["selected_obj_l1"] == ""
+
+
+def test_full_coordinate_tuples_are_preserved_for_traceability():
+    """필드별 합치기는 조합을 잃는다 — 원형 좌표를 별도로 남긴다."""
+    text = silver.format_coordinates(
+        [_winner("T_A", "I1", "1"), _winner("T_B", "I2", "2")])
+    assert "T_A/I1/1" in text and "T_B/I2/2" in text
+
+
+def test_no_winners_yields_empty_fields():
+    merged = silver.merge_winner_fields([])
+    assert all(value == "" for value in merged.values())
+    assert silver.format_coordinates([]) == ""

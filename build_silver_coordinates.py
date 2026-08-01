@@ -122,6 +122,46 @@ def classify(results) -> tuple[str, list]:
     return "NO_MATCH", []
 
 
+ALT_FIELDS = ("tbl_id", "selected_itm_id", "selected_obj_l1",
+              "selected_obj_l2", "selected_obj_l3")
+
+
+def merge_winner_fields(winners) -> dict[str, str]:
+    """값을 재현한 좌표가 여럿이면 **전부** 기록한다(파이프 구분).
+
+    2026-08-01 수정: 이전에는 `winners[0]` 하나만 저장해서, SILVER_AMBIGUOUS 인데도
+    정답이 하나로 좁혀졌다. 같은 통계가 여러 표에 수록된 경우(수출액이
+    DT_1R11006_FRM101 과 DT_1R11001_FRM101 양쪽에 존재) 나머지를 버리면
+    정당한 좌표를 찾은 것을 오답으로 세게 된다.
+
+    한계: 필드별로 합치므로 (표A,항목1) / (표B,항목2) 조합이 (표A,항목2) 로도
+    맞은 것처럼 보일 수 있다. recall 을 필드별로 재는 현재 평가 방식과는 일관되지만,
+    좌표 전체를 한 번에 맞췄는지 보려면 `silver_all_coordinates` 를 써야 한다.
+    """
+    merged: dict[str, str] = {}
+    for field in ALT_FIELDS:
+        seen, values = set(), []
+        for row in winners:
+            value = text(row.get(field))
+            if value and value not in seen:
+                seen.add(value)
+                values.append(value)
+        merged[field] = "|".join(values)
+    return merged
+
+
+def format_coordinates(winners) -> str:
+    """좌표 조합을 원형 그대로 남긴다(필드별 합치기의 한계를 보완하는 추적용)."""
+    seen, out = set(), []
+    for row in winners:
+        key = row["coordinate_key"]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append("/".join(part for part in key if part))
+    return " ;; ".join(out)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--measurements", required=True)
@@ -196,18 +236,23 @@ def main() -> None:
         tier, winners = classify(results)
         tier_counts[tier] += 1
         best = winners[0] if winners else None
+        # 값을 재현한 좌표는 하나만 남기지 않고 전부 기록한다(정답이 여럿일 수 있다).
+        alt = merge_winner_fields(winners) if tier.startswith("SILVER") else {
+            f: "" for f in ALT_FIELDS}
 
         silver_rows.append({
             "claim_measurement_id": mid,
             "tier": tier,
             "usable_for_retrieval_eval": tier == "SILVER_UNIQUE",
             "silver_org_id": text((best or {}).get("org_id")) or text(claim.get("org_id")),
-            "silver_tbl_id": (best or {}).get("tbl_id", ""),
-            "silver_itm_id": (best or {}).get("selected_itm_id", ""),
-            "silver_obj_l1": (best or {}).get("selected_obj_l1", ""),
-            "silver_obj_l2": (best or {}).get("selected_obj_l2", ""),
-            "silver_obj_l3": (best or {}).get("selected_obj_l3", ""),
-            "silver_source": (best or {}).get("sources", ""),
+            "silver_tbl_id": alt["tbl_id"] or (best or {}).get("tbl_id", ""),
+            "silver_itm_id": alt["selected_itm_id"] or (best or {}).get("selected_itm_id", ""),
+            "silver_obj_l1": alt["selected_obj_l1"] or (best or {}).get("selected_obj_l1", ""),
+            "silver_obj_l2": alt["selected_obj_l2"] or (best or {}).get("selected_obj_l2", ""),
+            "silver_obj_l3": alt["selected_obj_l3"] or (best or {}).get("selected_obj_l3", ""),
+            "silver_all_coordinates": format_coordinates(winners),
+            "silver_source": " ".join(dict.fromkeys(
+                w.get("sources", "") for w in winners)) or (best or {}).get("sources", ""),
             "claim_value": claim_value if claim_value is not None else "",
             "kosis_actual_value": (best or {}).get("kosis_actual_value", ""),
             "coordinates_tried": len(results),
