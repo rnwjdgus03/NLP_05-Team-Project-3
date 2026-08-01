@@ -259,7 +259,23 @@ def test_currency_mismatch_needs_exchange_rate():
     """1006조원 vs 달러 표 — 환율 없이는 비교가 불가능하다."""
     code, why = unit_failure_cause(
         "단위 불일치: KOSIS=천달러(currency/USD), claim=조원(currency/KRW)")
-    assert code == "UNIT_CURRENCY_MISMATCH" and "환율" in why
+    assert code == "UNIT_CURRENCY_MISMATCH"
+    assert "USD" in why and "KRW" in why
+
+
+def test_same_dimension_different_thing_is_not_currency():
+    """'개 vs 대' 를 '통화가 다름' 이라 표기하던 오류 — 세는 대상이 다른 것이다."""
+    code, why = unit_failure_cause(
+        "단위 불일치: KOSIS=개(count/개), claim=대(count/대)")
+    assert code == "UNIT_COUNTED_THING_DIFFERS" and "좌표" in why
+
+
+def test_dollar_symbol_units_are_recognized():
+    """KOSIS 는 '천$' 처럼 기호로 쓰는 표가 많다 — unknown 으로 떨어지면 안 된다."""
+    from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension
+    for raw in ("$", "천$", "백만$", "＄"):
+        assert unit_dimension(canonicalize_unit(raw)) == "currency", raw
+    assert canonicalize_unit("천$") == "천달러"
 
 
 def test_dimension_conflict_points_at_wrong_coordinate():

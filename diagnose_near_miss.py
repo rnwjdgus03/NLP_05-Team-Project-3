@@ -42,8 +42,12 @@ SCALE_TOLERANCE = 0.02
 SMALL_GAP_PCT = 10.0
 
 # 우리 쪽을 고치면 비교가 가능해지는 원인들(좌표 문제가 아니다).
-# UNIT_CURRENCY_MISMATCH 는 환율이 필요해 우리가 못 고친다 → 게이트 대상.
-# UNIT_DIMENSION_CONFLICT 는 좌표가 틀린 것이라 여기 넣지 않는다.
+#
+# 2026-08-01 실측: NEAR_MISS 30건에 이 원인은 거의 없었다.
+#   UNIT_DIMENSION_CONFLICT 11 / UNIT_CURRENCY_MISMATCH 7 / LARGE_GAP 6
+#   → 대부분 **좌표 선택**이 틀린 것이고, 우리 계산 버그로 회수되는 건 거의 없다.
+# 통화 불일치(원 vs 달러)도 우리가 환산할 게 아니라 **같은 통계의 다른 통화 표**를
+# 찾았어야 하는 문제이므로 좌표 쪽이다. 여기 넣지 않는다.
 FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH",
            "UNIT_KOSIS_MISSING", "UNIT_UNCONVERTIBLE"}
 
@@ -114,9 +118,15 @@ def unit_failure_cause(reason: str) -> tuple[str, str]:
         c_family = c_spec.split("/")[-1]
         k_dim = k_spec.split("/")[0]
         c_dim = c_spec.split("/")[0]
-        if k_dim == c_dim and k_family != c_family:
+        if k_dim == c_dim == "currency" and k_family != c_family:
             return ("UNIT_CURRENCY_MISMATCH",
-                    f"통화가 다름 ({k_family} vs {c_family}) — 환율 없이는 비교 불가")
+                    f"통화가 다름 (KOSIS={k_family}, claim={c_family}) — "
+                    "같은 통계의 다른 통화 표를 찾았어야 한다")
+        if k_dim == c_dim:
+            # 개 vs 대 처럼 같은 차원 안에서 세는 대상이 다르다 → 좌표가 틀린 것이다.
+            # (이전에는 이것도 '통화가 다름' 으로 잘못 표기했다.)
+            return ("UNIT_COUNTED_THING_DIFFERS",
+                    f"세는 대상이 다름 (KOSIS={k_family}, claim={c_family}) — 좌표가 틀렸을 가능성")
         return ("UNIT_DIMENSION_CONFLICT",
                 f"단위 차원이 다름 ({k_dim} vs {c_dim}) — 좌표가 틀렸을 가능성")
 
@@ -255,7 +265,8 @@ def main() -> None:
     print("DISPLAY_ROUNDING 은 판정 허용오차를 재검토하면 승격 후보다.")
 
     for cause in ("UNIT_KOSIS_MISSING", "UNIT_CURRENCY_MISMATCH",
-              "UNIT_DIMENSION_CONFLICT", "UNIT_CLAIM_MISSING",
+              "UNIT_DIMENSION_CONFLICT", "UNIT_COUNTED_THING_DIFFERS",
+              "UNIT_CLAIM_MISSING",
               "UNIT_UNCONVERTIBLE", "SIGN_MISMATCH", "SCALE_MISMATCH",
               "DISPLAY_ROUNDING"):
         picked = [r for r in rows if r["cause"] == cause]

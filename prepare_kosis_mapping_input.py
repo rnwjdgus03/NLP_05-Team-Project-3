@@ -42,6 +42,9 @@ def canonicalize_unit(unit: str) -> str:
     raw = re.sub(r"\s+", "", nz(unit)).replace("％", "%")
     raw = re.sub(r"(?i)u\.?s\.?\$", "달러", raw)
     raw = re.sub(r"(?i)usd", "달러", raw)
+    # KOSIS 는 단위를 '천$' / '백만$' 처럼 기호로 쓰는 표가 많다. 'US$' 만 처리하면
+    # 이런 표기가 차원 미확정으로 떨어져 값 비교 자체를 못 한다(실측 확인).
+    raw = raw.replace("＄", "$").replace("$", "달러")
     aliases = {
         "퍼센트": "%",
         "프로": "%",
