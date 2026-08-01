@@ -66,18 +66,28 @@ def ranked_by_measurement(rows: Iterable[Mapping[str, Any]],
     return {key: sorted(items, key=_rank) for key, items in grouped.items()}
 
 
+def gold_alternatives(value: Any) -> set[str]:
+    """골드 값은 파이프(|)로 복수 정답을 담을 수 있다.
+
+    같은 통계가 여러 표에 수록된 경우(예: 수출액이 DT_1R11006_FRM101 과
+    DT_1R11001_FRM101 양쪽에 존재) 어느 쪽을 찾아도 검색은 성공한 것이다.
+    정답을 하나로 강제하면 맞은 것을 틀렸다고 세게 된다.
+    """
+    return {part.strip() for part in _text(value).split("|") if part.strip()}
+
+
 def recall_at_k(ranked: Mapping[str, list[dict]], gold: Mapping[str, str],
                 field: str, ks=(1, 3, 5)) -> dict:
     """gold 가 있는 measurement 만 분모로 삼는다. 없으면 gold_required 를 반환."""
-    labeled = {k: v for k, v in gold.items() if _text(v)}
+    labeled = {k: gold_alternatives(v) for k, v in gold.items() if _text(v)}
     if not labeled:
         return {f"recall@{k}": GOLD_REQUIRED for k in ks} | {"labeled": 0}
     out: dict[str, Any] = {"labeled": len(labeled)}
     for k in ks:
         hit = 0
-        for key, want in labeled.items():
+        for key, wanted in labeled.items():
             top = ranked.get(key, [])[:k]
-            if any(_text(row.get(field)) == _text(want) for row in top):
+            if any(_text(row.get(field)) in wanted for row in top):
                 hit += 1
         out[f"recall@{k}"] = round(hit / len(labeled), 4)
     return out
@@ -151,7 +161,7 @@ def ready_coordinate_precision(
     for key, prediction in ready_rows.items():
         expected = labeled[key]
         comparisons = [
-            _text(prediction.get(predicted_field)) == _text(expected.get(gold_field))
+            _text(prediction.get(predicted_field)) in gold_alternatives(expected.get(gold_field))
             for gold_field, predicted_field in gold_fields
             if _text(expected.get(gold_field))
         ]
