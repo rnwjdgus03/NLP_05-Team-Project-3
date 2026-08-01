@@ -67,6 +67,20 @@ DIFFERENCE_HINT = ("올랐", "올렸", "올린", "내렸", "내린", "인상", "
                    "늘었", "늘렸", "줄었", "줄였", "높였", "낮췄", "낮아",
                    "개선", "차이", "포인트", "급감", "급증")
 
+# 장중·특정 시각 시세: KOSIS 는 월평균·연평균만 수록한다.
+# 실측: '오후 3시 30분 기준 1466.6원', '지난달 말(30일) 오후 3시 30분 기준 1472.5원'
+TIME_OF_DAY = re.compile(r"(?:오전|오후)?\s*\d{1,2}\s*시\s*(?:\d{1,2}\s*분)?")
+MARKET_SUBJECT = ("환율", "주가", "종가", "시세", "코스피", "코스닥", "지수")
+MARKET_DAILY_HINT = ("전 거래일", "전거래일", "장 마감", "장중", "마감", "기준")
+
+# 개별 기업 단위 실적: KOSIS 는 통계법상 개별 기업 자료를 수록하지 않는다(산업 집계만).
+# 목록은 관측된 사례에서만 뽑았으므로 **불완전하며 확장 전제**다.
+SINGLE_COMPANY = ("현대차", "기아", "gm 한국사업장", "kg모빌리티", "르노코리아",
+                  "제주항공", "진에어", "대한항공", "아시아나항공", "티웨이",
+                  "동아오츠카", "오리온", "롤렉스", "에르메스", "삼성전자", "sk하이닉스",
+                  "포스코", "현대제철", "lg전자")
+COMPANY_METRIC = ("판매", "수출", "생산", "실적", "정비사", "인력", "매출", "영업이익")
+
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # 따옴표로 감싼 제품·모델명: '데이트저스트 오이스터스틸…', ‘에버 헤라클레스 웨딩 밴드’
 QUOTED_PRODUCT = re.compile(r"[‘'\"“]([^’'\"”]{4,40})[’'\"”]")
@@ -214,9 +228,47 @@ def derived_indicator(claim_text: str, row: Mapping[str, Any]):
     return None
 
 
+def intraday_market_rate(claim_text: str, row: Mapping[str, Any]):
+    """특정 시각·거래일 기준 시세. KOSIS 는 월평균·연평균만 수록한다.
+
+    실측: '오후 3시 30분 기준 1466.6원' 을 월평균 환율 표에 대면 값이 맞을 리 없다.
+    """
+    subject = _has(claim_text, MARKET_SUBJECT) or _has(
+        _first(row, "measurement_indicator", "indicator"), MARKET_SUBJECT)
+    if not subject:
+        return None
+    if TIME_OF_DAY.search(claim_text):
+        return ("INTRADAY_MARKET_RATE",
+                f"특정 시각 기준 {subject} — KOSIS 는 월·연 평균만 수록", REJECT)
+    hint = _has(claim_text, MARKET_DAILY_HINT)
+    if hint and _has(claim_text, ("환율", "종가", "주가")):
+        return ("DAILY_MARKET_RATE",
+                f"일별 {subject} 기준({hint}) — 월·연 평균과 비교 불가", REJECT)
+    return None
+
+
+def single_company_metric(claim_text: str, row: Mapping[str, Any]):
+    """개별 기업 하나의 실적. KOSIS 는 통계법상 개별 기업 자료를 수록하지 않는다.
+
+    지표·품목 필드를 먼저 보고, 없으면 문장에서 찾는다. 목록이 불완전하므로
+    문장에서만 걸린 경우는 REVIEW 로 남긴다(오탐 방지).
+    """
+    scope = _lower(_first(row, "measurement_indicator", "indicator",
+                          "measurement_item", "industry_or_item"))
+    company = _has(scope, SINGLE_COMPANY)
+    if company:
+        return ("SINGLE_COMPANY_METRIC",
+                f"개별 기업({company}) 실적 — KOSIS 는 산업 집계만 수록", REJECT)
+    company = _has(claim_text, SINGLE_COMPANY)
+    if company and _has(claim_text, COMPANY_METRIC):
+        return ("POSSIBLE_COMPANY_METRIC",
+                f"문장에 개별 기업({company})이 있음 — 대상이 산업 집계인지 확인 필요", REVIEW)
+    return None
+
+
 DETECTORS = (foreign_market, global_scope, forecast_or_plan,
              policy_parameter, branded_product_price, derived_difference,
-             derived_indicator)
+             derived_indicator, intraday_market_rate, single_company_metric)
 
 
 def scope_violation(row: Mapping[str, Any]) -> tuple[str, str, str]:

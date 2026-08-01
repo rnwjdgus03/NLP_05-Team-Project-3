@@ -243,3 +243,72 @@ def test_indicator_field_variants_are_read():
 def test_missing_indicator_is_not_judged():
     code, _, _ = scope_violation(_row("어떤 문장", measurement_indicator=""))
     assert code != "DERIVED_INDICATOR"
+
+
+# --------------------------------------------------------------------------
+# 2차 확장 ① 장중·일별 시세 — KOSIS 는 월·연 평균만 수록
+# --------------------------------------------------------------------------
+
+def test_intraday_exchange_rate_is_rejected():
+    code, _, severity = scope_violation(_row(
+        "2일 서울 외환시장에서 달러 대비 원화 환율은 오후 3시 30분 기준 "
+        "전 거래일보다 5.9원 떨어진 달러당 1466.6원을 기록했다.",
+        measurement_indicator="달러 대비 원화 환율", unit="원", value="1466.6"))
+    assert code == "INTRADAY_MARKET_RATE" and severity == REJECT
+
+
+def test_daily_close_without_clock_time_is_rejected():
+    code, _, severity = scope_violation(_row(
+        "환율은 전 거래일보다 오른 1470원에 마감했다.",
+        measurement_indicator="환율", unit="원", value="1470"))
+    assert code == "DAILY_MARKET_RATE" and severity == REJECT
+
+
+def test_monthly_average_rate_is_kept():
+    """월평균·연평균 환율은 KOSIS 에 실재한다 — 막으면 안 된다."""
+    code, _, _ = scope_violation(_row(
+        "지난해 연평균 원달러 환율은 1364원이었다.",
+        measurement_indicator="원달러 환율", unit="원", value="1364"))
+    assert code == ""
+
+
+def test_non_market_subject_with_clock_time_is_kept():
+    """시각 표현만으로 막으면 안 된다 — 대상이 시세여야 한다."""
+    code, _, _ = scope_violation(_row(
+        "오후 3시에 발표된 출생아 수는 2만717명이다.",
+        measurement_indicator="출생아 수", unit="명", value="20717"))
+    assert code == ""
+
+
+# --------------------------------------------------------------------------
+# 2차 확장 ② 개별 기업 실적 — KOSIS 는 산업 집계만
+# --------------------------------------------------------------------------
+
+def test_company_in_indicator_is_rejected():
+    code, _, severity = scope_violation(_row(
+        "현대차는 지난해 판매량이 414만 1791대로, 2023년 대비 1.8% 감소했다.",
+        measurement_indicator="현대차 판매량", unit="대", value="4141791"))
+    assert code == "SINGLE_COMPANY_METRIC" and severity == REJECT
+
+
+def test_company_only_in_text_goes_to_review():
+    """문장에만 기업명이 있으면 대상이 산업 집계일 수도 있다 — 버리지 않는다."""
+    code, _, severity = scope_violation(_row(
+        "현대차 등 국내 완성차 업체들의 판매량이 0.6% 줄었다.",
+        measurement_indicator="완성차 판매량", unit="%", value="0.6"))
+    assert code == "POSSIBLE_COMPANY_METRIC" and severity == REVIEW
+
+
+def test_industry_aggregate_is_kept():
+    code, _, _ = scope_violation(_row(
+        "작년 국내 완성차 업체들의 판매량이 2023년 대비 0.6% 줄었다.",
+        measurement_indicator="완성차 판매량", unit="%", value="0.6"))
+    assert code == ""
+
+
+def test_company_name_without_metric_word_is_kept():
+    """기업명이 출처로만 등장한 경우 — 대상이 아니다."""
+    code, _, _ = scope_violation(_row(
+        "삼성전자 관계자에 따르면 소비자물가지수는 2.3% 올랐다.",
+        measurement_indicator="소비자물가지수", unit="%", value="2.3"))
+    assert code == ""
