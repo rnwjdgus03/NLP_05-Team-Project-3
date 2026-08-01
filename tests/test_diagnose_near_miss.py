@@ -100,10 +100,12 @@ def test_zero_claim_does_not_divide_by_zero():
 def test_fixable_covers_only_our_side_problems():
     """'고치면 비교 가능' 은 우리 쪽 결함만 세야 한다.
 
-    반올림·개정·좌표오류는 우리가 고칠 수 있는 게 아니므로 넣지 않는다.
+    반올림·개정·좌표오류·환율은 우리가 고칠 수 있는 게 아니므로 넣지 않는다.
     """
-    assert FIXABLE == {"SIGN_MISMATCH", "SCALE_MISMATCH", "UNIT_UNCONVERTIBLE"}
-    for not_ours in ("DISPLAY_ROUNDING", "SMALL_GAP", "LARGE_GAP", "NO_DATA_IN_PERIOD"):
+    assert FIXABLE == {"SIGN_MISMATCH", "SCALE_MISMATCH",
+                       "UNIT_KOSIS_MISSING", "UNIT_UNCONVERTIBLE"}
+    for not_ours in ("DISPLAY_ROUNDING", "SMALL_GAP", "LARGE_GAP", "NO_DATA_IN_PERIOD",
+                     "UNIT_CURRENCY_MISMATCH", "UNIT_DIMENSION_CONFLICT"):
         assert not_ours not in FIXABLE
 
 
@@ -200,9 +202,22 @@ def test_real_case_is_rounding_not_sign_mismatch():
 # --------------------------------------------------------------------------
 
 def test_unit_failure_is_separated_from_coordinate_problem():
-    code, why = no_value_cause(
+    """사유를 못 읽으면 일반 코드로 떨어지되, 좌표 문제로 세지는 않는다."""
+    code, _ = no_value_cause(
         {"verdict_code": "UNIT_UNCERTAIN", "verdict_reason": "단위 비호환 → 후보 유지"})
-    assert code == "UNIT_UNCONVERTIBLE" and "좌표 문제가 아니다" in why
+    assert code == "UNIT_UNCONVERTIBLE"
+    assert code in FIXABLE
+
+
+def test_unit_failure_subtypes_are_routed_from_the_row():
+    """실제 메시지가 있으면 세 갈래로 갈린다."""
+    missing = no_value_cause({"verdict_code": "UNIT_UNCERTAIN",
+                              "verdict_reason": "단위 차원 미확정: KOSIS=, claim=억달러"})
+    currency = no_value_cause({"verdict_code": "UNIT_UNCERTAIN",
+                               "verdict_reason": "단위 불일치: KOSIS=천달러(currency/USD), "
+                                                 "claim=조원(currency/KRW)"})
+    assert missing[0] == "UNIT_KOSIS_MISSING"
+    assert currency[0] == "UNIT_CURRENCY_MISMATCH"
 
 
 def test_missing_period_data_is_its_own_cause():
@@ -225,3 +240,41 @@ def test_comparable_candidate_wins_over_unit_failed_one():
     rows = [_row("M1", 100, "", verdict_reason="단위 비호환", tbl_id="T_UNIT"),
             _row("M1", 100, 101, tbl_id="T_OK")]
     assert best_row(rows)["tbl_id"] == "T_OK"
+
+
+# --------------------------------------------------------------------------
+# 단위 실패를 세 갈래로 가른다 — 처방이 전부 다르다
+# --------------------------------------------------------------------------
+
+from diagnose_near_miss import unit_failure_cause
+
+
+def test_empty_kosis_unit_is_recoverable():
+    """KOSIS 단위가 비었을 뿐이면 우리 메타 스냅샷으로 채울 수 있다."""
+    code, why = unit_failure_cause("단위 차원 미확정: KOSIS=, claim=억달러")
+    assert code == "UNIT_KOSIS_MISSING" and "메타 폴백" in why
+
+
+def test_currency_mismatch_needs_exchange_rate():
+    """1006조원 vs 달러 표 — 환율 없이는 비교가 불가능하다."""
+    code, why = unit_failure_cause(
+        "단위 불일치: KOSIS=천달러(currency/USD), claim=조원(currency/KRW)")
+    assert code == "UNIT_CURRENCY_MISMATCH" and "환율" in why
+
+
+def test_dimension_conflict_points_at_wrong_coordinate():
+    """금액 표에 개수 주장을 붙인 것 — 단위가 아니라 좌표가 틀렸다."""
+    code, why = unit_failure_cause(
+        "단위 불일치: KOSIS=천달러(currency/USD), claim=대(count/대)")
+    assert code == "UNIT_DIMENSION_CONFLICT" and "좌표" in why
+
+
+def test_unparseable_reason_falls_back():
+    code, _ = unit_failure_cause("단위 뭔가 이상함")
+    assert code == "UNIT_UNCONVERTIBLE"
+
+
+def test_currency_mismatch_is_not_our_bug():
+    """환율 문제를 '고치면 된다' 로 세면 안 된다 — 우리가 못 고친다."""
+    assert "UNIT_CURRENCY_MISMATCH" not in FIXABLE
+    assert "UNIT_KOSIS_MISSING" in FIXABLE

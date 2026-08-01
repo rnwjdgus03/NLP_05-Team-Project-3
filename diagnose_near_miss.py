@@ -42,7 +42,10 @@ SCALE_TOLERANCE = 0.02
 SMALL_GAP_PCT = 10.0
 
 # 우리 쪽을 고치면 비교가 가능해지는 원인들(좌표 문제가 아니다).
-FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH", "UNIT_UNCONVERTIBLE"}
+# UNIT_CURRENCY_MISMATCH 는 환율이 필요해 우리가 못 고친다 → 게이트 대상.
+# UNIT_DIMENSION_CONFLICT 는 좌표가 틀린 것이라 여기 넣지 않는다.
+FIXABLE = {"SIGN_MISMATCH", "SCALE_MISMATCH",
+           "UNIT_KOSIS_MISSING", "UNIT_UNCONVERTIBLE"}
 
 
 def text(value) -> str:
@@ -83,6 +86,43 @@ def display_ulp(raw: str) -> float:
     return 1.0
 
 
+# `unit_factor` 가 남기는 두 가지 실패 메시지. 원인이 달라 처방도 다르다.
+UNIT_UNKNOWN_MSG = re.compile(r"단위 차원 미확정:\s*KOSIS=([^,]*),\s*claim=(.*?)(?:\)|$|/)")
+UNIT_CONFLICT_MSG = re.compile(r"단위 불일치:\s*KOSIS=([^(]*)\(([^)]*)\),\s*claim=([^(]*)\(([^)]*)\)")
+
+
+def unit_failure_cause(reason: str) -> tuple[str, str]:
+    """단위 실패를 세 갈래로 가른다 — 처방이 전부 다르기 때문이다.
+
+    UNIT_KOSIS_MISSING     KOSIS 쪽 단위가 비어 있다 → 메타 스냅샷 폴백으로 회수 가능
+    UNIT_CURRENCY_MISMATCH 통화가 다르다(원 vs 달러) → 환율 없이는 불가. 게이트 대상
+    UNIT_DIMENSION_CONFLICT 차원이 다르다(금액 vs 개수) → 좌표가 틀렸을 가능성
+    """
+    unknown = UNIT_UNKNOWN_MSG.search(reason)
+    if unknown:
+        kosis_unit, claim_unit = unknown.group(1).strip(), unknown.group(2).strip()
+        if not kosis_unit or kosis_unit in {"-", "None"}:
+            return ("UNIT_KOSIS_MISSING",
+                    f"KOSIS 단위가 비어 변환 불가 (claim={claim_unit}) — 메타 폴백으로 회수 가능")
+        return ("UNIT_CLAIM_MISSING",
+                f"기사 단위를 해석 못 함 (KOSIS={kosis_unit}, claim={claim_unit})")
+
+    conflict = UNIT_CONFLICT_MSG.search(reason)
+    if conflict:
+        k_unit, k_spec, c_unit, c_spec = (g.strip() for g in conflict.groups())
+        k_family = k_spec.split("/")[-1]
+        c_family = c_spec.split("/")[-1]
+        k_dim = k_spec.split("/")[0]
+        c_dim = c_spec.split("/")[0]
+        if k_dim == c_dim and k_family != c_family:
+            return ("UNIT_CURRENCY_MISMATCH",
+                    f"통화가 다름 ({k_family} vs {c_family}) — 환율 없이는 비교 불가")
+        return ("UNIT_DIMENSION_CONFLICT",
+                f"단위 차원이 다름 ({k_dim} vs {c_dim}) — 좌표가 틀렸을 가능성")
+
+    return "UNIT_UNCONVERTIBLE", "단위를 변환하지 못해 값 비교 자체가 불가"
+
+
 def no_value_cause(row) -> tuple[str, str]:
     """KOSIS 값이 비어 비교 자체를 못 한 경우의 원인을 verdict 기록에서 읽는다.
 
@@ -91,9 +131,8 @@ def no_value_cause(row) -> tuple[str, str]:
     """
     code = text(row.get("verdict_code"))
     reason = text(row.get("verdict_reason"))
-    if code == "UNIT_UNCERTAIN" or "단위 비호환" in reason:
-        return ("UNIT_UNCONVERTIBLE",
-                "단위를 변환하지 못해 값 비교 자체가 불가 — 좌표 문제가 아니다")
+    if code == "UNIT_UNCERTAIN" or "단위 비호환" in reason or "단위" in reason:
+        return unit_failure_cause(reason)
     if "조회 데이터 없음" in reason or code == "ACTUAL_DERIVATION_FAILED":
         return "NO_DATA_IN_PERIOD", "해당 시점 데이터가 없음"
     return "NO_VALUE_OTHER", f"값 없음 ({code or '사유 미기록'})"
@@ -182,6 +221,8 @@ def diagnose(silver_rows, review_rows) -> list[dict]:
             "selected_obj_l1": text(row.get("selected_obj_l1")),
             "mapping_type": text(row.get("mapping_type")),
             "candidates_examined": len(grouped[mid]),
+            "claim_unit": text(row.get("unit")),
+            "verdict_reason": text(row.get("verdict_reason"))[:160],
             "claim_text": text(row.get("claim_text"))[:110],
         })
     return out
@@ -213,7 +254,9 @@ def main() -> None:
     print("  (UNIT_UNCONVERTIBLE / SIGN_MISMATCH / SCALE_MISMATCH — 좌표 문제가 아님)")
     print("DISPLAY_ROUNDING 은 판정 허용오차를 재검토하면 승격 후보다.")
 
-    for cause in ("UNIT_UNCONVERTIBLE", "SIGN_MISMATCH", "SCALE_MISMATCH",
+    for cause in ("UNIT_KOSIS_MISSING", "UNIT_CURRENCY_MISMATCH",
+              "UNIT_DIMENSION_CONFLICT", "UNIT_CLAIM_MISSING",
+              "UNIT_UNCONVERTIBLE", "SIGN_MISMATCH", "SCALE_MISMATCH",
               "DISPLAY_ROUNDING"):
         picked = [r for r in rows if r["cause"] == cause]
         if not picked:
