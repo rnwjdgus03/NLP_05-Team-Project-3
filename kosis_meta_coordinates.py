@@ -31,11 +31,57 @@ MAX_AXIS = 8
 # 축이 많은 표에서 조합 폭발을 막기 위한 축별 상한 (집계값 우선 정렬 후 상위 N개).
 DEFAULT_AXIS_VALUE_LIMIT = 40
 DEFAULT_MAX_COORDINATES_PER_TABLE = 4000
+# 좌표 생성 시 축 상한(DEFAULT_AXIS_VALUE_LIMIT)을 적용해도 집계값이 살아남게 하는 목록.
+# 여기를 바꾸면 어떤 좌표가 인덱스에 들어가는지가 바뀌므로 Chroma 인덱스를 재빌드해야 한다.
+# 그래서 아래 AGGREGATE_OBJ_NAMES(순위·판정용)와 일부러 분리해 둔다.
 AGGREGATE_NAMES = ("계", "전체", "총계", "총액", "전국", "합계")
+
+# 순위·판정에서 '이 좌표가 집계값인가'를 볼 때 쓰는 정식 목록.
+# 2026-08-02 이전에는 kosis_meta_coordinates 와 kosis_validate_mapping_candidates 에
+# 서로 다른 목록이 각각 있었다. 여기로 모은다.
+# '총지수'는 추측이 아니라 실측으로 추가했다 — 골드 정답이 T10(총지수)인데
+# 집계로 인정받지 못해 빈 축 후보에 밀린 사례가 있었다.
+AGGREGATE_OBJ_NAMES = ("계", "전체", "총계", "합계", "총액", "전국",
+                       "소계", "평균", "전산업", "총지수")
+
+# 주장이 세부 대상을 특정하지 않았음을 뜻하는 값들.
+AGGREGATE_ITEM_TOKENS = frozenset({"", "-", "전체", "총계", "합계", "총액"})
 
 
 def _text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def normalize_obj_name(value: Any) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", str(value or "")).lower()
+
+
+_AGGREGATE_NORMALIZED = frozenset(normalize_obj_name(n) for n in AGGREGATE_OBJ_NAMES)
+
+
+def is_aggregate_name(value: Any) -> bool:
+    """이름이 집계축을 가리키는가.
+
+    완전일치만 인정한다. '전산업생산지수'는 '전산업'으로 시작하지만 별개의 지표이고,
+    접두·접미 매칭을 허용하면 이런 것까지 집계로 오인한다.
+    반대로 '원화대출금(계)'처럼 실제 집계인데 놓치는 건이 실측으로 확인됐다 —
+    확대 여부는 별도 측정 후 결정한다.
+    """
+    return normalize_obj_name(value) in _AGGREGATE_NORMALIZED
+
+
+def metadata_is_aggregate(metadata: Mapping[str, Any] | None, max_level: int = 3) -> bool:
+    """좌표의 분류축이 전부 집계인가 (축 이름이 하나도 없으면 집계로 본다)."""
+    names = [_text((metadata or {}).get(f"obj_l{level}_name"))
+             for level in range(1, max_level + 1)]
+    names = [name for name in names if name]
+    return all(is_aggregate_name(name) for name in names) if names else True
+
+
+def claim_specifies_target(claim: Mapping[str, Any] | None) -> bool:
+    """주장이 세부 대상(품목·업종 등)을 특정했는가."""
+    item = _first(claim or {}, "industry_or_item", "measurement_item")
+    return bool(normalize_obj_name(item)) and item not in AGGREGATE_ITEM_TOKENS
 
 
 def _first(row: Mapping[str, Any], *names: str, default: str = "") -> str:

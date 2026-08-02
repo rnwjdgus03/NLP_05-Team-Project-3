@@ -59,16 +59,15 @@ def test_original_order_kept_when_not_preferring():
     assert aggregate_first(rows, prefer_aggregate=False)[0]["selected_obj_l1"] == "41"
 
 
-def test_known_gap_total_index_is_not_recognised_as_aggregate():
-    """실측으로 드러난 구멍을 문서화한다.
+def test_total_index_gap_is_closed():
+    """이 테스트는 원래 '구멍'을 기록하던 것이고, 지금은 닫혔음을 지킨다.
 
-    소비자물가지수의 집계 축 이름은 '총지수' 인데 AGGREGATE_OBJ_NAMES 에 없다.
-    → 집계 우선 규칙이 이 표에서는 아예 작동하지 않는다.
-    이름 목록을 넓히는 건 진단 결과(어떤 이름이 실제로 많이 나오는지)를 보고 결정한다.
-    지금 추측으로 넓히면 오늘 여섯 번 틀린 방식을 반복하는 것이다.
+    소비자물가지수의 집계 축 이름은 '총지수' 인데 목록에 없어서
+    골드 정답 T10 이 집계로 인정받지 못하고 빈 축 후보에 밀렸다(실측).
+    추측이 아니라 그 실패 사례를 근거로 정식 목록에 넣었다.
     """
     rows = [_cand(1, "41", "자가주거비"), _cand(2, "T10", "총지수")]
-    assert aggregate_first(rows, prefer_aggregate=True)[0]["selected_obj_l1"] == "41"
+    assert aggregate_first(rows, prefer_aggregate=True)[0]["selected_obj_l1"] == "T10"
 
 
 def test_rank_breaks_ties_within_the_same_group():

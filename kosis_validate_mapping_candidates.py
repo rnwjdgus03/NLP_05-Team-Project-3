@@ -806,9 +806,14 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
     return ""
 
 
-AGGREGATE_ITEM_TOKENS = {"", "-", "전체", "총계", "합계", "총액"}
-# 좌표의 분류축이 '집계'임을 나타내는 이름들
-AGGREGATE_OBJ_NAMES = ("계", "전체", "총계", "합계", "총액", "전국", "소계", "평균", "전산업")
+# 2026-08-02: 같은 개념의 목록이 이 파일과 kosis_meta_coordinates 에 따로 있었고
+# 내용이 달랐다(6개 vs 9개). 정식 목록 한 곳에서 가져온다.
+# 이때 '총지수'가 새로 들어온다 — 골드 정답이 T10(총지수)인데 집계로 인정받지 못해
+# 밀린 실측 사례가 근거다. 자동 확정 건수가 바뀔 수 있으므로 반드시 재측정할 것.
+from kosis_meta_coordinates import (  # noqa: E402
+    AGGREGATE_ITEM_TOKENS,
+    AGGREGATE_OBJ_NAMES,
+)
 
 
 def _normalize(value: Any) -> str:

@@ -33,8 +33,10 @@ from kosis_meta_coordinates import (
     build_coordinate_query,
     build_coordinates,
     claim_prd_se,
+    claim_specifies_target,
     coordinate_document,
     coordinate_metadata,
+    metadata_is_aggregate,
     passes_hard_filter,
     prd_se_compatible,
     read_csv_rows,
@@ -348,7 +350,26 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
     for candidate in fused:
         candidate["prd_se_match"] = prd_se_compatible(
             wanted_prd_se, (candidate.get("metadata") or {}).get("prd_se", ""))
-    fused.sort(key=lambda c: (0 if c["prd_se_match"] else 1, -c["final_rank_score"]))
+
+    # 주장이 세부 대상을 말하지 않으면 좌표도 집계여야 한다.
+    # 이 규칙은 2026-07-31 부터 READY 확정 게이트에만 있었고 순위에는 없었다.
+    # 그래서 세부 분류가 1위로 올라온 뒤에야 탈락했다.
+    #
+    # 실측(잠근 125건, 대상 미특정 46건): 같은 축에 집계 코드가 있는데도
+    #   C(리랭커)는 32건에서 세부를 골랐고, A(빌드 순서 유지)는 8건뿐이었다.
+    #   리랭커가 build_coordinates 의 집계 우선 정렬을 의미 유사도로 덮어쓴다.
+    #   '계'보다 세부 분류 이름이 주장 문장과 더 비슷해 보이기 때문이다.
+    #
+    # prd_se 와 마찬가지로 점수를 곱해 깎지 않는다(리랭커 로짓은 음수가 될 수 있다).
+    # 정렬 키로만 쓰고, 주기 일치를 앞에 둔다 — 기간 불일치가 더 강한 제약이다.
+    prefer_aggregate = not claim_specifies_target(claim)
+    for candidate in fused:
+        candidate["obj_aggregate"] = metadata_is_aggregate(candidate.get("metadata"))
+    fused.sort(key=lambda c: (
+        0 if c["prd_se_match"] else 1,
+        0 if (not prefer_aggregate or c["obj_aggregate"]) else 1,
+        -c["final_rank_score"],
+    ))
 
     stats = {
         "query": query,
@@ -356,6 +377,9 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         "lexical_count": len(lexical),
         "fused_count": len(fused),
         "prd_se_demoted": sum(1 for c in fused if not c["prd_se_match"]),
+        "prefer_aggregate": prefer_aggregate,
+        "aggregate_promoted": (sum(1 for c in fused if not c["obj_aggregate"])
+                               if prefer_aggregate else 0),
         "search_seconds": search_seconds,
         "rerank_seconds": rerank_seconds,
     }
