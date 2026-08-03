@@ -130,6 +130,20 @@ def test_wrong_coordinate_bucket_is_a_system_gap():
     assert BUCKETS["COORDINATE_RETURNS_NOTHING"][0] == SYSTEM_GAP
 
 
+def test_api_error_warning_exists():
+    """한 실행의 숫자를 기록하면 노이즈를 성능으로 착각한다.
+
+    실측: 같은 입력으로 두 번 돌렸더니 API_ERROR 48행(measurement 8개) -> 0,
+    확정 11 -> 12. 재시도·백오프가 있는데도 그렇다.
+    """
+    import inspect
+
+    import report_coverage
+    text = inspect.getsource(report_coverage.main)
+    assert "이 숫자를 기록하지 말 것" in text
+    assert "api_errors" in text
+
+
 def test_every_bucket_has_a_group_and_description():
     for bucket, (group, description) in BUCKETS.items():
         assert group in {CONFIRMED, UNVERIFIABLE, SYSTEM_GAP}

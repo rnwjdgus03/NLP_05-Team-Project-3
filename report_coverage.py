@@ -148,6 +148,12 @@ def main() -> None:
                        "group": BUCKETS[bucket][0],
                        "claim_text": text(claim.get("claim_text"))[:100]})
 
+    # 2026-08-02: 같은 입력으로 두 번 돌렸더니 API_ERROR 48행(measurement 8개) → 0 이었고
+    # 확정이 11 → 12 로 바뀌었다. 재시도·백오프가 있는데도 한 실행에서 실패가 남는다.
+    # 이 상태의 숫자를 기록하면 노이즈를 성능으로 착각한다.
+    api_errors = {mid for mid, rows in grouped.items()
+                  if any(text(r.get("mapping_status")) == "API_ERROR" for r in rows)}
+
     total = len(claims)
     by_group = Counter()
     for bucket, n in counts.items():
@@ -173,6 +179,11 @@ def main() -> None:
     print("  가능 기준  — 답할 수 있는 문제에서 시스템이 얼마나 하는가")
     print("어느 하나만 쓰면 유리한 쪽을 고른 것이 된다.")
     print(f"\n고칠 여지가 있는 것(시스템 한계): {by_group[SYSTEM_GAP]}건")
+    if api_errors:
+        print(f"\n[경고] KOSIS 조회에 실패한 measurement 가 {len(api_errors)}건 있다.")
+        print("       이 숫자를 기록하지 말 것 — 같은 입력으로 다시 돌리면 달라진다.")
+        print("       실측: API_ERROR 48행 -> 0, 확정 11 -> 12 (재시도·백오프가 있는데도 그렇다).")
+        print("       validate 를 한 번 더 돌린 뒤 다시 집계할 것.")
     if not args.probe:
         print("\n[주의] --probe 를 주지 않았다. 빈 응답 좌표를 전부 '확인 불가'로 세고 있어")
         print("       확인 가능 기준 확정률이 부풀려진다. 실측에서 그런 24건 중")
