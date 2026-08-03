@@ -450,6 +450,11 @@ def main() -> None:
             embedding_model=args.embedding_model, device=args.device,
         )
         print(f"retrieval=chroma_hybrid manifest={searcher.manifest.get('embedding_model')}")
+        # 어느 인덱스로 뽑은 후보인지 남긴다. 같은 입력으로 재빌드해도 임베딩이
+        # 미세하게 달라져 recall 이 ±1건 흔들린 적이 있다(2026-08-02 실측).
+        # A/B 비교를 할 때 이 지문이 같은지부터 확인해야 한다.
+        print(f"index_fingerprint={searcher.manifest.get('embedding_fingerprint', '(없음)')}"
+              f" rounded={searcher.manifest.get('embedding_fingerprint_rounded', '(없음)')}")
 
     reranker = None
     if not args.no_reranker and not args.meta_index:

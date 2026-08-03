@@ -18,9 +18,12 @@ embedding 은 BGE-M3 로 **미리 계산해서 직접 저장**한다. Chroma 의
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+
+import numpy as np
 
 from kosis_meta_coordinates import (
     SCHEMA_VERSION,
@@ -67,6 +70,25 @@ def build_documents(meta_rows, *, axis_value_limit, max_coordinates_per_table,
         documents.append(coordinate_document(coordinate))
         metadatas.append(coordinate_metadata(coordinate))
     return ids, documents, metadatas
+
+
+def embedding_fingerprint(ids, vectors, decimals: int = 6) -> tuple[str, str]:
+    """임베딩의 지문 두 개. (원본, 반올림)
+
+    두 지문을 함께 남기는 이유:
+      원본만 다르고 반올림이 같다  → 부동소수점 오차. 좌표 자체는 동일하다.
+      둘 다 다르다                 → 입력이나 모델이 실제로 바뀌었다.
+    이 구분이 없으면 '재빌드했는데 결과가 달라졌다'의 원인을 짚을 수 없다(실측).
+    """
+    raw = hashlib.sha256()
+    rounded = hashlib.sha256()
+    for key, vector in sorted(zip(ids, vectors), key=lambda pair: pair[0]):
+        raw.update(key.encode("utf-8"))
+        rounded.update(key.encode("utf-8"))
+        array = np.asarray(vector, dtype=np.float32)
+        raw.update(array.tobytes())
+        rounded.update(np.round(array, decimals).tobytes())
+    return raw.hexdigest()[:32], rounded.hexdigest()[:32]
 
 
 def write_manifest(persist_dir: Path, payload: dict) -> Path:
@@ -142,6 +164,7 @@ def main() -> None:
             embeddings=[v.tolist() for v in vectors[start:stop]],
         )
 
+    raw_fp, rounded_fp = embedding_fingerprint(ids, vectors)
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "embedding_model": args.embedding_model,
@@ -150,6 +173,11 @@ def main() -> None:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source_meta_file": str(args.meta_index),
         "source_meta_sha256": file_sha256(args.meta_index),
+        # 2026-08-02: 같은 입력으로 재빌드했는데 골드 recall 이 ±1건 흔들렸다.
+        # source_meta_sha256 과 document_count 는 양쪽 다 같아서 원인을 못 짚었다.
+        # 임베딩 자체를 지문으로 남겨 '인덱스가 정말 같은가'를 사후 확인 가능하게 한다.
+        "embedding_fingerprint": raw_fp,
+        "embedding_fingerprint_rounded": rounded_fp,
         "document_count": len(ids),
         "collection": args.collection,
         "axis_value_limit": args.axis_value_limit,
