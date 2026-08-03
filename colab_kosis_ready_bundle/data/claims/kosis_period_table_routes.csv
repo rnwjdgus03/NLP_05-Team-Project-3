@@ -1,0 +1,4 @@
+enabled,series_group,indicator_regex,item_regex,period_start,period_end,org_id,tbl_id,tbl_name_contains,route_status,mapping_basis,definition_note
+Y,robot_import,로봇.*수입|수입.*로봇,로봇|로봇단품|로봇부품|부품,2007,2012,,,로봇단품 및 부품 수입현황,PROVISIONAL_PERIOD_ROUTED,2007-2012 KOSIS 표명이 로봇단품 및 부품 수입현황으로 분리되어 있어 기간 기준으로 후보 표를 우선 주입,표명 개편 전후 조사대상·분류·단위 동일성은 최종 API/메타 검증 및 사람 승인 필요
+Y,robot_import,로봇.*수입|수입.*로봇,로봇|로봇단품|로봇부품|부품|국가,2013,2018,,,로봇 단품 및 부품 국가별 수입 현황,PROVISIONAL_PERIOD_ROUTED,2013-2018 KOSIS 표명이 로봇 단품 및 부품 국가별 수입 현황으로 분리되어 있어 기간 기준으로 후보 표를 우선 주입,표명 개편 전후 조사대상·분류·단위 동일성은 최종 API/메타 검증 및 사람 승인 필요
+Y,robot_import,로봇.*수입|수입.*로봇,로봇|로봇산업,2019,2024,,,로봇산업 수입 현황,PROVISIONAL_PERIOD_ROUTED,2019-2024 KOSIS 표명이 로봇산업 수입 현황으로 분리되어 있어 기간 기준으로 후보 표를 우선 주입,표명 개편 전후 조사대상·분류·단위 동일성은 최종 API/메타 검증 및 사람 승인 필요

@@ -264,8 +264,11 @@ def entity_type(row: dict) -> str:
 def comparison_period(row: dict, semantic: str) -> str:
     if semantic not in {"rate_change", "absolute_change"}:
         return ""
+    existing = nz(row.get("comparison_period"))
+    if existing:
+        return existing
     target = nz(row.get("measurement_period"))
-    target_match = re.search(r"(?:19|20)\d{2}(?:0[1-9]|1[0-2])?", target)
+    target_match = re.search(r"(?:19|20)\d{2}(?:Q[1-4]|0[1-9]|1[0-2])?", target, flags=re.IGNORECASE)
     target_value = target_match.group() if target_match else ""
     text = nz(row.get("claim_text"))
 
@@ -281,9 +284,18 @@ def comparison_period(row: dict, semantic: str) -> str:
 
     base = nz(row.get("change_base"))
     if target_value and "전년" in base:
+        q_match = re.fullmatch(r"((?:19|20)\d{2})Q([1-4])", target_value, flags=re.IGNORECASE)
+        if q_match:
+            return f"{int(q_match.group(1)) - 1}Q{q_match.group(2)}"
         if len(target_value) == 6:
             return str(int(target_value[:4]) - 1) + target_value[4:]
         return str(int(target_value[:4]) - 1)
+    q_match = re.fullmatch(r"((?:19|20)\d{2})Q([1-4])", target_value, flags=re.IGNORECASE)
+    if q_match and "전분기" in base:
+        year, quarter = int(q_match.group(1)), int(q_match.group(2))
+        if quarter == 1:
+            return f"{year - 1}Q4"
+        return f"{year}Q{quarter - 1}"
     if len(target_value) == 6 and "전월" in base:
         year, month = int(target_value[:4]), int(target_value[4:])
         if month == 1:

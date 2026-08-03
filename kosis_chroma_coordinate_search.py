@@ -273,6 +273,22 @@ def _metadata_filter(row: Mapping[str, Any], *, tbl_ids: set[str], claim: Mappin
     return True
 
 
+def _chroma_where(conditions: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Build a ChromaDB-compatible where filter.
+
+    Recent ChromaDB versions reject multiple top-level field predicates such as
+    {"tbl_id": ..., "prd_se": ...}.  Multiple predicates must be wrapped in
+    {"$and": [...]}.  We still keep the Python-side _metadata_filter after the
+    dense query, so this filter is only a performance/hard-filter hint.
+    """
+    cleaned = {key: value for key, value in conditions.items() if value not in (None, "", [])}
+    if not cleaned:
+        return None
+    if len(cleaned) == 1:
+        return cleaned
+    return {"$and": [{key: value} for key, value in cleaned.items()]}
+
+
 def lexical_coordinate_search(
     documents: Sequence[Mapping[str, Any]], query: str, *, top_k: int = 50,
     tbl_ids: set[str] | None = None, claim: Mapping[str, Any] | None = None,
@@ -317,21 +333,21 @@ class CoordinateSearchRuntime:
 
     def dense_search(self, query: str, *, top_k: int = 50, tbl_ids: set[str] | None = None,
                      claim: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
-        where: dict[str, Any] = {}
+        where_conditions: dict[str, Any] = {}
         if tbl_ids:
-            where["tbl_id"] = {"$in": sorted(tbl_ids)}
+            where_conditions["tbl_id"] = {"$in": sorted(tbl_ids)}
         if claim:
             prd_se = _first(claim, "measurement_prd_se", "prd_se")
             unit_dimension = _first(claim, "unit_dimension")
             if prd_se:
-                where["prd_se"] = prd_se
+                where_conditions["prd_se"] = prd_se
             if unit_dimension:
-                where["unit_dimension"] = unit_dimension
+                where_conditions["unit_dimension"] = unit_dimension
         vector = self.embedder.encode([query])[0].tolist()
         result = self.collection.query(
             query_embeddings=[vector],
             n_results=top_k,
-            where=where or None,
+            where=_chroma_where(where_conditions),
             include=["documents", "metadatas", "distances"],
         )
         hits = []

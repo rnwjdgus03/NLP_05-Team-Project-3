@@ -60,6 +60,13 @@ DOMAIN_HINTS = {
     "항공": ["교통", "항공", "여객", "운송"],
     "여객": ["교통", "항공", "여객", "운송"],
     "로봇": ["로봇", "산업", "제조업"],
+    "자동차": ["자동차", "차량", "교통", "등록"],
+    "완성차": ["자동차", "차량", "교통", "등록"],
+    "전기차": ["전기자동차", "친환경자동차", "자동차", "교통"],
+    "산업활동": ["산업활동", "전산업생산", "생산지수", "광공업생산"],
+    "환율": ["환율", "외환"],
+    "부업": ["부업", "취업", "경제활동"],
+    "증권": ["증권", "주가지수", "코스피", "코스닥", "PBR"],
 }
 
 DOMAIN_FILTERS = {
@@ -74,6 +81,13 @@ DOMAIN_FILTERS = {
     "항공": ["교통", "항공", "여객", "운송"],
     "여객": ["교통", "항공", "여객", "운송"],
     "로봇": ["로봇"],
+    "자동차": ["자동차", "차량", "교통"],
+    "완성차": ["자동차", "차량", "교통"],
+    "전기차": ["전기자동차", "친환경자동차", "자동차"],
+    "산업활동": ["산업활동", "생산지수", "전산업생산", "광공업생산"],
+    "환율": ["환율"],
+    "부업": ["부업", "취업", "경제활동"],
+    "증권": ["증권", "주가지수", "코스피", "코스닥", "PBR"],
 }
 
 TOKEN_EXPANSIONS = {
@@ -92,6 +106,15 @@ TOKEN_EXPANSIONS = {
     "석유화학": ["석유", "화학", "화학제품"],
     "바이오헬스": ["의약품", "의료용품", "바이오"],
     "농수산식품": ["식품", "농산물", "수산", "어류"],
+    "산업활동지수": ["산업활동지수", "전산업생산지수", "생산지수", "광공업생산지수"],
+    "생산지수": ["산업활동지수", "전산업생산지수", "광공업생산지수"],
+    "정비사": ["항공사별통계", "항공사별", "항공정비", "정비사"],
+    "저비용항공사": ["LCC", "저비용항공사", "항공사별통계", "항공사별"],
+    "대형항공사": ["대한항공", "아시아나항공", "항공사별통계", "항공사별"],
+    "부업자": ["부업", "취업자", "경제활동인구"],
+    "환율": ["환율", "원달러", "외환"],
+    "할인율": ["PBR", "주가순자산비율", "코리아디스카운트", "증권"],
+    "전기차": ["전기자동차", "친환경자동차", "자동차"],
     "최저임금": ["임금", "노동", "근로"],
     "무역집중도": ["무역집중도", "기업특성별무역통계", "상위기업", "교역액"],
     "상위기업": ["무역집중도", "기업특성별무역통계", "교역액"],
@@ -117,7 +140,28 @@ ITEM_FAMILIES = {
     "농수산식품": ["농수산", "농산물", "수산물", "식품", "K푸드"],
     "석유화학": ["석유화학", "화학제품"],
     "선박": ["선박", "보트", "부유구조물"],
+    "전기차": ["전기차", "전기자동차", "친환경자동차"],
+    "완성차": ["완성차", "자동차", "차량"],
 }
+
+MISSING_VALUES = {"", "-", "–", "—", "nan", "none", "null", "n/a"}
+
+ITEM_ALIASES_FROM_TEXT = [
+    ("반도체", ("반도체", "메모리반도체", "전자집적회로", "메모리")),
+    ("전기차", ("전기차", "전기자동차", "EV")),
+    ("완성차", ("완성차", "국내판매", "해외판매")),
+    ("자동차", ("자동차", "차량")),
+    ("조선업", ("조선업", "선박", "고부가선박")),
+    ("석유화학", ("석유화학", "화학공업품")),
+    ("바이오헬스", ("바이오헬스", "의약품", "의료용품")),
+    ("농수산식품", ("농수산식품", "농산물", "수산물", "식품")),
+    ("화장품", ("화장품", "K뷰티")),
+    ("LCC", ("LCC", "저비용항공사", "제주항공", "진에어", "티웨이", "에어부산", "에어서울", "이스타")),
+    ("대형항공사", ("대형항공사", "대한항공", "아시아나항공")),
+    ("대형마트", ("대형마트",)),
+    ("중소기업", ("중소기업",)),
+    ("현대차", ("현대차", "현대자동차")),
+]
 
 
 def read_csv(path: Path):
@@ -150,16 +194,40 @@ def get_first(row, *keys):
     return ""
 
 
+def is_missing_value(value):
+    return compact(value).lower() in MISSING_VALUES
+
+
+def infer_item_from_text(row):
+    text = compact(" ".join(
+        str(row.get(key, ""))
+        for key in (
+            "measurement_item", "industry_or_item", "measurement_indicator",
+            "indicator", "keywords", "claim_text", "evidence_text",
+            "prev_sentence", "prev_prev_sentence", "next_sentence",
+        )
+    ))
+    for canonical, aliases in ITEM_ALIASES_FROM_TEXT:
+        if any(compact(alias) in text for alias in aliases):
+            return canonical
+    return ""
+
+
 def normalized_claim_row(row):
     """A팀/HCX 파일마다 다른 컬럼명을 후보 매칭용 표준명으로 맞춘다."""
+    if row.get("_normalized_claim") == "Y":
+        return row
     if any(key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")):
         row = normalize_mapping_row(row)
+    item = get_first(row, "measurement_item", "industry_or_item", "품목", "산업", "대상")
+    if is_missing_value(item):
+        item = infer_item_from_text(row)
     return {
         "claim_id": get_first(row, "claim_id", "claimId", "id"),
         "claim_measurement_id": get_first(row, "claim_measurement_id", "measurement_id"),
         "indicator": get_first(row, "measurement_indicator", "indicator", "지표"),
         "metric_domain": get_first(row, "metric_domain", "도메인", "검색 구분 레이블"),
-        "industry_or_item": get_first(row, "measurement_item", "industry_or_item", "품목", "산업", "대상"),
+        "industry_or_item": item,
         "keywords": get_first(row, "keywords", "키워드"),
         "region": get_first(row, "region", "지역"),
         "age_group": get_first(row, "age_group", "연령"),
@@ -184,6 +252,7 @@ def normalized_claim_row(row):
         "change_base": get_first(row, "change_base"),
         "comparison_period": get_first(row, "comparison_period"),
         "claim_text": get_first(row, "claim_text", "문장", "sentence", "evidence_text"),
+        "_normalized_claim": "Y",
     }
 
 
@@ -421,8 +490,14 @@ def measurement_anchors(claim):
     compact_source = compact(source)
     for canonical, variants in {
         "로봇": ("로봇", "로봇화"),
-        "항공": ("항공", "국제선", "LCC", "저비용항공사", "대형항공사"),
+        "항공": ("항공", "국제선", "LCC", "저비용항공사", "대형항공사", "항공사"),
         "여객": ("여객", "이용객"),
+        "산업활동": ("산업활동", "생산지수", "전산업생산", "광공업생산"),
+        "정비사": ("정비사", "항공정비"),
+        "자동차": ("완성차", "전기차", "자동차", "차량"),
+        "환율": ("환율", "원달러", "원화환율"),
+        "증권": ("할인율", "코스피", "코스닥", "PBR"),
+        "부업": ("부업", "부업자"),
     }.items():
         if any(compact(variant) in compact_source for variant in variants):
             anchors.append(canonical)
@@ -494,8 +569,9 @@ def score_table(row, tokens, claim):
         f"{focused_text} {norm_claim.get('claim_text', '')}"
     )
     table_id = row.get("tbl_id", "")
+    is_balance_claim = any(token in indicator_text for token in ("무역수지", "흑자", "적자"))
     is_trade_claim = any(
-        token in indicator_text for token in ("수출", "수입", "무역수지")
+        token in indicator_text for token in ("수출", "수입", "무역수지", "흑자", "적자")
     )
 
     # Gold-set 분석에서 반복 확인된 KOSIS 표명 힌트.
@@ -559,13 +635,13 @@ def score_table(row, tokens, claim):
         )
         if domestic_or_import_only:
             return -10**9, []
-    if "무역수지" in indicator_text and not any(
+    if is_balance_claim and not any(
         token in table_text
         for token in ("무역수지", "품목별수출액", "품목별수입액", "국제수지")
     ):
         return -10**9, []
     generic_trade_balance = (
-        "무역수지" in indicator_text
+        is_balance_claim
         and compact(norm_claim.get("industry_or_item")) in {"", "-"}
     )
     if generic_trade_balance:
@@ -585,13 +661,55 @@ def score_table(row, tokens, claim):
             for scope in narrow_scopes
         ):
             return -10**9, []
-    if any(token in indicator_text for token in ("국제선여객", "LCC", "대형항공사")):
+    if any(token in claim_scope_text for token in ("국제선여객", "LCC", "저비용항공사", "대형항공사", "항공사이용객")):
         if any(token in table_text for token in ("지역간통행량", "국가교통조사")):
             return -10**9, []
     if "정비사" in indicator_text and any(
         token in table_text for token in ("부족인원", "부족률")
     ):
         return -10**9, []
+    if "정비사" in indicator_text:
+        if any(token in table_text for token in ("정비사업", "농업생산기반정비", "주거환경개선사업")):
+            return -10**9, []
+        if "항공사별통계" in table_text:
+            score += 520
+
+    if any(token in indicator_text for token in ("산업활동지수", "생산지수")):
+        if table_id in {"DT_1JH20201", "DT_1JH20202"} or any(
+            token in table_text for token in ("전산업생산지수", "광공업생산지수", "서비스업생산지수")
+        ):
+            score += 640
+        if any(token in table_text for token in ("활동제약", "사회활동", "봉사활동")):
+            return -10**9, []
+
+    if "환율" in indicator_text:
+        if any(token in table_text for token in ("전환율", "이환율", "원화결제", "원화대출", "하도급", "단가", "PB제품")):
+            return -10**9, []
+        if "환율" not in table_text:
+            return -10**9, []
+
+    if "할인율" in indicator_text:
+        if any(token in table_text for token in ("PBR", "주가순자산비율", "코스피", "코스닥", "상장")):
+            score += 360
+        elif not any(token in table_text for token in ("증권", "주식", "주가")):
+            return -10**9, []
+
+    if any(token in indicator_text for token in ("완성차판매량", "전기차판매량")):
+        if any(token in table_text for token in ("범죄예방", "개인정보", "앱수용도", "수용도")):
+            return -10**9, []
+        if "등록" in table_text and "등록" not in indicator_text:
+            return -10**9, []
+        if not any(token in table_text for token in ("판매", "출고")):
+            return -10**9, []
+        if any(token in table_text for token in ("자동차등록", "전기자동차", "친환경자동차")):
+            score += 240
+
+    if "부업자" in indicator_text:
+        if any(token in table_text for token in ("생활시간", "여가시간", "근무시간", "수행여부", "의향", "만족도", "세부업무", "장애인", "희망고용형태")):
+            return -10**9, []
+        if "부업자" not in table_text:
+            return -10**9, []
+        score += 280
 
     period_match = re.search(r"(?:19|20)\d{2}", str(norm_claim.get("period") or ""))
     archived_match = re.search(r"_((?:19|20)\d{2})$", row.get("tbl_id", ""))
@@ -636,7 +754,7 @@ def score_table(row, tokens, claim):
         elif entity == "organization" and any(token in table_text for token in ("수입현황", "생산현황", "출하현황", "인력현황")):
             score -= 180
 
-    if "항공" in measurement_anchors(norm_claim):
+    if "항공" in anchors:
         if any(token in table_text for token in ("수상여객", "철도여객", "도로여객")):
             return -10**9, []
     score += table_year_penalty(f"{row['tbl_name']} {row['category_path']}", norm_claim.get("period"))
@@ -1170,8 +1288,8 @@ def main():
     parser.add_argument(
         "--retrieval-mode",
         choices=["auto", "lexical", "hybrid"],
-        default="auto",
-        help="auto는 임베딩 인덱스가 있으면 hybrid, 없으면 lexical 사용",
+        default="hybrid",
+        help="기본은 keyword + BGE-M3 hybrid 검색. lexical은 빠른 디버깅/오프라인 비교용",
     )
     parser.add_argument("--semantic-index", default=str(DEFAULT_SEMANTIC_INDEX))
     parser.add_argument("--period-route-index", default=str(DEFAULT_PERIOD_ROUTE_INDEX))
