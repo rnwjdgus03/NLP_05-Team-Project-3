@@ -59,6 +59,7 @@ def _require_api_key():
 LIST_URL = "https://kosis.kr/openapi/statisticsList.do"
 DATA_URL = "https://kosis.kr/openapi/Param/statisticsParameterData.do"
 META_URL = "https://kosis.kr/openapi/statisticsData.do"  # method=getMeta
+SEARCH_URL = "https://kosis.kr/openapi/statisticsSearch.do"
 
 # KOSIS가 "format=json"으로 줘도 실제로는 key에 따옴표가 없는 JS 객체 리터럴을
 # 반환한다 (예: [{LIST_NM:"인구",LIST_ID:"A"}] <- LIST_NM, LIST_ID 에 따옴표 없음).
@@ -97,6 +98,33 @@ def get_list(vw_cd="MT_ZTITLE", parent_id=""):
     res = SESSION.get(LIST_URL, params=params, timeout=REQUEST_TIMEOUT)
     res.raise_for_status()
     return _parse_kosis_json(res.text)
+
+
+def search_tables(keyword, page=1, per_page=50):
+    """KOSIS 통합검색 — 키워드로 통계표를 찾는다.
+
+    2026-08-02: 골드를 만들려는데 정답 좌표가 후보에도 메타 인덱스에도 없는 건이 나왔다.
+    예) '석유화학 수출액' — 메타에서 '석유화학' 코드가 0개.
+        KOSIS 품목별 무역통계는 SITC 기준이라 분류가 '선박용증기 터어빈의것' 수준으로
+        잘게 쪼개져 있고, 기사가 쓰는 산업부 MTI 13대 품목 구분이 없다.
+
+    그래서 갈라야 한다 — **KOSIS 에 표가 아예 없는가**, 아니면
+    **있는데 우리 상류 표 검색이 못 찾았는가**. 전자면 커버리지 한계이고
+    후자면 고칠 버그다. 이 함수는 그 판별에 쓴다.
+    """
+    params = {
+        "method": "getList",
+        "apiKey": _require_api_key(),
+        "searchNm": keyword,
+        "startCount": (page - 1) * per_page,
+        "resultCount": per_page,
+        "sort": "RANK",
+        "format": "json",
+    }
+    res = SESSION.get(SEARCH_URL, params=params, timeout=REQUEST_TIMEOUT)
+    res.raise_for_status()
+    rows = _parse_kosis_json(res.text)
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def get_stat_data(org_id, tbl_id, obj_l1, itm_id, prd_se="Y", new_est_prd_cnt=3, **extra):

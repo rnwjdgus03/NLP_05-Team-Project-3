@@ -43,7 +43,14 @@ def test_all_endpoints_share_the_retry_session():
     """한 곳만 고치면 나머지 엔드포인트에서 같은 문제가 반복된다."""
     source = open(api.__file__, encoding="utf-8").read()
     assert "requests.get(" not in source, "재시도 없는 직접 호출이 남아 있다"
-    assert source.count("SESSION.get(") == 3    # list / data / meta
+    # list / search / data / meta — 엔드포인트를 늘리면 이 수도 같이 늘어야 한다
+    assert source.count("SESSION.get(") == 4
+
+
+def test_search_endpoint_exists():
+    """'KOSIS 에 표가 없는가' vs '우리가 못 찾았는가'를 가르는 데 쓴다."""
+    assert api.SEARCH_URL.endswith("statisticsSearch.do")
+    assert callable(api.search_tables)
 
 
 def test_session_is_a_requests_session():
