@@ -758,6 +758,20 @@ def semantic_ready_gate(
     if not claim_item_matches_selection(row, result):
         reasons.append("CLAIM_ITEM_MISMATCH")
 
+    # claim 의 대상이 그 문장에 실제로 나오는가.
+    #
+    # 2026-08-02 실측: '작년 한 해 전체 수출액이 6838억달러' 라는 문장의
+    # industry_or_item 이 '반도체'였다. 기사 전체가 반도체를 다루니 상류 추출이
+    # 그 대상을 이 measurement 에 붙인 것이다. 그 결과 objL1=반도체 좌표가
+    # '대상=반도체 · 좌표=반도체'로 정상 통과해 확정됐고 '불일치'로 단언됐다.
+    # 전체 수출액(6838억)을 반도체 수출액(1420억)과 비교한 셈이다.
+    #
+    # 문장에 없는 대상은 이 measurement 의 것이 아니다. 확정하지 않는다.
+    # 앞 문장에서 이어받는 정당한 생략도 있으므로 **거부가 아니라 확정 보류**다.
+    claim_item = _normalize(_first(row, "industry_or_item", "measurement_item"))
+    if claim_item and claim_item not in _normalize(row.get("claim_text")):
+        reasons.append("UNGROUNDED_CLAIM_ITEM")
+
     reasons = list(dict.fromkeys(reasons))
     return {
         "semantic_gate_valid": not reasons,

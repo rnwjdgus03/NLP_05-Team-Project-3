@@ -87,6 +87,48 @@ def test_reason_is_recorded_so_the_block_is_traceable():
     assert out["mapping_reason"] == "CLAIM_ITEM_MISMATCH"
 
 
+# --------------------------------------------------------------------------
+# 문장에 없는 대상 — 실측 거짓 불일치의 진짜 원인
+# --------------------------------------------------------------------------
+
+TOTAL_EXPORT_SENTENCE = ("작년 한 해 전체 수출액이 6838억달러(약 1006조원)로 "
+                         "2023년에 비해 8.2% 증가했다고 산업통상자원부와 관세청이 1일 밝혔다.")
+
+
+def test_item_absent_from_the_sentence_blocks_confirmation():
+    """상류 추출이 기사 전체 맥락에서 '반도체'를 이 문장에 붙였다.
+
+    그 결과 '대상=반도체 · 좌표=반도체'로 가드를 정상 통과해 확정됐고,
+    전체 수출액(6838억)을 반도체 수출액(1420억)과 비교해 '불일치'로 단언했다.
+    """
+    claim = {"claim_text": TOTAL_EXPORT_SENTENCE, "industry_or_item": "반도체",
+             "candidate_rank": "1", "candidate_status": "READY"}
+    out = apply_semantic_ready_gate(claim, _result("반도체"))
+    assert out["mapping_status"] == "NEEDS_CONFIRMATION"
+    assert "UNGROUNDED_CLAIM_ITEM" in out["semantic_gate_details"]
+
+
+def test_item_present_in_the_sentence_still_confirms():
+    """같은 기사의 정상 건까지 막으면 안 된다."""
+    claim = {"claim_text": "품목별로는 최대 수출품목인 반도체가 43.9% 증가한 1419억 달러를 기록했다.",
+             "industry_or_item": "반도체", "candidate_rank": "1", "candidate_status": "READY"}
+    out = apply_semantic_ready_gate(claim, _result("반도체"))
+    assert out["mapping_status"] == "READY"
+
+
+def test_spacing_does_not_break_the_check():
+    claim = {"claim_text": "석유 화학 수출은 480억 달러였다.", "industry_or_item": "석유화학",
+             "candidate_rank": "1", "candidate_status": "READY"}
+    out = apply_semantic_ready_gate(claim, _result("석유화학"))
+    assert out["mapping_status"] == "READY"
+
+
+def test_empty_item_is_not_flagged_as_ungrounded():
+    """대상이 없는 주장은 이 규칙의 대상이 아니다(집계 규칙이 따로 본다)."""
+    out = apply_semantic_ready_gate(TOTAL_EXPORT_CLAIM, _result("계"))
+    assert "UNGROUNDED_CLAIM_ITEM" not in out.get("semantic_gate_details", "")
+
+
 def test_gate_and_recovery_share_one_implementation():
     """가드가 두 벌이면 반드시 어긋난다. 오늘 그래서 세 번 틀렸다."""
     import inspect
