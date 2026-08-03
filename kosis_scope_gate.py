@@ -392,10 +392,22 @@ ARTICLE_SCOPED_CODES = frozenset({"INTERNAL_DOCUMENT_SOURCE", "FOREIGN_ORG_SOURC
 
 
 def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
-    """문장별 판정을 낸 뒤, 출처 귀속 판정만 같은 기사의 나머지 문장에 번지게 한다.
+    """문장별 판정을 낸 뒤, 출처 귀속 판정을 같은 기사의 나머지 문장에 **표시만** 한다.
 
-    반환값은 gate_decision 과 같은 키를 쓰되, 전파로 붙은 건
-    scope_gate_propagated='Y' 로 표시해 원 판정과 구분할 수 있게 한다.
+    2026-08-02 1차 시도는 전파를 REJECT 로 했다가 되돌렸다. 실측에서 두 건이
+    부당하게 막혔다.
+      · '한국로봇산업진흥원에 따르면 로봇화 기업 2524곳' — 출처가 IFR 이 아니다.
+        로봇산업실태조사는 KOSIS 수록 국가승인통계다.
+      · '2023년 국적기 국제선 여객 4720만명' — 국토부 항공통계로 확인 가능한 건인데
+        같은 기사의 '본지가 분석한' 문장 때문에 번졌다.
+    **한 기사가 여러 출처를 인용하는데 문장에 출처가 없으면 소속을 알 수 없다.**
+
+    그래서 REVIEW 로만 남긴다. 어느 오류가 더 나쁜지가 기준이다 —
+    범위 밖이 남으면 NEEDS_CONFIRMATION 으로 앉아 있을 뿐이지만,
+    정상 주장을 빼면 분모가 줄어 커버리지가 공짜로 오른다. 후자가 더 나쁘다.
+
+    자동 오탐 검사(실버·골드 대조)로는 이걸 못 잡는다는 것도 배웠다.
+    골드가 없는 건은 검사 대상이 아니기 때문이다. 눈으로 봐야 했다.
     """
     decisions = [dict(gate_decision(row)) for row in rows]
     source_of: dict[str, tuple[str, str]] = {}
@@ -406,6 +418,7 @@ def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, st
                                            decision["scope_gate_reason"]))
     for row, decision in zip(rows, decisions):
         decision.setdefault("scope_gate_propagated", "N")
+        decision.setdefault("article_source_hint", "")
         if decision["scope_gate_blocked"] == "Y":
             continue
         found = source_of.get(_text(row.get("article_id")))
@@ -413,10 +426,11 @@ def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, st
             continue
         code, reason = found
         decision.update({
-            "scope_gate_code": code,
-            "scope_gate_reason": f"{reason} (같은 기사의 다른 문장에서 출처 확인)",
-            "scope_gate_severity": REJECT,
-            "scope_gate_blocked": "Y",
+            "article_source_hint": code,
             "scope_gate_propagated": "Y",
+            "scope_gate_severity": decision["scope_gate_severity"] or REVIEW,
+            "scope_gate_reason": (decision["scope_gate_reason"]
+                                  or f"{reason} (같은 기사의 다른 문장에서 확인된 출처 — "
+                                     f"이 문장의 출처인지는 미확인)"),
         })
     return decisions

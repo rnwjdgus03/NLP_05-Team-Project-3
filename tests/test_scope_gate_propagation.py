@@ -22,11 +22,36 @@ def _rows(*pairs):
 # 전파가 실제로 일어나는가
 # --------------------------------------------------------------------------
 
-def test_follow_up_sentence_inherits_the_source():
+def test_follow_up_sentence_is_flagged_not_blocked():
+    """표시만 한다. 차단하면 정상 주장까지 잃는다(아래 회귀 테스트 참고)."""
     rows = _rows(("A1", SOURCE_SENTENCE), ("A1", FOLLOW_UP))
     got = propagate_by_article(rows)
-    assert got[1]["scope_gate_blocked"] == "Y"
-    assert got[1]["scope_gate_code"] == "INTERNAL_DOCUMENT_SOURCE"
+    assert got[1]["scope_gate_blocked"] == "N"
+    assert got[1]["article_source_hint"] == "INTERNAL_DOCUMENT_SOURCE"
+
+
+def test_propagation_does_not_block_a_verifiable_claim():
+    """실측 회귀: 전파를 REJECT 로 했을 때 부당하게 막힌 두 건.
+
+    한 기사가 여러 출처를 인용하는데 문장에 출처가 없으면 소속을 알 수 없다.
+    """
+    rows = _rows(
+        ("A1", "31일 본지가 국토교통부의 항공 정비사 통계를 분석한 결과 72.6%였다."),
+        ("A1", "2023년 국적기로 국제선을 이용한 여객은 4720만여 명이었다."),
+    )
+    got = propagate_by_article(rows)
+    assert got[0]["scope_gate_blocked"] == "Y"
+    assert got[1]["scope_gate_blocked"] == "N"
+
+
+def test_official_survey_in_an_ifr_article_is_not_blocked():
+    """'한국로봇산업진흥원 실태조사'는 KOSIS 수록 통계다. IFR 문장과 같은 기사여도 막지 않는다."""
+    rows = _rows(
+        ("A1", "국제로봇연맹(IFR)에 따르면 로봇 1012대를 쓰는 나라였다."),
+        ("A1", "한국로봇산업진흥원에 따르면 로봇화에 뛰어든 기업은 2524곳이었다."),
+    )
+    got = propagate_by_article(rows)
+    assert got[1]["scope_gate_blocked"] == "N"
 
 
 def test_propagated_rows_are_marked():
@@ -48,7 +73,7 @@ def test_reason_says_it_came_from_another_sentence():
 def test_other_articles_are_untouched():
     rows = _rows(("A1", SOURCE_SENTENCE), ("A2", FOLLOW_UP))
     got = propagate_by_article(rows)
-    assert got[1]["scope_gate_blocked"] == "N"
+    assert got[1]["article_source_hint"] == ""
 
 
 def test_company_metric_does_not_propagate():
