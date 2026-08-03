@@ -23,18 +23,30 @@ PROMPT = extract_hcx.SYSTEM_PROMPT
 # 규칙 1 — 품목 근거
 # --------------------------------------------------------------------------
 
-def test_item_must_appear_in_the_target_sentence():
-    assert "[검증 대상 문장]에 나올 때만" in PROMPT
+def test_rule_states_both_directions():
+    """한쪽만 강조하면 모델이 그쪽으로 몰린다.
+
+    1차 프롬프트가 '없으면 -' 쪽만 강조했더니 대조군 6건 중 4건에서
+    문장에 **있는** 품목까지 지워졌다(석유화학·선박·바이오헬스·생활가전).
+    """
+    assert "나오면 **반드시 쓰고**" in PROMPT
+    assert "양쪽 다 지킨다" in PROMPT
 
 
-def test_title_and_neighbours_are_explicitly_excluded():
-    assert "제목이나 앞뒤 문장의 품목을 끌어오지 않는다" in PROMPT
+def test_positive_examples_are_present():
+    """지우는 예시만 있으면 지우는 쪽으로 학습된다."""
+    assert "'석유화학 수출은 480억 달러로' → item=석유화학" in PROMPT
+    assert "→ item=선박" in PROMPT
 
 
-def test_aggregate_sentence_example_is_present():
-    """추상 규칙만으로는 모델이 안 지킨다. 실패한 문장을 그대로 예시로 넣었다."""
+def test_negative_example_is_present():
     assert "전체 수출액이 6838억달러" in PROMPT
-    assert "item은 -다" in PROMPT
+    assert "item=-" in PROMPT
+
+
+def test_over_correction_is_recorded():
+    """왜 양방향으로 썼는지 남기지 않으면 다음 사람이 한쪽으로 되돌린다."""
+    assert "지워졌다" in PROMPT
 
 
 def test_legitimate_ellipsis_is_still_allowed():
