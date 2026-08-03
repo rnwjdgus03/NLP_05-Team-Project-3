@@ -41,6 +41,7 @@ from kosis_meta_coordinates import (
     prd_se_compatible,
     read_csv_rows,
 )
+from kosis_match_claims_to_index import item_mapping_type
 from kosis_semantic_search import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_RERANKER_MODEL,
@@ -156,12 +157,38 @@ BASE_CLAIM_FIELDS = (
 )
 
 
+def resolve_mapping_type(claim: Mapping[str, Any], meta: Mapping[str, Any]) -> tuple[str, str]:
+    """이 항목으로 주장 값을 만들 수 있는 방식과, 못 만든다면 그 이유.
+
+    2026-08-02: mapping_type 은 주장에서 오는 값이 아니라 **항목을 고를 때 계산**되는 값이다.
+    A 경로(kosis_match_claims_to_index)는 item_mapping_type 으로 이걸 채우는데
+    C 경로는 Chroma 메타에서 항목만 가져오고 계산을 하지 않았다.
+    그 결과 validate 가 빈 값을 'direct' 로 메워서,
+    '증감률 주장 vs 수준값 항목'(예: % vs 천달러)을 단위 불일치로 막았다.
+    실측: 잠근 125건 중 UNIT_MISMATCH 46건 전부 mapping_type 이 비어 있었고
+          그중 30건이 증감률 주장이었다.
+
+    주의: KOSIS 단위를 모르면 여기서도 빈 값이 나온다. 그건 정상이다 —
+          단위를 확인할 수 없는 좌표를 자동 확정하면 안 된다.
+    """
+    claim_mapping_type = _text(claim.get("mapping_type"))
+    if claim_mapping_type:
+        return claim_mapping_type, ""
+    try:
+        return item_mapping_type(claim, _text(meta.get("unit")), _text(meta.get("itm_name")))
+    except Exception as exc:
+        return "", f"MAPPING_TYPE_ERROR: {type(exc).__name__}"
+
+
 def build_output_row(claim: Mapping[str, Any], table: Mapping[str, Any],
                      candidate: Mapping[str, Any], rank: int) -> dict:
     meta = candidate["metadata"]
     row: dict[str, Any] = {field: _text(claim.get(field)) for field in BASE_CLAIM_FIELDS}
     row["period"] = row["period"] or row["measurement_period"]
     row["prd_se"] = row["prd_se"] or row["measurement_prd_se"]
+    mapping_type, unit_reason = resolve_mapping_type(claim, meta)
+    row["mapping_type"] = mapping_type
+    row["unit_compatibility_reason"] = unit_reason
     row.update({
         "org_id": meta.get("org_id", table.get("org_id", "")),
         "tbl_id": meta.get("tbl_id", table.get("tbl_id", "")),
