@@ -105,6 +105,22 @@ def test_unknown_status_is_not_silently_confirmed():
 # 버킷 정의
 # --------------------------------------------------------------------------
 
+def test_ungrounded_claim_item_has_its_own_bucket():
+    """'분류되지 않음'으로 뭉뚱그리면 무엇을 고쳐야 하는지 흐려진다.
+
+    이 사유는 상류 추출이 문장에 없는 대상을 붙여서 생긴다 —
+    확정을 잃는 대신 거짓 불일치를 없앤 건이라 실패와 성격이 다르다.
+    """
+    row = _row("NEEDS_CONFIRMATION", "UNGROUNDED_CLAIM_ITEM")
+    assert bucket_of(row, ARTICLE) == "CLAIM_ITEM_UNGROUNDED"
+    assert BUCKETS["CLAIM_ITEM_UNGROUNDED"][0] == SYSTEM_GAP
+
+
+def test_claim_item_mismatch_has_its_own_bucket():
+    row = _row("NEEDS_CONFIRMATION", "CLAIM_ITEM_MISMATCH")
+    assert bucket_of(row, ARTICLE) == "CLAIM_ITEM_MISMATCH"
+
+
 def test_wrong_coordinate_bucket_is_a_system_gap():
     """재조회에서 어느 기간에도 값이 없으면 좌표가 틀린 것이다 — 확인 불가가 아니다.
 

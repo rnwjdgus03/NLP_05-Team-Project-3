@@ -41,6 +41,8 @@ BUCKETS = {
     "NO_DATA_AT_COORDINATE": (UNVERIFIABLE, "좌표는 유효한데 그 기간에 값이 없음"),
     "PERIOD_MISSING": (UNVERIFIABLE, "기간을 특정할 수 없음"),
     "COORDINATE_RETURNS_NOTHING": (SYSTEM_GAP, "어느 기간에도 값이 없음 — 좌표가 틀림"),
+    "CLAIM_ITEM_UNGROUNDED": (SYSTEM_GAP, "주장 대상이 그 문장에 없음 — 상류 추출 오류"),
+    "CLAIM_ITEM_MISMATCH": (SYSTEM_GAP, "주장 대상과 좌표가 어긋남"),
     "UNIT_UNVERIFIABLE": (SYSTEM_GAP, "단위 정합을 확인하지 못함"),
     "CANDIDATE_NOT_DECISIVE": (SYSTEM_GAP, "후보가 결정적이지 않음"),
     "COORDINATE_NOT_FOUND": (SYSTEM_GAP, "유효한 좌표 조합을 못 찾음"),
@@ -73,6 +75,12 @@ def bucket_of(row, claim) -> str:
         return "API_ERROR"
 
     reason = text(row.get("mapping_reason"))
+    # 2026-08-02 추가. 이 둘은 '틀린 답을 막은' 사유라 실패와 성격이 다르다 —
+    # 확정을 잃는 대신 거짓 불일치를 없앤 것이다.
+    if "UNGROUNDED_CLAIM_ITEM" in reason:
+        return "CLAIM_ITEM_UNGROUNDED"
+    if "CLAIM_ITEM_MISMATCH" in reason:
+        return "CLAIM_ITEM_MISMATCH"
     if "PERIOD_MISSING" in reason:
         return "PERIOD_MISSING"
     if "UNIT_MISMATCH" in reason:
