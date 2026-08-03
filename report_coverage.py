@@ -40,6 +40,7 @@ BUCKETS = {
     "PERIOD_AFTER_ARTICLE": (UNVERIFIABLE, "요청 기간이 기사일 이후 — 그 시점에 존재할 수 없음"),
     "NO_DATA_AT_COORDINATE": (UNVERIFIABLE, "좌표는 유효한데 그 기간에 값이 없음"),
     "PERIOD_MISSING": (UNVERIFIABLE, "기간을 특정할 수 없음"),
+    "COORDINATE_RETURNS_NOTHING": (SYSTEM_GAP, "어느 기간에도 값이 없음 — 좌표가 틀림"),
     "UNIT_UNVERIFIABLE": (SYSTEM_GAP, "단위 정합을 확인하지 못함"),
     "CANDIDATE_NOT_DECISIVE": (SYSTEM_GAP, "후보가 결정적이지 않음"),
     "COORDINATE_NOT_FOUND": (SYSTEM_GAP, "유효한 좌표 조합을 못 찾음"),
@@ -95,8 +96,23 @@ def main() -> None:
     ap.add_argument("--evaluation-set", required=True)
     ap.add_argument("--article-source", default="",
                     help="date 컬럼이 평가 집합에 없을 때 가져올 파일")
+    ap.add_argument("--probe", default="",
+                    help="probe_empty_coordinates.py 출력. 빈 응답 좌표를 "
+                         "'좌표는 맞고 기간만 없음'과 '좌표가 틀림'으로 가른다. "
+                         "없으면 전부 확인 불가로 세므로 커버리지가 부풀려진다.")
     ap.add_argument("--output", default="")
     args = ap.parse_args()
+
+    # 재조회 결과: 어느 기간에도 값이 없으면 좌표가 틀린 것 → 시스템 한계
+    coordinate_wrong: set[str] = set()
+    if args.probe:
+        for row in read_csv_rows(args.probe):
+            try:
+                found = int(float(text(row.get("values_found")) or "-1"))
+            except ValueError:
+                found = -1
+            if found == 0:
+                coordinate_wrong.add(text(row.get("claim_measurement_id")))
 
     claims = {text(r.get("claim_measurement_id")): dict(r)
               for r in read_csv_rows(args.evaluation_set)}
@@ -117,6 +133,8 @@ def main() -> None:
     for mid, claim in claims.items():
         rows = grouped.get(mid)
         bucket = bucket_of(best_row(rows), claim) if rows else "COORDINATE_NOT_FOUND"
+        if bucket == "NO_DATA_AT_COORDINATE" and mid in coordinate_wrong:
+            bucket = "COORDINATE_RETURNS_NOTHING"
         counts[bucket] += 1
         detail.append({"claim_measurement_id": mid, "bucket": bucket,
                        "group": BUCKETS[bucket][0],
@@ -147,6 +165,10 @@ def main() -> None:
     print("  가능 기준  — 답할 수 있는 문제에서 시스템이 얼마나 하는가")
     print("어느 하나만 쓰면 유리한 쪽을 고른 것이 된다.")
     print(f"\n고칠 여지가 있는 것(시스템 한계): {by_group[SYSTEM_GAP]}건")
+    if not args.probe:
+        print("\n[주의] --probe 를 주지 않았다. 빈 응답 좌표를 전부 '확인 불가'로 세고 있어")
+        print("       확인 가능 기준 확정률이 부풀려진다. 실측에서 그런 24건 중")
+        print("       절반(12건)은 좌표가 틀린 것이었다.")
 
     if args.output and detail:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)

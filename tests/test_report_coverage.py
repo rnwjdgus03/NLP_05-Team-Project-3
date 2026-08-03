@@ -105,6 +105,15 @@ def test_unknown_status_is_not_silently_confirmed():
 # 버킷 정의
 # --------------------------------------------------------------------------
 
+def test_wrong_coordinate_bucket_is_a_system_gap():
+    """재조회에서 어느 기간에도 값이 없으면 좌표가 틀린 것이다 — 확인 불가가 아니다.
+
+    실측: 그렇게 분류된 24건 중 12건이 여기 해당했다.
+    가르지 않으면 확인 가능 기준 확정률이 20.7% 로 부풀려진다(실제 17.1%).
+    """
+    assert BUCKETS["COORDINATE_RETURNS_NOTHING"][0] == SYSTEM_GAP
+
+
 def test_every_bucket_has_a_group_and_description():
     for bucket, (group, description) in BUCKETS.items():
         assert group in {CONFIRMED, UNVERIFIABLE, SYSTEM_GAP}
