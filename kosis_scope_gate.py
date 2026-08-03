@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 REJECT = "REJECT"
 REVIEW = "REVIEW"
@@ -380,3 +380,43 @@ def gate_decision(row: Mapping[str, Any]) -> dict[str, str]:
         "scope_gate_severity": severity,
         "scope_gate_blocked": "Y" if severity == REJECT else "N",
     }
+
+
+# 기사 단위로 번지는 판정. **출처 귀속만** 해당한다.
+# 기사는 출처를 한 번만 밝히고 수치는 여러 문장에 흩어놓는다(실측: 한은 차입 7문장 중
+# '제출받은 자료' 표현이 있는 건 1문장뿐이었다).
+#
+# 반대로 SINGLE_COMPANY_METRIC 은 전파하면 안 된다 — 같은 기사에 개별 기업 문장과
+# 산업 집계 문장이 함께 있을 수 있고(완성차 기사가 그렇다), 전파하면 정상 주장을 잃는다.
+ARTICLE_SCOPED_CODES = frozenset({"INTERNAL_DOCUMENT_SOURCE", "FOREIGN_ORG_SOURCE"})
+
+
+def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
+    """문장별 판정을 낸 뒤, 출처 귀속 판정만 같은 기사의 나머지 문장에 번지게 한다.
+
+    반환값은 gate_decision 과 같은 키를 쓰되, 전파로 붙은 건
+    scope_gate_propagated='Y' 로 표시해 원 판정과 구분할 수 있게 한다.
+    """
+    decisions = [dict(gate_decision(row)) for row in rows]
+    source_of: dict[str, tuple[str, str]] = {}
+    for row, decision in zip(rows, decisions):
+        article = _text(row.get("article_id"))
+        if article and decision["scope_gate_code"] in ARTICLE_SCOPED_CODES:
+            source_of.setdefault(article, (decision["scope_gate_code"],
+                                           decision["scope_gate_reason"]))
+    for row, decision in zip(rows, decisions):
+        decision.setdefault("scope_gate_propagated", "N")
+        if decision["scope_gate_blocked"] == "Y":
+            continue
+        found = source_of.get(_text(row.get("article_id")))
+        if not found:
+            continue
+        code, reason = found
+        decision.update({
+            "scope_gate_code": code,
+            "scope_gate_reason": f"{reason} (같은 기사의 다른 문장에서 출처 확인)",
+            "scope_gate_severity": REJECT,
+            "scope_gate_blocked": "Y",
+            "scope_gate_propagated": "Y",
+        })
+    return decisions
