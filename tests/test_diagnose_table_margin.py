@@ -95,3 +95,31 @@ def test_missing_score_has_its_own_bucket():
 def test_buckets_are_contiguous():
     labels = [bucket_label(v) for v in (0.1, 1, 3, 10, 50, 500)]
     assert len(set(labels)) == 6
+
+
+# --------------------------------------------------------------------------
+# 순환 경고 — 이 출력에 한 번 속았다
+# --------------------------------------------------------------------------
+
+def test_output_warns_that_confirmed_comparison_is_circular():
+    """'확정된 것의 얇은 마진 0%'를 발견으로 읽을 뻔했다.
+
+    상류가 candidate_status=READY 에 마진 10% 를 요구하고 확정 경로가 그 상태를
+    요구하므로, 확정된 건은 정의상 마진이 넓다. 0% 는 동어반복이다.
+    경고를 지우면 다음 사람이 같은 결론을 낸다.
+    """
+    import inspect
+
+    import diagnose_table_margin as module
+    text = inspect.getsource(module)
+    assert "순환이다" in text
+    assert "--allow-unconfirmed" in text
+
+
+def test_upstream_threshold_is_stricter_than_the_recover_gate():
+    """상류 10% vs 회수 게이트 1%. 두 임계값이 다르다는 사실 자체가 기록돼야 한다."""
+    import inspect
+
+    import kosis_match_claims_to_index as upstream
+    assert "max(10, int(table_score * 0.1))" in inspect.getsource(upstream)
+    assert MIN_RELATIVE == 0.01

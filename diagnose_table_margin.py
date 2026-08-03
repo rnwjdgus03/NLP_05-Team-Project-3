@@ -135,12 +135,13 @@ def main() -> None:
 
         confirmed = by_outcome.get("CONFIRMED", [])
         if confirmed:
-            confirmed_share = sum(confirmed) / len(confirmed)
-            others = [f for b, fs in by_outcome.items() if b != "CONFIRMED" for f in fs]
-            other_share = sum(others) / len(others) if others else 0
-            print(f"\n  확정된 것의 얇은 마진 {confirmed_share:.0%} vs 나머지 {other_share:.0%}")
-            print("  → 차이가 크면 마진이 실제 신호다. 비슷하면 마진은 결과와 무관하고")
-            print("     '구분을 못 한다'가 아니라 '구분할 필요가 없다'는 뜻이다.")
+            print(f"\n  [읽지 말 것] CONFIRMED 의 얇은 마진 비율은 **순환이다.**")
+            print("  kosis_match_claims_to_index 는 candidate_status=READY 에 마진 10% 를 요구하고")
+            print("  (max(10, score*0.1)), 확정 경로는 candidate_status=READY 를 요구한다.")
+            print("  따라서 확정된 건은 정의상 마진이 넓다. 0% 가 나와도 아무것도 증명하지 못한다.")
+            print("\n  마진이 진짜 신호인지 보려면 **게이트를 우회한 결과**와 대조해야 한다:")
+            print("    kosis_verify_claim_values.py --allow-unconfirmed 로 미확정 건을 조회한 뒤")
+            print("    얇은 마진 / 넓은 마진의 '일치' 비율을 비교한다.")
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8-sig", newline="") as handle:
