@@ -928,13 +928,29 @@ def main():
     parser.add_argument('--skip-empty-value', action='store_true', help='value가 비어 있는 행은 테스트/검증에서 제외')
     parser.add_argument('--rank', default='1', help='검증할 candidate_rank. 기본 1')
     parser.add_argument('--delay', type=float, default=0.12)
+    parser.add_argument(
+        '--allow-unconfirmed', action='store_true',
+        help='확정되지 않은 매핑(NEEDS_CONFIRMATION 등)도 조회한다. **진단 전용**이다. '
+             '출력의 verified_without_confirmation=Y 로 표시되며, 이 결과를 '
+             '판정으로 쓰면 안 된다 — 좌표가 확정되지 않았으므로 값이 맞아도 '
+             '우연일 수 있고 틀려도 주장이 거짓이라는 뜻이 아니다.')
     args = parser.parse_args()
 
     inp = Path(args.input).expanduser()
     outp = Path(args.output).expanduser() if args.output else inp.with_name(inp.stem.replace('_kosis_index_candidates_with_meta', '') + '_kosis_verified.csv')
     rows, fields = read_csv(inp)
     if any(str(r.get('mapping_status', '')).strip() for r in rows):
-        rows = [r for r in rows if r.get('mapping_status') == 'READY']
+        # 기본은 READY 만. 확정 안 된 매핑에 판정을 내면 파이프라인의 원칙이 깨진다.
+        # 2026-08-02: '후보가 결정적이지 않음' 24건이 정말 틀린 좌표인지 재려면
+        # 조회는 해봐야 해서 진단용 통로를 열되, 출력에 표시를 남긴다.
+        if not args.allow_unconfirmed:
+            rows = [r for r in rows if r.get('mapping_status') == 'READY']
+        else:
+            for row in rows:
+                row['verified_without_confirmation'] = 'Y'
+            if 'verified_without_confirmation' not in fields:
+                fields.append('verified_without_confirmation')
+            print('[진단 모드] 확정되지 않은 매핑을 조회한다. 결과를 판정으로 쓰지 말 것.')
     else:
         rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
     if args.skip_empty_value:
