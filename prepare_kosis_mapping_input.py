@@ -27,6 +27,50 @@ def nz(value) -> str:
     return "" if text.lower() in EMPTY else text
 
 
+# 대상을 여러 개 붙여 쓰는 경우: 'LCC, 대형항공사', '포카리스웨트, 데미소다'
+_ITEM_SPLIT = re.compile(r"[,·/、]|및|와\s|과\s")
+# 파생어 꼬리. '조선업'은 문장의 '조선 산업기술인력'에서 온 정당한 대상이다.
+_ITEM_SUFFIXES = ("업체", "산업", "부문", "분야", "업", "류", "군")
+
+
+def _item_key(value) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", str(value or "")).lower()
+
+
+def claim_item_grounded(row) -> bool:
+    """주장 대상이 그 문장이나 지표에 근거를 두는가.
+
+    2026-08-02 실측: '작년 한 해 전체 수출액이 6838억달러' 문장의 measurement_item 이
+    '반도체'였다. 기사 전체가 반도체를 다뤄 HCX 가 measurement 단위로 그렇게 붙였다
+    (상속 문제가 아니라 추출 자체의 문제다 — measurement_item 이 직접 '반도체'였다).
+    그 결과 전체 수출액(6,838억)을 반도체 수출액(1,420억)과 비교해 '불일치'라고 단언했다.
+
+    검사 설계:
+      · 쉼표·및 로 나눈다 — 'LCC, 대형항공사'를 통째로 찾으면 둘 다 있어도 실패한다
+      · 꼬리를 떼며 어간을 본다 — '조선업'은 문장의 '조선 산업기술인력'에서 왔다
+      · 지표도 근거로 인정한다 — 앞 문장에서 대상을 이어받는 정당한 생략이 있다
+    실측 오탐: 통째 27/91 → 분할·어간 21 → 지표 포함 12.
+    """
+    raw = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
+    if not _item_key(raw):
+        return True   # 대상이 없는 주장은 집계 규칙이 따로 본다
+    haystack = _item_key(row.get("claim_text")) + _item_key(
+        nz(row.get("measurement_indicator")) or nz(row.get("indicator")))
+    if not haystack:
+        return True
+    for part in _ITEM_SPLIT.split(str(raw)):
+        token = _item_key(part)
+        if not token:
+            continue
+        if token in haystack:
+            return True
+        for suffix in _ITEM_SUFFIXES:
+            stem = token[:-len(suffix)] if token.endswith(suffix) else ""
+            if len(stem) >= 2 and stem in haystack:
+                return True
+    return False
+
+
 def parse_number(value):
     text = nz(value).replace(",", "")
     match = re.search(r"[-+]?\d+(?:\.\d+)?", text)
@@ -294,7 +338,16 @@ def normalize_row(row: dict) -> dict:
     out["claim_prd_se"] = nz(row.get("prd_se"))
     out["raw_measurement_period"] = nz(row.get("measurement_period"))
     out["indicator"] = nz(row.get("measurement_indicator")) or nz(row.get("indicator"))
+    # 문장에도 지표에도 근거가 없는 대상은 이 measurement 의 것이 아니다.
+    # 막지 않고 **지운다** — 그러면 대상 없는 주장이 되어 집계 좌표를 찾게 되고,
+    # 그것이 문장이 실제로 말하는 바다.
+    # (실측: '전체 수출액 6838억달러' + 대상='반도체' → 지우면 총액 좌표로 일치)
     out["industry_or_item"] = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
+    out["item_ungrounded"] = "N"
+    if out["industry_or_item"] and not claim_item_grounded(row):
+        out["item_ungrounded"] = "Y"
+        out["dropped_item"] = out["industry_or_item"]
+        out["industry_or_item"] = ""
     out["prd_se"] = nz(row.get("measurement_prd_se"))
     out["period"], out["period_alignment_status"] = align_change_period(row)
     out["raw_unit"] = raw_unit
@@ -334,6 +387,9 @@ def normalize_row(row: dict) -> dict:
 DERIVED_FIELDS = [
     "claim_indicator",
     "claim_industry_or_item",
+    # 근거 없는 대상을 지웠는지, 무엇을 지웠는지 남긴다(추적용)
+    "item_ungrounded",
+    "dropped_item",
     "claim_period",
     "claim_prd_se",
     "raw_measurement_period",

@@ -839,6 +839,9 @@ from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_ITEM_TOKENS,
     AGGREGATE_OBJ_NAMES,
 )
+# 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
+# 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
+from prepare_kosis_mapping_input import claim_item_grounded  # noqa: E402
 
 
 def _normalize(value: Any) -> str:
@@ -858,51 +861,6 @@ def selection_is_aggregate(result: Mapping[str, Any] | None,
         return True
     return all(_normalize(name) in {_normalize(t) for t in AGGREGATE_OBJ_NAMES}
                for name in names)
-
-
-# 대상을 여러 개 붙여 쓰는 경우가 있다: 'LCC, 대형항공사', '포카리스웨트, 데미소다'
-_ITEM_SPLIT = re.compile(r"[,·/、]|및|와\s|과\s")
-# 파생어 꼬리. '조선업' 은 문장의 '조선 산업기술인력' 에서 온 정당한 대상이다.
-_ITEM_SUFFIXES = ("업체", "산업", "부문", "분야", "업", "류", "군")
-
-
-def claim_item_grounded(row: Mapping[str, Any]) -> bool:
-    """주장 대상이 그 문장에 근거를 두는가.
-
-    2026-08-02: '작년 한 해 전체 수출액이 6838억달러' 문장의 industry_or_item 이
-    '반도체'였다(기사 전체가 반도체를 다뤄 상류가 그렇게 붙였다). 그 결과
-    '대상=반도체 · 좌표=반도체'로 가드를 통과해 확정됐고 전체 수출액을
-    반도체 수출액과 비교해 '불일치'라고 단언했다.
-
-    처음 구현은 대상 전체를 통째로 찾아서 오탐이 났다(실측 27/91=30%).
-      'LCC, 대형항공사' — 둘 다 문장에 있는데 붙여 찾아 실패
-      '조선업'          — 문장엔 '조선 산업기술인력'. 파생어를 못 봄
-    그래서 쉼표로 나누고 꼬리를 떼며 본다. 하나라도 근거가 있으면 통과.
-
-    **지표도 함께 본다.** 앞 문장에서 대상을 이어받는 정당한 생략이 있기 때문이다.
-      '이들이 차지하는 비율도 1.5%에서 4.4%로' + 지표='조선 산업기술인력 중 외국인의 비율'
-        → 문장엔 없지만 지표에 근거가 있다. 정상이다.
-      '작년 한 해 전체 수출액이 6838억달러' + 지표='총수출액' + 대상='반도체'
-        → 문장에도 지표에도 없다. 잘못 붙은 것이다.
-    """
-    raw = _first(row, "industry_or_item", "measurement_item")
-    if not _normalize(raw):
-        return True   # 대상이 없는 주장은 집계 규칙이 따로 본다
-    text = _normalize(row.get("claim_text")) + _normalize(
-        _first(row, "indicator", "measurement_indicator"))
-    if not text:
-        return True
-    for part in _ITEM_SPLIT.split(str(raw)):
-        token = _normalize(part)
-        if not token:
-            continue
-        if token in text:
-            return True
-        for suffix in _ITEM_SUFFIXES:
-            stem = token[:-len(suffix)] if token.endswith(suffix) else ""
-            if len(stem) >= 2 and stem in text:
-                return True
-    return False
 
 
 def claim_item_matches_selection(row: Mapping[str, Any],

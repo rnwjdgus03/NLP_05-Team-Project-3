@@ -170,6 +170,25 @@ def test_empty_item_is_not_flagged_as_ungrounded():
     assert "UNGROUNDED_CLAIM_ITEM" not in out.get("semantic_gate_details", "")
 
 
+def test_prepare_drops_the_ungrounded_item():
+    """막지 않고 지운다 — 대상 없는 주장이 되어 집계 좌표를 찾게 된다.
+
+    '전체 수출액 6838억달러' 는 실제로 총액 좌표(683.6억)와 일치한다.
+    막기만 하면 그 일치를 영영 못 낸다.
+    """
+    from prepare_kosis_mapping_input import claim_item_grounded
+    assert not claim_item_grounded({
+        "measurement_item": "반도체", "measurement_indicator": "총수출액",
+        "claim_text": TOTAL_EXPORT_SENTENCE})
+
+
+def test_one_implementation_shared_across_modules():
+    """대상 근거 검사가 두 벌이면 어긋난다. validate 는 prepare 것을 그대로 쓴다."""
+    import prepare_kosis_mapping_input as prepare
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert claim_item_grounded is prepare.claim_item_grounded
+
+
 def test_gate_and_recovery_share_one_implementation():
     """가드가 두 벌이면 반드시 어긋난다. 오늘 그래서 세 번 틀렸다."""
     import inspect
