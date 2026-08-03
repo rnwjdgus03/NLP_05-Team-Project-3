@@ -76,18 +76,26 @@ def main() -> None:
     ap.add_argument("--candidates", required=True)
     ap.add_argument("--measurements", required=True)
     ap.add_argument("--output", required=True)
-    ap.add_argument("--answer-key", required=True)
+    ap.add_argument("--answer-key", default="")
     ap.add_argument("--max-options", type=int, default=8)
+    ap.add_argument("--unlabeled", action="store_true",
+                    help="골드에 **없는** measurement 로 문제지를 만든다(실제 라벨링용). "
+                         "이때는 정답이 없으므로 answer-key 를 쓰지 않는다.")
+    ap.add_argument("--limit", type=int, default=0, help="한 번에 낼 문항 수(배치)")
+    ap.add_argument("--offset", type=int, default=0)
     args = ap.parse_args()
 
     gold = {text(r.get("claim_measurement_id")): r for r in read_csv_rows(args.gold)}
     claims = {text(r.get("claim_measurement_id")): r
               for r in read_csv_rows(args.measurements)}
+    if not args.unlabeled and not args.answer_key:
+        raise SystemExit("교정 모드에서는 --answer-key 가 필요하다")
 
+    targets = set(claims) - set(gold) if args.unlabeled else set(gold)
     by_measurement: dict[str, dict[tuple, dict]] = defaultdict(dict)
     for row in read_csv_rows(args.candidates):
         mid = text(row.get("claim_measurement_id"))
-        if mid in gold:
+        if mid in targets:
             by_measurement[mid].setdefault(coordinate_key(row), row)
 
     lines = [
@@ -104,7 +112,10 @@ def main() -> None:
         "",
     ]
     answers = []
-    for index, (mid, options) in enumerate(sorted(by_measurement.items()), start=1):
+    selected = sorted(by_measurement.items())
+    if args.limit:
+        selected = selected[args.offset:args.offset + args.limit]
+    for index, (mid, options) in enumerate(selected, start=args.offset + 1):
         claim = claims.get(mid, {})
         ordered = [options[key] for key in sorted(options)][:args.max_options]
         if len(ordered) < 2:
@@ -128,21 +139,26 @@ def main() -> None:
             lines.append(f"- **{letter}.** {describe(row)}")
         lines += ["", f"답: `문제 {index} = ?`", "", "---", ""]
 
-        answers.append({
+        entry = {
             "question": index,
             "claim_measurement_id": mid,
-            "gold_tbl_id": text(gold[mid].get("gold_tbl_id")),
-            "gold_itm_id": text(gold[mid].get("gold_itm_id")),
-            "gold_obj_l1": text(gold[mid].get("gold_obj_l1")),
-            "gold_grade": text(gold[mid].get("gold_grade")),
             "options": " | ".join(
                 f"{letter}={'/'.join(coordinate_key(row))}"
                 for letter, row in zip("ABCDEFGH", ordered)),
-        })
+        }
+        if not args.unlabeled:
+            entry.update({
+                "gold_tbl_id": text(gold[mid].get("gold_tbl_id")),
+                "gold_itm_id": text(gold[mid].get("gold_itm_id")),
+                "gold_obj_l1": text(gold[mid].get("gold_obj_l1")),
+                "gold_grade": text(gold[mid].get("gold_grade")),
+            })
+        answers.append(entry)
 
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text("\n".join(lines), encoding="utf-8")
-    with open(args.answer_key, "w", encoding="utf-8-sig", newline="") as handle:
+    key_path = args.answer_key or (str(Path(args.output).with_suffix("")) + "_key.csv")
+    with open(key_path, "w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(answers[0].keys()))
         writer.writeheader()
         writer.writerows(answers)
@@ -150,7 +166,10 @@ def main() -> None:
     leaked = [name for name in LEAKY
               if any(name in line for line in lines)]
     print(f"문제 {len(answers)}개 → {args.output}")
-    print(f"정답 → {args.answer_key}")
+    print(f"{'선택지 매핑' if args.unlabeled else '정답'} → {key_path}")
+    if args.unlabeled:
+        print(f"라벨 대상 {len(by_measurement)}건 중 {len(answers)}건 출제 "
+              f"(offset={args.offset}, limit={args.limit or '전체'})")
     print(f"누출 검사: {'통과' if not leaked else '실패 ' + str(leaked)}")
     if leaked:
         raise SystemExit("문제지에 정답이 새는 항목이 있다")
