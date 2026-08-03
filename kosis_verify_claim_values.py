@@ -735,7 +735,13 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     compare_value = signed_claim_value(row, claim_value)
     out['claim_value_numeric'] = claim_value if claim_value is not None else ''
 
-    if row.get('mapping_status') and row.get('mapping_status') != 'READY':
+    # 확정 매핑이 아니면 판정하지 않는다. 단, --allow-unconfirmed 로 표시된 진단 행은
+    # 조회까지 진행한다(결과는 판정이 아니라 진단이며 출력에 표시가 남는다).
+    #
+    # 2026-08-02: 게이트가 두 겹이었다. CLI 의 행 필터만 열었더니 여기서 다시 막혀
+    # 24건이 전부 '판단불가'로 나왔다. validate 에서 고쳤던 이중 게이트와 같은 모양이다.
+    diagnostic = str(row.get('verified_without_confirmation', '')).strip().upper() == 'Y'
+    if row.get('mapping_status') and row.get('mapping_status') != 'READY' and not diagnostic:
         return mark_unverifiable(
             out,
             row.get('mapping_status'),

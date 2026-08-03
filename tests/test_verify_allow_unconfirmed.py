@@ -54,3 +54,39 @@ def test_console_warning_is_printed():
 def test_ready_only_path_is_unchanged_for_files_without_status():
     """mapping_status 컬럼이 없는 후보 파일은 기존대로 rank 로 거른다."""
     assert "str(r.get('candidate_rank', '')).strip() == str(args.rank)" in source()
+
+
+# --------------------------------------------------------------------------
+# 게이트가 두 겹이었다 — 한 겹만 열면 아무 일도 일어나지 않는다
+# --------------------------------------------------------------------------
+
+def test_row_level_gate_also_honours_the_marker():
+    """CLI 행 필터를 열어도 verify_row 안에서 다시 막히면 소용이 없다.
+
+    2026-08-02: 실제로 그렇게 만들어서 24건이 전부 '판단불가'로 나왔다.
+    validate 에서 고쳤던 이중 게이트와 같은 모양이다.
+    """
+    text = source()
+    assert "diagnostic = str(row.get('verified_without_confirmation'" in text
+    assert "and not diagnostic:" in text
+
+
+def test_unmarked_rows_are_still_blocked_inside_verify_row():
+    """표시가 없는 행은 예전처럼 막혀야 한다. 진단 통로가 기본이 되면 안 된다."""
+    out = verify.verify_row(
+        {"mapping_status": "NEEDS_CONFIRMATION", "value": "100", "period": "2024"},
+        meta_cache={}, delay=0)
+    assert out.get("verdict") == "판단불가"
+
+
+def test_marked_row_passes_the_mapping_gate():
+    """표시된 행은 매핑 게이트를 넘어가야 한다.
+
+    그다음 단계(값·기간)에서 막히는 것은 정상이지만,
+    막힌 이유가 'mapping'이면 게이트를 못 넘은 것이다.
+    """
+    out = verify.verify_row(
+        {"mapping_status": "NEEDS_CONFIRMATION", "verified_without_confirmation": "Y",
+         "value": "", "period": "2024"},
+        meta_cache={}, delay=0)
+    assert out.get("unverifiable_stage") != "mapping"
