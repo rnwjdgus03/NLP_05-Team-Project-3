@@ -659,8 +659,38 @@ def score_structured_meta(row, norm_claim, weighted_tokens):
     return score, hits
 
 
+# 단위가 비어 있을 때 항목 **이름**에서 차원을 추론한다.
+#
+# 2026-08-02: KOSIS 메타의 ITEM 452개 중 158개(35%)가 unit_name 이 비어 있다.
+# 그 결과 item_mapping_type 이 빈 값을 내고, verify 가 MAPPING_TYPE_UNSUPPORTED 로
+# 막아 잠근 103건 중 58건이 판정 자체를 못 받았다(실측).
+# 단위 없는 항목들은 이름에 단위가 들어 있는 경우가 많다 —
+# '바이오헬스산업 매출액', '생산 품목별 수출 금액(합계)', '쌀가루 생산판매 현황'.
+#
+# **순서가 중요하다.** '매출액 증가율'은 금액이 아니라 비율이므로 rate 를 먼저 본다.
+# 목록은 좁게 잡았다. 이름 추론은 틀릴 수 있고, 틀리면 잘못된 좌표가 확정된다.
+NAME_DIMENSION_HINTS = (
+    ("rate", ("비율", "증감률", "증가율", "감소율", "등락률", "구성비", "비중", "점유율")),
+    ("currency", ("매출액", "수출액", "수입액", "거래액", "생산액", "판매액", "교역액",
+                  "금액", "자산", "부채", "예산", "소득", "지출", "수익", "차입금")),
+    ("person_count", ("종사자", "취업자", "근로자", "재직자", "고용인원", "인력")),
+    ("count", ("사업체수", "기업수", "업체수", "건수", "대수", "개수", "사례수")),
+)
+
+
+def name_unit_dimension(item_name) -> str:
+    """항목 이름만으로 차원을 추론한다. 확신이 없으면 unknown 을 유지한다."""
+    compact_item = compact(item_name)
+    if not compact_item:
+        return "unknown"
+    for dimension, tokens in NAME_DIMENSION_HINTS:
+        if any(token in compact_item for token in tokens):
+            return dimension
+    return "unknown"
+
+
 def meta_unit_dimension(meta_unit, item_name=""):
-    """Infer a KOSIS unit dimension, using the ITEM name only for rate items."""
+    """Infer a KOSIS unit dimension. 단위가 없으면 ITEM 이름으로 보완한다."""
     raw_unit = str(meta_unit or "").strip().lower()
     compact_item = compact(item_name)
     if re.search(r"\d{4}\s*[=＝]\s*100(?:\.0+)?", raw_unit):
@@ -670,9 +700,7 @@ def meta_unit_dimension(meta_unit, item_name=""):
     dimension = infer_unit_dimension(canonicalize_unit(meta_unit))
     if dimension != "unknown":
         return dimension
-    if any(token in compact_item for token in ("비율", "증감률", "증가율", "감소율", "등락률", "구성비")):
-        return "rate"
-    return "unknown"
+    return name_unit_dimension(item_name)
 
 
 def item_mapping_type(norm_claim, meta_unit, item_name):

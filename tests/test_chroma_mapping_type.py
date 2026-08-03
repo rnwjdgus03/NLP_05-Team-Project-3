@@ -33,13 +33,21 @@ def test_absolute_change_on_a_matching_level_item():
 # 단위를 모르면 비워둔다 — 이건 정상 동작이다
 # --------------------------------------------------------------------------
 
-def test_unknown_kosis_unit_yields_no_mapping_type():
-    """단위를 확인할 수 없는 좌표를 자동 확정하면 안 된다.
+def test_unit_can_be_inferred_from_the_item_name():
+    """2026-08-02 변경: 단위가 없어도 항목 이름으로 차원을 보완한다.
 
-    실측 46건 중 23건이 KOSIS 단위가 비어 있었다. 이 수정으로 풀리지 않는 게 맞다.
-    게이트를 낮추는 게 아니라 라벨을 정확히 하는 것이 목적이다.
+    이전에는 여기서 빈 값이 나왔다. KOSIS 메타의 ITEM 35%가 단위가 비어 있고,
+    그 때문에 잠근 103건 중 58건이 판정 자체를 못 받고 있었다(실측).
+    단위 없는 항목은 이름에 단위가 들어 있는 경우가 많다 — '수출액', '매출액'.
     """
-    mapping_type, reason = resolve_mapping_type(RATE_CLAIM, {"unit": "", "itm_name": "수출액"})
+    mapping_type, _ = resolve_mapping_type(RATE_CLAIM, {"unit": "", "itm_name": "수출액"})
+    assert mapping_type == "rate_from_level"
+
+
+def test_name_without_a_hint_still_yields_no_mapping_type():
+    """이름으로도 모르면 비워둔다. 확인 못 하는 좌표를 자동 확정하면 안 된다."""
+    mapping_type, reason = resolve_mapping_type(
+        RATE_CLAIM, {"unit": "", "itm_name": "디지털 헬스케어 서비스 이용 여부"})
     assert mapping_type == ""
     assert reason
 
