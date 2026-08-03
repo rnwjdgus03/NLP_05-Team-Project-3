@@ -81,6 +81,20 @@ SINGLE_COMPANY = ("현대차", "기아", "gm 한국사업장", "kg모빌리티",
                   "포스코", "현대제철", "lg전자")
 COMPANY_METRIC = ("판매", "수출", "생산", "실적", "정비사", "인력", "매출", "영업이익")
 
+# 기업명 바로 뒤에 주격·화제 조사가 붙으면 그 기업이 주장의 **주체**다.
+# "현대차는 414만1791대", "기아는 308만9457대를 팔아" — 산업 집계가 아니다.
+# 반대로 "국내 완성차 업체들의 판매량"처럼 기업명이 예시로만 스치는 문장과 구분된다.
+SUBJECT_PARTICLE = ("는", "은", "이", "가", "도", "의")
+
+# 국회의원·언론이 기관에서 받아온 자료. 공표 통계가 아니라 개별 요청 산출물이다.
+INTERNAL_DOCUMENT = ("제출받은 자료", "제출한 자료", "제출받은", "의원실",
+                     "입수한 자료", "확보한 자료", "단독 입수", "내부 자료",
+                     "본지가", "본지 분석")
+
+# KOSIS 에 수록되지 않는 것이 확실한 국제기구 통계.
+# OECD·IMF 등은 KOSIS 국제통계에 일부 수록되므로 여기 넣지 않는다.
+FOREIGN_ORG_ONLY = ("국제로봇연맹", "ifr", "international federation of robotics")
+
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # 따옴표로 감싼 제품·모델명: '데이트저스트 오이스터스틸…', ‘에버 헤라클레스 웨딩 밴드’
 QUOTED_PRODUCT = re.compile(r"[‘'\"“]([^’'\"”]{4,40})[’'\"”]")
@@ -260,15 +274,82 @@ def single_company_metric(claim_text: str, row: Mapping[str, Any]):
         return ("SINGLE_COMPANY_METRIC",
                 f"개별 기업({company}) 실적 — KOSIS 는 산업 집계만 수록", REJECT)
     company = _has(claim_text, SINGLE_COMPANY)
-    if company and _has(claim_text, COMPANY_METRIC):
+    if not company:
+        return None
+    subject = company_is_subject(claim_text)
+    if subject and _has(claim_text, COMPANY_METRIC):
+        return ("SINGLE_COMPANY_METRIC",
+                f"'{subject}'가 주장의 주체 — 개별 기업 실적이지 산업 집계가 아님", REJECT)
+    if _has(claim_text, COMPANY_METRIC):
         return ("POSSIBLE_COMPANY_METRIC",
                 f"문장에 개별 기업({company})이 있음 — 대상이 산업 집계인지 확인 필요", REVIEW)
     return None
 
 
+def company_is_subject(claim_text: str) -> str:
+    """기업명 바로 뒤에 주격·화제 조사가 붙는가.
+
+    2026-08-02 실측: 게이트가 개별 기업 실적 13문장을 통과시켰다.
+    문장에 기업명이 있으면 REVIEW 로만 두고 REJECT 하지 않았기 때문이다.
+    '현대차는 414만대'(주체)와 '완성차 업체들의 판매량'(집계)을 조사로 가른다.
+    """
+    lowered = _lower(claim_text)
+    for company in SINGLE_COMPANY:
+        start = 0
+        while (index := lowered.find(company, start)) != -1:
+            tail = lowered[index + len(company):index + len(company) + 1]
+            if tail in SUBJECT_PARTICLE:
+                return company
+            start = index + 1
+    return ""
+
+
+def enumerated_companies(claim_text: str, row: Mapping[str, Any]):
+    """기업을 둘 이상 열거하면 개별 기업 자료의 합이다.
+
+    예: '완성차 5사(현대차, 기아, GM 한국사업장, KG모빌리티, 르노코리아)는 794만대를 판매'
+    KOSIS 의 산업 집계와 표본·정의가 다르므로 대조할 수 없다.
+    """
+    lowered = _lower(claim_text)
+    found = {company for company in SINGLE_COMPANY if company in lowered}
+    if len(found) >= 2 and _has(claim_text, COMPANY_METRIC):
+        names = ", ".join(sorted(found)[:3])
+        return ("ENUMERATED_COMPANIES",
+                f"개별 기업 {len(found)}곳({names}) 합계 — 산업 집계와 정의가 다름", REJECT)
+    return None
+
+
+def internal_document_source(claim_text: str, row: Mapping[str, Any]):
+    """국회의원·언론이 기관에서 받아온 자료. 공표 통계가 아니다.
+
+    2026-08-02 실측: 정부의 한은 일시차입 관련 7문장이 전부 이 유형이었다.
+    '한은에서 제출받은 자료'는 KOSIS 어디에도 없다.
+    """
+    hit = _has(claim_text, INTERNAL_DOCUMENT)
+    if hit:
+        return ("INTERNAL_DOCUMENT_SOURCE",
+                f"'{hit}' — 공표 통계가 아니라 개별 요청으로 받은 자료", REJECT)
+    return None
+
+
+def foreign_organization_source(claim_text: str, row: Mapping[str, Any]):
+    """KOSIS 에 수록되지 않는 국제기구 자료.
+
+    OECD·IMF 등은 KOSIS 국제통계에 일부 수록되므로 대상에서 뺐다.
+    확실히 미수록인 것만 REJECT 한다.
+    """
+    hit = _has(claim_text, FOREIGN_ORG_ONLY)
+    if hit:
+        return ("FOREIGN_ORG_SOURCE",
+                f"'{hit}' 발표 수치 — KOSIS 미수록 국제기구 통계", REJECT)
+    return None
+
+
 DETECTORS = (foreign_market, global_scope, forecast_or_plan,
              policy_parameter, branded_product_price, derived_difference,
-             derived_indicator, intraday_market_rate, single_company_metric)
+             derived_indicator, intraday_market_rate, single_company_metric,
+             enumerated_companies, internal_document_source,
+             foreign_organization_source)
 
 
 def scope_violation(row: Mapping[str, Any]) -> tuple[str, str, str]:
