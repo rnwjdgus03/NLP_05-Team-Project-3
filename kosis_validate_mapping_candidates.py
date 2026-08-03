@@ -746,6 +746,18 @@ def semantic_ready_gate(
             reasons.append("UNGROUNDED_NUMERIC_OBJ_SCOPE")
             break
 
+    # claim 품목 ↔ 좌표 일치. **모든 확정 경로가 이 검사를 거쳐야 한다.**
+    #
+    # 2026-08-02: 이 가드가 downstream_validated_rank1(회수 경로)에만 있었다.
+    # 상류가 결정적이면(rank==1 and candidate_status==READY) 건너뛰고 확정돼서,
+    # '전체 수출액 6838억달러' 주장에 objL1=반도체 좌표가 붙은 채 READY 가 됐고
+    # 시스템이 '불일치'라고 단언했다(실측). 참인 기사에 거짓 딱지를 붙인 것이다.
+    #
+    # 차이율 임계값(LIKELY_MISMAPPING)으로는 못 막는다 — 그 건의 차이율은 79% 로
+    # 수준값 임계값 300% 아래였다. 값이 아니라 의미로 막아야 한다.
+    if not claim_item_matches_selection(row, result):
+        reasons.append("CLAIM_ITEM_MISMATCH")
+
     reasons = list(dict.fromkeys(reasons))
     return {
         "semantic_gate_valid": not reasons,
