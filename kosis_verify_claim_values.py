@@ -515,8 +515,44 @@ THRESHOLD_MARKERS = ('밑돌', '밑돈', '밑도', '웃돌', '웃돈', '웃도',
                      '아래로', '위로', '선을 넘', '선을 웃')
 _THRESHOLD_TAIL = 14
 
+# 비교 기준 충돌. 문장은 전년 기준을 말하는데 change_base 가 전월로 잡힌 경우.
+#
+# 2026-08-02 실측 거짓 불일치:
+#   "작년 12월 수출은 613억8000만달러로 1년 전 대비 6.6% 늘어 한 달 전(1.4%)에 비해
+#    오름폭을 키웠다" — '한 달 전(1.4%)'은 11월의 **전년동월비**다.
+#   추출이 '한 달 전'을 비교 기준으로 읽어 change_base=전월 로 넣었고,
+#   검증기가 11월 vs 10월(-2.1%)을 계산해 '불일치'라고 단언했다.
+#   실제 11월 전년동월비는 +1.4% 로 주장이 참이다.
+#
+# '한 달 전'은 시점 지시어이지 비교 기준이 아니다. 문장에 전년 기준이 명시돼 있고
+# 전월 기준 표현이 없으면 어느 쪽인지 확정할 수 없다 → 판정하지 않는다.
+YEAR_BASIS_PHRASES = ('1년 전', '일년 전', '전년 대비', '전년대비', '전년 동월', '전년동월',
+                      '작년 같은', '전년 같은')
+MONTH_BASIS_PHRASES = ('전월 대비', '전월대비', '전달 대비', '전달보다', '한 달 새',
+                       '한달 새', '지난달 대비', '전월비')
+
 DECREASE_WORDS = ('감소', '하락', '줄', '축소', '마이너스', '위축', '둔화', '뒷걸음', '하향')
 INCREASE_WORDS = ('증가', '상승', '늘', '확대', '급증', '플러스', '오른', '올라', '상향')
+
+
+def change_base_conflicts(row):
+    """비교 기준이 문장과 어긋나는가. 어긋나면 그 근거를 돌려준다.
+
+    '한 달 전'처럼 시점을 가리키는 말이 비교 기준으로 잘못 읽히면
+    전월비를 계산하게 되고, 전년동월비 주장과 비교해 거짓 불일치가 난다.
+    """
+    base = str(row.get('change_base') or '').strip()
+    if base not in {'전월', '전달'}:
+        return ''
+    text = str(row.get('claim_text') or '')
+    if not text:
+        return ''
+    if any(phrase in text for phrase in MONTH_BASIS_PHRASES):
+        return ''   # 전월 기준이 문장에 명시돼 있다
+    hit = next((phrase for phrase in YEAR_BASIS_PHRASES if phrase in text), '')
+    if hit:
+        return f"문장은 '{hit}' 기준인데 change_base={base}"
+    return ''
 
 
 def threshold_expression(claim_text, claim_value):
@@ -797,6 +833,11 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         return mark_unverifiable(
             out, 'THRESHOLD_CLAIM_UNSUPPORTED', 'input',
             f"'{threshold}' — 한계값 서술이라 값 일치로 판정할 수 없음")
+    conflict = change_base_conflicts(row)
+    if conflict:
+        return mark_unverifiable(
+            out, 'CHANGE_BASE_AMBIGUOUS', 'input',
+            f"{conflict} — 비교 기준을 확정할 수 없음")
     if not parse_period(row.get('period')):
         return mark_unverifiable(out, 'PERIOD_MISSING', 'input', 'measurement period가 없음')
     mapping_type = str(row.get('mapping_type', '')).strip()
