@@ -497,8 +497,44 @@ def derive_actual(data_rows, prd_se, period, row):
     return None, current_period, previous_period, f'지원하지 않는 mapping_type={mapping_type}'
 
 
+# 값 뒤에 붙어 '그 값 자체'가 아니라 '그 값을 기준으로 한 비교'임을 뜻하는 표현.
+#
+# 2026-08-02 실측: "성장률과 물가 상승률이 모두 2%를 밑돈 경우는 2020년이 마지막이었다"에서
+# 2% 는 측정값이 아니라 한계값이다. 2020년 실제 물가상승률 0.54% 는 2% 미만이므로
+# **주장은 참**인데, 검증기가 '주장 2 vs 실제 0.54 → 불일치'로 단언했다.
+# 참인 기사에 거짓 딱지를 붙인 것이다.
+#
+# 한계값 비교를 제대로 구현하려면 방향(미만/초과)을 정확히 읽어야 하고,
+# 틀리면 새로운 거짓 판정이 생긴다. 그래서 지금은 **판정하지 않는다** —
+# 틀린 답을 내는 것보다 못 한다고 말하는 편이 낫다.
+# 활용형에 주의한다. '밑돌다'는 '밑돈'으로 줄어 '밑돌'을 포함하지 않고,
+# '넘어서다'는 '넘어섰다'가 되어 '넘어서'를 포함하지 않는다.
+# 그래서 어간을 짧게 잡는다 — 테스트가 이 실수를 잡아줬다.
+THRESHOLD_MARKERS = ('밑돌', '밑돈', '밑도', '웃돌', '웃돈', '웃도',
+                     '미만', '이하', '이상', '초과', '넘어', '넘은', '넘는', '넘었',
+                     '아래로', '위로', '선을 넘', '선을 웃')
+_THRESHOLD_TAIL = 14
+
 DECREASE_WORDS = ('감소', '하락', '줄', '축소', '마이너스', '위축', '둔화', '뒷걸음', '하향')
 INCREASE_WORDS = ('증가', '상승', '늘', '확대', '급증', '플러스', '오른', '올라', '상향')
+
+
+def threshold_expression(claim_text, claim_value):
+    """주장 값이 '한계값'으로 쓰였으면 그 표현을 돌려준다. 아니면 빈 문자열.
+
+    값 바로 뒤(약 14자)에 비교 표현이 붙는 경우만 본다.
+    문장 어딘가에 '이상'이 있다는 이유로 막으면 정상 주장까지 잃는다.
+    """
+    text = str(claim_text or '')
+    if not text or claim_value is None:
+        return ''
+    digits = f'{claim_value:g}'
+    for match in re.finditer(re.escape(digits), text):
+        tail = text[match.end():match.end() + _THRESHOLD_TAIL]
+        for marker in THRESHOLD_MARKERS:
+            if marker in tail:
+                return text[match.start():match.end() + _THRESHOLD_TAIL].strip()
+    return ''
 
 
 def signed_claim_value(row, magnitude):
@@ -756,6 +792,11 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         return mark_unverifiable(out, code, 'candidate', reason)
     if claim_value is None:
         return mark_unverifiable(out, 'VALUE_MISSING', 'input', 'claim value가 비어 있음')
+    threshold = threshold_expression(row.get('claim_text'), claim_value)
+    if threshold:
+        return mark_unverifiable(
+            out, 'THRESHOLD_CLAIM_UNSUPPORTED', 'input',
+            f"'{threshold}' — 한계값 서술이라 값 일치로 판정할 수 없음")
     if not parse_period(row.get('period')):
         return mark_unverifiable(out, 'PERIOD_MISSING', 'input', 'measurement period가 없음')
     mapping_type = str(row.get('mapping_type', '')).strip()
