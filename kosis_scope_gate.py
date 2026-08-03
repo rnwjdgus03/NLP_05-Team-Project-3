@@ -390,6 +390,16 @@ def gate_decision(row: Mapping[str, Any]) -> dict[str, str]:
 # 산업 집계 문장이 함께 있을 수 있고(완성차 기사가 그렇다), 전파하면 정상 주장을 잃는다.
 ARTICLE_SCOPED_CODES = frozenset({"INTERNAL_DOCUMENT_SOURCE", "FOREIGN_ORG_SOURCE"})
 
+# 문장이 스스로 출처를 밝히면 기사 단위 전파를 적용하지 않는다.
+# 1차 전파가 '한국로봇산업진흥원에 따르면 로봇화 기업 2524곳'을 부당하게 막았다 —
+# 같은 기사에 IFR 문장이 있었기 때문이다. 자체 출처가 있으면 그 문장의 출처다.
+OWN_SOURCE_MARKERS = ("에 따르면", "가 발표한", "이 발표한", "가 밝힌", "이 밝힌",
+                      "조사에 따르면", "통계에 따르면", "집계에 따르면")
+
+
+def has_own_source(claim_text: str) -> bool:
+    return bool(_has(claim_text, OWN_SOURCE_MARKERS))
+
 
 def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
     """문장별 판정을 낸 뒤, 출처 귀속 판정을 같은 기사의 나머지 문장에 **표시만** 한다.
@@ -425,12 +435,19 @@ def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, st
         if not found:
             continue
         code, reason = found
+        decision["article_source_hint"] = code
+        decision["scope_gate_propagated"] = "Y"
+        if has_own_source(_text(row.get("claim_text"))):
+            # 문장이 스스로 출처를 밝히면 그 문장의 출처다. 표시만 남긴다.
+            decision["scope_gate_severity"] = decision["scope_gate_severity"] or REVIEW
+            decision["scope_gate_reason"] = (
+                decision["scope_gate_reason"]
+                or f"{reason} (같은 기사의 다른 문장 출처 — 이 문장은 자체 출처가 있다)")
+            continue
         decision.update({
-            "article_source_hint": code,
-            "scope_gate_propagated": "Y",
-            "scope_gate_severity": decision["scope_gate_severity"] or REVIEW,
-            "scope_gate_reason": (decision["scope_gate_reason"]
-                                  or f"{reason} (같은 기사의 다른 문장에서 확인된 출처 — "
-                                     f"이 문장의 출처인지는 미확인)"),
+            "scope_gate_code": code,
+            "scope_gate_reason": f"{reason} (같은 기사에서 확인된 출처, 이 문장은 자체 출처 없음)",
+            "scope_gate_severity": REJECT,
+            "scope_gate_blocked": "Y",
         })
     return decisions

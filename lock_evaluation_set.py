@@ -42,6 +42,7 @@ from kosis_scope_gate import (
     PLAN,
     POLICY_PARAM,
     gate_decision,
+    propagate_by_article,
 )
 
 SCHEMA_VERSION = "kosis-evaluation-set-v2"
@@ -60,10 +61,15 @@ def text(value) -> str:
 
 
 def apply_gate(rows):
-    """(유지 행, 제외 행) 으로 가른다. REVIEW 는 유지하되 표시를 남긴다."""
+    """(유지 행, 제외 행) 으로 가른다. REVIEW 는 유지하되 표시를 남긴다.
+
+    **문장별 판정만으로는 부족하다.** 기사는 출처를 첫 문장에서만 밝히고
+    수치는 여러 문장에 흩어놓는다(실측: 한은 차입 7문장 중 출처 표현이 있는 건 1문장).
+    그래서 출처 귀속 판정을 기사 단위로 전파한다 — 자체 출처가 있는 문장은 제외하고.
+    """
+    rows = list(rows)
     kept, dropped = [], []
-    for row in rows:
-        decision = gate_decision(row)
+    for row, decision in zip(rows, propagate_by_article(rows)):
         merged = {**row, **decision}
         (dropped if decision["scope_gate_blocked"] == "Y" else kept).append(merged)
     return kept, dropped
