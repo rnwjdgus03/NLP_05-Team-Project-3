@@ -1,70 +1,75 @@
-"""추출 프롬프트에 상류 오류 두 가지를 막는 규칙이 있는지 (2026-08-02).
+"""추출 프롬프트 — 무엇을 넣었고 무엇을 뺐는지 (2026-08-02).
 
-프롬프트는 코드처럼 테스트할 수 없지만, **규칙이 지워지지 않았는지**는 지킬 수 있다.
-아래 둘은 실측에서 거짓 불일치를 만든 원인이고, 지금은 하류에서 방어만 하고 있다.
-프롬프트가 근본 수정이므로 규칙이 사라지면 방어에만 의존하게 된다.
+프롬프트는 코드처럼 테스트할 수 없다. 다만 **결정이 지워지지 않았는지**는 지킬 수 있다.
 
-  1. 문장에 없는 품목 부착
-     '작년 한 해 전체 수출액이 6838억달러' 문장에 item=반도체가 붙었다.
-     기사 제목이 반도체를 다뤘고, 프롬프트가 제목·앞뒤 문장을 함께 준다.
-     그 결과 전체 수출액(6,838억)을 반도체 수출액(1,420억)과 대조해 '불일치'라 단언했다.
+## 뺀 것 — 품목 근거 규칙
 
-  2. 시점 지시어를 비교 기준으로 오독
-     '한 달 전(1.4%)'의 change_base가 전월로 잡혔다. 실제로는 11월의 전년동월비다.
-     11월 대 10월(-2.1%)을 계산해 '불일치'라 단언했고, 주장은 참이었다.
+거짓 불일치의 원인 중 하나가 상류 추출이었다.
+`'작년 한 해 전체 수출액이 6838억달러'` 문장에 `item=반도체` 가 붙어
+전체 수출액 6,838억을 반도체 수출액 1,420억과 대조하고 '불일치'라 단언했다.
+
+프롬프트로 고치려 **두 번 시도했고 둘 다 원본보다 나빴다.** 444~449건 전수 측정:
+
+| | 대상 있음 | 근거 없음 |
+|---|---|---|
+| 원본 | 222/443 (50%) | 39 |
+| 1차 `'문장에 없으면 -'` | 117/444 (26%) | 14 |
+| 2차 `'총계 문장에만'` 으로 좁힘 | 97/449 (22%) | 22 |
+
+규칙을 좁혔는데 더 나빠졌다. 어떤 형태로 넣든 모델이 품목을 대거 버린다.
+잃은 것 중에는 문장에 **있는** 품목이 많았다 —
+`'폴크스바겐그룹 전기차 80만대'`, `'로봇이 주요 공정의 100%를 처리'`,
+`'저비용항공사(LCC) 이용객 2419만명'`.
+
+10문장 대조군에서는 이 문제가 안 보였다. 표본이 품목별 수출 유형뿐이었다.
+**작은 표본으로 통과한 것을 전수로 다시 재는 것이 필요했다.**
+
+→ 대신 하류에서 막는다: `prepare_kosis_mapping_input.claim_item_grounded`.
+
+## 남긴 것 — 비교 기준 규칙
+
+`'한 달 전(1.4%)'` 의 `change_base` 가 `전월` 로 잡혀 11월 대 10월(-2.1%)을 계산했다.
+실제로는 11월의 전년동월비(+1.4%)였고 주장은 참이었다.
+좁고 구체적인 규칙이라 남겼다. **다만 전수 검증은 하지 않았다.**
 """
 import extract_hcx
-
 
 PROMPT = extract_hcx.SYSTEM_PROMPT
 
 
 # --------------------------------------------------------------------------
-# 규칙 1 — 품목 근거
+# 뺀 것이 다시 들어오지 않았는지
 # --------------------------------------------------------------------------
 
-def test_rule_is_scoped_to_aggregate_sentences_only():
-    """규칙을 넓게 쓰면 정당한 품목까지 지운다. 444건 실측으로 확인했다.
-
-    1차: '문장에 없으면 -' → 근거 없는 대상 39 → 14 로 줄었지만
-         **정당한 품목 106건이 사라졌다**(대상 있음 50% → 26%).
-         '전기차 80만대', '로봇이 주요 공정의 100%', 'LCC 이용객 2419만명' 처럼
-         문장에 **있는** 품목까지 지워졌다.
-    2차: 규칙을 '총계 문장에만' 으로 좁혔다.
-
-    10문장 대조군에서는 이 문제가 안 보였다 — 표본이 품목별 수출 유형뿐이었다.
-    """
-    assert "총계 문장에만" in PROMPT
-    assert "품목이 문장에 나오면 그대로 쓴다" in PROMPT
+def test_item_grounding_rule_is_not_in_the_prompt():
+    """두 번 넣어봤고 두 번 다 나빴다. 다시 넣으려면 전수 측정부터 할 것."""
+    for phrase in ("총계 문장에만", "[검증 대상 문장]에 나오면", "제목이나 앞뒤 문장의 품목"):
+        assert phrase not in PROMPT
 
 
-def test_positive_examples_are_present():
-    """지우는 예시만 있으면 지우는 쪽으로 쏠린다. 실측에서 잃은 것들을 예시로 넣었다."""
-    for example in ("전기차 80만대", "로봇이 주요 공정의 100%", "LCC 이용객 2419만명"):
-        assert example in PROMPT
+def test_schema_description_is_unconstrained():
+    line = next(l for l in PROMPT.splitlines() if '"measurement_item"' in l)
+    assert "총계" not in line and "[검증 대상 문장]" not in line
 
 
-def test_negative_example_is_present():
-    assert "전체 수출액이 6838억달러" in PROMPT
-    assert "item=-" in PROMPT
+def test_the_experiment_is_recorded_in_source():
+    """왜 뺐는지 남기지 않으면 다음 사람이 같은 시도를 반복한다."""
+    import inspect
+    source = inspect.getsource(extract_hcx)
+    assert "두 번 시도했고 둘 다 원본보다 나빴다" in source
+    assert "222/443" in source and "97/449" in source
 
 
-def test_schema_field_is_not_over_constrained():
-    """스키마 설명까지 '문장에 있을 때만'으로 조이면 모델이 품목을 대거 지운다.
-
-    실측: 그렇게 썼다가 정당한 품목 106건을 잃었다.
-    스키마에는 총계 조건만 남기고 나머지는 판정 규칙에서 다룬다.
-    """
-    schema_line = next(l for l in PROMPT.splitlines() if '"measurement_item"' in l)
-    assert "총계" in schema_line
-    assert "[검증 대상 문장]" not in schema_line
+def test_downstream_defence_is_named_as_the_alternative():
+    import inspect
+    assert "claim_item_grounded" in inspect.getsource(extract_hcx)
 
 
 # --------------------------------------------------------------------------
-# 규칙 2 — 비교 기준
+# 남긴 것
 # --------------------------------------------------------------------------
 
-def test_time_pointer_is_not_a_change_base():
+def test_change_base_rule_is_present():
     assert "시점을 가리키는 말은 change_base가 아니다" in PROMPT
 
 
@@ -74,9 +79,21 @@ def test_change_base_example_is_present():
 
 
 # --------------------------------------------------------------------------
-# 실측 근거를 프롬프트에 남긴다
+# 프롬프트가 온전한지 — 문자열이 끊긴 적이 있다
 # --------------------------------------------------------------------------
 
-def test_observed_failures_are_recorded_in_the_prompt():
-    """왜 이 규칙이 있는지 남기지 않으면 다음 사람이 지운다."""
-    assert PROMPT.count("실측 오류") >= 2
+def test_prompt_is_not_truncated():
+    """주석을 문자열 안에 넣어 프롬프트가 두 동강 난 적이 있다.
+
+    그때 change_base 규칙과 마지막 규칙들이 통째로 사라졌는데
+    코드는 정상 동작해서 눈치채기 어려웠다.
+    """
+    assert PROMPT.rstrip().endswith("빠짐없이 반영한다.")
+    assert "## 출력 JSON 스키마" in PROMPT
+    assert "## 판정 규칙" in PROMPT
+    assert len(PROMPT) > 3000
+
+
+def test_no_comment_leaked_into_the_prompt():
+    assert "대상 있음 222" not in PROMPT
+    assert "claim_item_grounded" not in PROMPT
