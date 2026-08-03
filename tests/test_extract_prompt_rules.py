@@ -23,20 +23,25 @@ PROMPT = extract_hcx.SYSTEM_PROMPT
 # 규칙 1 — 품목 근거
 # --------------------------------------------------------------------------
 
-def test_rule_states_both_directions():
-    """한쪽만 강조하면 모델이 그쪽으로 몰린다.
+def test_rule_is_scoped_to_aggregate_sentences_only():
+    """규칙을 넓게 쓰면 정당한 품목까지 지운다. 444건 실측으로 확인했다.
 
-    1차 프롬프트가 '없으면 -' 쪽만 강조했더니 대조군 6건 중 4건에서
-    문장에 **있는** 품목까지 지워졌다(석유화학·선박·바이오헬스·생활가전).
+    1차: '문장에 없으면 -' → 근거 없는 대상 39 → 14 로 줄었지만
+         **정당한 품목 106건이 사라졌다**(대상 있음 50% → 26%).
+         '전기차 80만대', '로봇이 주요 공정의 100%', 'LCC 이용객 2419만명' 처럼
+         문장에 **있는** 품목까지 지워졌다.
+    2차: 규칙을 '총계 문장에만' 으로 좁혔다.
+
+    10문장 대조군에서는 이 문제가 안 보였다 — 표본이 품목별 수출 유형뿐이었다.
     """
-    assert "나오면 **반드시 쓰고**" in PROMPT
-    assert "양쪽 다 지킨다" in PROMPT
+    assert "총계 문장에만" in PROMPT
+    assert "품목이 문장에 나오면 그대로 쓴다" in PROMPT
 
 
 def test_positive_examples_are_present():
-    """지우는 예시만 있으면 지우는 쪽으로 학습된다."""
-    assert "'석유화학 수출은 480억 달러로' → item=석유화학" in PROMPT
-    assert "→ item=선박" in PROMPT
+    """지우는 예시만 있으면 지우는 쪽으로 쏠린다. 실측에서 잃은 것들을 예시로 넣었다."""
+    for example in ("전기차 80만대", "로봇이 주요 공정의 100%", "LCC 이용객 2419만명"):
+        assert example in PROMPT
 
 
 def test_negative_example_is_present():
@@ -44,19 +49,15 @@ def test_negative_example_is_present():
     assert "item=-" in PROMPT
 
 
-def test_over_correction_is_recorded():
-    """왜 양방향으로 썼는지 남기지 않으면 다음 사람이 한쪽으로 되돌린다."""
-    assert "지워졌다" in PROMPT
+def test_schema_field_is_not_over_constrained():
+    """스키마 설명까지 '문장에 있을 때만'으로 조이면 모델이 품목을 대거 지운다.
 
-
-def test_legitimate_ellipsis_is_still_allowed():
-    """앞 문장에서 대상을 이어받는 생략까지 막으면 정상 추출을 잃는다."""
-    assert "앞 문장의 대상을 이어받는 생략은 허용한다" in PROMPT
-
-
-def test_schema_fields_carry_the_same_constraint():
-    """규칙 목록에만 쓰고 스키마 설명에 없으면 모델이 스키마를 따른다."""
-    assert PROMPT.count("[검증 대상 문장]") >= 3
+    실측: 그렇게 썼다가 정당한 품목 106건을 잃었다.
+    스키마에는 총계 조건만 남기고 나머지는 판정 규칙에서 다룬다.
+    """
+    schema_line = next(l for l in PROMPT.splitlines() if '"measurement_item"' in l)
+    assert "총계" in schema_line
+    assert "[검증 대상 문장]" not in schema_line
 
 
 # --------------------------------------------------------------------------
