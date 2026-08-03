@@ -75,10 +75,20 @@ def test_invalid_metadata_blocks():
     assert downstream_validated_rank1(_row(), _result(item_meta_valid=False)) is False
 
 
-def test_tie_between_top_two_tables_stays_manual():
-    """1·2위 점수차가 작으면 어느 표인지 사람이 봐야 한다."""
+def test_thin_table_margin_no_longer_blocks():
+    """2026-08-02 결정 변경. 이 테스트는 원래 '마진이 얇으면 사람이 본다'였다.
+
+    두 번 재고 나서 풀었다.
+      1차(평가집합 103) 마진만으로 막힌 5건 → 회수 2 · 거짓 불일치 2. 1:1 이라 유지
+      2차(평가집합 88)  마진만으로 막힌 4건 → 회수 2 · 거짓 불일치 0. 풀었다
+    바뀐 이유는 그 거짓 불일치 2건이 각각 다른 게이트의 몫이었기 때문이다
+    (비교 기준 오독 → CHANGE_BASE_AMBIGUOUS, 한은 차입 → 출처 전파로 범위 밖).
+
+    마진은 표 검색 품질과도 무관했다 — 게이트를 우회한 판정에서
+    얇은 쪽 일치율 50%(3/6), 넓은 쪽 25%(1/4)로 방향이 오히려 반대였다.
+    """
     row = _row(candidate_score="600", candidate_runner_up_score="598")
-    assert downstream_validated_rank1(row, _result()) is False
+    assert downstream_validated_rank1(row, _result()) is True
 
 
 def test_semantic_guard_blocks_unrelated_item():

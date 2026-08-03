@@ -926,12 +926,27 @@ def downstream_validated_rank1(row: Mapping[str, Any], result: Mapping[str, Any]
     # (실측 오매핑: 농수산식품 수출 → '건조기(농산물용의 것)', 반도체 → '인산에스테르 및 그 염…')
     if not claim_item_matches_selection(row, result):
         return False
-    try:
-        score = float(str(row.get("candidate_score", "")))
-        runner_up = float(str(row.get("candidate_runner_up_score", "")))
-    except (TypeError, ValueError):
-        return True  # 점수 정보가 없으면 실측 통과만으로 인정
-    return (score - runner_up) >= max(5.0, score * 0.01)
+    # 2026-08-02: 상류 표 점수 마진 조건을 제거했다.
+    #
+    # 이 조건은 '1·2위 표 점수가 비슷하면 표 선택이 애매하다'는 상류 신호였다.
+    # 그런데 여기까지 온 후보는 이미 공식 메타·API 응답·단위·기간·의미 가드를
+    # 모두 독립 통과했다. 약한 상류 신호가 강한 하류 증거를 덮고 있었다.
+    #
+    # 근거(실측, 게이트를 우회해 조회):
+    #   1차(평가집합 103) 마진만으로 막힌 5건 → 회수 2 · 거짓 불일치 2. 1:1 이라 유지했다.
+    #   2차(평가집합 88)  마진만으로 막힌 4건 → 회수 2 · **거짓 불일치 0**.
+    # 달라진 이유는 그 거짓 불일치 2건의 정체다.
+    #   하나는 '한 달 전(1.4%)' 비교 기준 오독 → CHANGE_BASE_AMBIGUOUS 로 보류하게 고쳤다
+    #   하나는 '정부의 한은 차입' → 범위 밖이라 출처 전파 강화로 집합에서 빠졌다
+    # 즉 마진이 막고 있던 것은 **다른 게이트가 맡아야 할 일**이었다.
+    # 그 둘이 제 몫을 하게 되자 마진은 정상 확정만 막고 있었다.
+    #
+    # 마진은 표 검색 품질과도 무관했다 — 게이트를 우회한 판정에서
+    # 마진이 얇은 쪽 일치율 50%(3/6), 넓은 쪽 25%(1/4)로 방향이 오히려 반대였다(n=10).
+    #
+    # 남은 안전 조건은 그대로다: rank1 · 상류 REJECT 제외 · 메타·API·단위·기간 실측 통과 ·
+    # 의미 가드. 되돌리려면 이 함수에 마진 검사를 다시 넣으면 된다.
+    return True
 
 
 def _rank_of(row: Mapping[str, Any]) -> int:
