@@ -1,0 +1,136 @@
+{
+  "schema_version": "kosis-evaluation-set-v2",
+  "created_at": "2026-08-03T05:58:47.130612+00:00",
+  "source_ready_file": "/content/drive/MyDrive/NLP_05-Team-Project-3/runs/contextual_top50_context_v2_8x3/07_mapping_jinsung/05_hcx_measurements_kosis_ready.csv",
+  "source_ready_sha256": "4a0a79a939664b83895a44a46888cecb3e537b07250f9646a1c3cf6316db9543",
+  "output_file": "/content/drive/MyDrive/NLP_05-Team-Project-3/runs/contextual_top50_context_v2_8x3/07_mapping_jinsung/chroma_hybrid/evaluation_set_v5.csv",
+  "output_sha256": "1a5f983db6a7868926b15052a0bbd71ca33d81f976028fc693fc31015111efa8",
+  "input_measurements": 177,
+  "locked_measurements": 88,
+  "excluded_measurements": 89,
+  "excluded_by_code": {
+    "FORECAST_VALUE": 20,
+    "INTERNAL_DOCUMENT_SOURCE": 17,
+    "ENUMERATED_COMPANIES": 10,
+    "SINGLE_COMPANY_METRIC": 9,
+    "POLICY_PARAMETER": 7,
+    "FOREIGN_MARKET_VALUE": 5,
+    "DERIVED_INDICATOR": 4,
+    "PLAN_VALUE": 4,
+    "INTRADAY_MARKET_RATE": 4,
+    "DERIVED_DIFFERENCE": 4,
+    "FOREIGN_ORG_SOURCE": 2,
+    "BRANDED_PRODUCT_PRICE": 2,
+    "GLOBAL_SCOPE_VALUE": 1
+  },
+  "review_flagged_but_kept": 10,
+  "gate_rules": {
+    "foreign_market": [
+      "비트코인",
+      "이더리움",
+      "가상자산",
+      "가상화폐",
+      "암호화폐",
+      "코인시세",
+      "나스닥",
+      "s&p",
+      "에스앤피",
+      "다우존스",
+      "다우지수",
+      "니케이",
+      "항셍",
+      "월가",
+      "뉴욕증시"
+    ],
+    "global_aggregate": [
+      "세계 평균",
+      "세계평균",
+      "글로벌 평균",
+      "주요국 평균",
+      "oecd 평균",
+      "국제 평균",
+      "세계 전체",
+      "전 세계 합계"
+    ],
+    "global_context": [
+      "전 세계",
+      "전세계",
+      "세계 각국",
+      "글로벌",
+      "국제 사회"
+    ],
+    "forecast": [
+      "전망",
+      "예상",
+      "추정",
+      "내다봤",
+      "관측",
+      "예측",
+      "잠재 성장률",
+      "잠재성장률"
+    ],
+    "plan": [
+      "하겠다",
+      "겠다고",
+      "계획",
+      "목표로",
+      "추진하기로",
+      "집행하겠"
+    ],
+    "policy_parameter": [
+      "세율",
+      "개별소비세",
+      "관세율",
+      "부가세율",
+      "법인세율",
+      "소득세율",
+      "정원",
+      "허용 비율",
+      "한도",
+      "요율",
+      "공제율",
+      "지원 비율"
+    ],
+    "difference_hint": [
+      "올랐",
+      "올렸",
+      "올린",
+      "내렸",
+      "내린",
+      "인상",
+      "인하",
+      "늘었",
+      "늘렸",
+      "줄었",
+      "줄였",
+      "높였",
+      "낮췄",
+      "낮아",
+      "개선",
+      "차이",
+      "포인트",
+      "급감",
+      "급증"
+    ]
+  },
+  "notes": [
+    "REJECT 만 제외했다. REVIEW 는 확신이 없어 남긴다(오탐 방지).",
+    "게이트는 문장 단위라, 전망 문장에 섞인 실적치가 함께 제외될 수 있다.",
+    "이 집합은 '검색 비교'용이다. 판정(verdict) 정확도 평가에는 별도 검토가 필요하다."
+  ],
+  "silver_tier_kept": {
+    "NO_MATCH": 56,
+    "NEAR_MISS": 20,
+    "SILVER_UNIQUE": 8,
+    "SILVER_AMBIGUOUS": 4
+  },
+  "silver_tier_excluded": {
+    "(없음)": 74,
+    "NO_MATCH": 13,
+    "NEAR_MISS": 2
+  },
+  "false_positive_check": {
+    "silver_unique_excluded": 0,
+    "criterion": "값이 재현된 건을 제외하면 오탐이다. 0이어야 한다."
+  }
+}
