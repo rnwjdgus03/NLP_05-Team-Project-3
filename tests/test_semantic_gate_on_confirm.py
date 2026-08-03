@@ -123,6 +123,47 @@ def test_spacing_does_not_break_the_check():
     assert out["mapping_status"] == "READY"
 
 
+def test_multiple_items_separated_by_comma():
+    """'LCC, 대형항공사'를 통째로 찾으면 둘 다 문장에 있어도 실패한다(실측 오탐)."""
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert claim_item_grounded({
+        "industry_or_item": "LCC, 대형항공사",
+        "claim_text": "저비용항공사(LCC) 이용객이 2419만여 명으로 대형항공사 이용객을 넘어섰다"})
+
+
+def test_derived_form_matches_the_stem():
+    """'조선업'은 문장의 '조선 산업기술인력'에서 온 정당한 대상이다."""
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert claim_item_grounded({
+        "industry_or_item": "조선업",
+        "claim_text": "지난 2023년 말 조선 산업기술인력은 5만8528명이었다"})
+
+
+def test_indicator_grounds_an_elliptical_sentence():
+    """앞 문장에서 대상을 이어받는 정당한 생략 — 지표에 근거가 있다."""
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert claim_item_grounded({
+        "industry_or_item": "조선업",
+        "claim_text": "이들이 차지하는 비율도 같은 기간 1.5%에서 4.4%로 증가했다.",
+        "indicator": "조선 산업기술인력 중 외국인의 비율"})
+
+
+def test_item_absent_from_both_sentence_and_indicator_is_flagged():
+    """실측 거짓 불일치의 원인 — 지표가 '총수출액'인데 대상이 '반도체'다."""
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert not claim_item_grounded({
+        "industry_or_item": "반도체", "indicator": "총수출액",
+        "claim_text": TOTAL_EXPORT_SENTENCE})
+
+
+def test_short_stem_does_not_match_everything():
+    """어간을 너무 짧게 자르면 아무 문장에나 걸린다."""
+    from kosis_validate_mapping_candidates import claim_item_grounded
+    assert not claim_item_grounded({
+        "industry_or_item": "가업", "indicator": "수출액",
+        "claim_text": "수출액이 늘었다"})
+
+
 def test_empty_item_is_not_flagged_as_ungrounded():
     """대상이 없는 주장은 이 규칙의 대상이 아니다(집계 규칙이 따로 본다)."""
     out = apply_semantic_ready_gate(TOTAL_EXPORT_CLAIM, _result("계"))
