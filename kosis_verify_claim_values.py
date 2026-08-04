@@ -472,6 +472,20 @@ def aggregation_method(row):
     return 'latest'
 
 
+# KOSIS 는 주기를 두 가지 어휘로 답한다.
+#   자료 행     PRD_SE = 'Y' / 'Q' / 'M'
+#   getMeta PRD PRD_SE = '년' / '분기' / '월'
+_PRD_SE_ALIASES = {'Y': 'Y', '년': 'Y', '연': 'Y', '연간': 'Y',
+                   'H': 'H', '반기': 'H',
+                   'Q': 'Q', '분기': 'Q',
+                   'M': 'M', '월': 'M', '월간': 'M',
+                   'D': 'D', '일': 'D'}
+
+
+def row_periodicity(row) -> str:
+    return _PRD_SE_ALIASES.get(str(row.get('PRD_SE', '')).strip(), '')
+
+
 def aggregate_period(data_rows, prd_se, target_period, method, span=None):
     if span:
         # 구간 합산은 **반드시 sum** 이다. latest 를 쓰면 마지막 달 값만 나온다.
@@ -479,10 +493,15 @@ def aggregate_period(data_rows, prd_se, target_period, method, span=None):
         # **KOSIS 는 월 자료가 없는 표에 prdSe=M 을 줘도 에러를 내지 않는다.**
         # 2026-08-04 실측: DT_127005_005 에 prdSe=M/Q 로 물었더니
         # PRD_DE=['2019'..'2024'] 인 **연간** 행이 그대로 돌아왔다.
-        # 그걸 합치면 6개 연도의 합이 '11개월 누적'으로 둔갑한다.
-        # 그래서 자릿수를 명시적으로 확인한다. 우연에 기대지 않는다.
+        #
+        # 자릿수만으로는 부족하다. **분기 PRD_DE 는 월간과 모양이 같다** —
+        # 실측: DT_1K41012 를 prdSe=Q 로 물으면 202501/202502/202503/202504 가 온다.
+        # 분기를 2자리로 채우기 때문에 '202501' 이 1분기인지 1월인지 글자로는 구분이 안 된다.
+        # 분기 넷을 월 넷으로 착각해 합치면 조용히 틀린 답이 나온다.
+        # 그래서 **PRD_SE 필드를 본다.**
         matching = [r for r in data_rows
-                    if len(str(r.get('PRD_DE', ''))) == len(span[0])
+                    if row_periodicity(r) == 'M'
+                    and len(str(r.get('PRD_DE', ''))) == len(span[0])
                     and span[0] <= str(r.get('PRD_DE', '')) <= span[1]]
         values = [parse_number(r.get('DT')) for r in matching]
         values = [v for v in values if v is not None]

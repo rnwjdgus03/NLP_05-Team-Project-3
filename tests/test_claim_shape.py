@@ -233,15 +233,15 @@ def test_span_drives_the_query_range():
 
 
 def test_span_sums_only_those_months():
-    rows = [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 13)]
+    rows = [{"PRD_DE": f"2024{m:02d}", "DT": "10", "PRD_SE": "M"} for m in range(1, 13)]
     value, used = aggregate_period(rows, "M", "2024", "latest", ("202401", "202411"))
     assert value == 110          # 12월을 빼야 한다. 이걸 안 빼서 거짓 불일치가 났다
     assert "11개월" in used
 
 
 def test_span_ignores_other_years():
-    rows = ([{"PRD_DE": f"2023{m:02d}", "DT": "99"} for m in range(1, 13)]
-            + [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 12)])
+    rows = ([{"PRD_DE": f"2023{m:02d}", "DT": "99", "PRD_SE": "M"} for m in range(1, 13)]
+            + [{"PRD_DE": f"2024{m:02d}", "DT": "10", "PRD_SE": "M"} for m in range(1, 12)])
     value, _ = aggregate_period(rows, "M", "2024", "sum", ("202401", "202411"))
     assert value == 110
 
@@ -295,14 +295,50 @@ def test_annual_rows_are_never_summed_as_months():
     PRD_DE=['2019'..'2024'] 인 연간 행이 그대로 돌아왔다.
     그걸 합치면 6개 연도의 합이 '11개월 누적'으로 둔갑한다.
     """
-    annual = [{"PRD_DE": str(y), "DT": "100000"} for y in range(2019, 2025)]
+    annual = [{"PRD_DE": str(y), "DT": "100000", "PRD_SE": "Y"} for y in range(2019, 2025)]
     value, used = aggregate_period(annual, "M", "2024", "sum", ("202401", "202411"))
     assert value is None
     assert used == ""
 
 
 def test_mixed_rows_take_only_the_months():
-    rows = ([{"PRD_DE": "2024", "DT": "999999"}]
-            + [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 12)])
+    rows = ([{"PRD_DE": "2024", "DT": "999999", "PRD_SE": "Y"}]
+            + [{"PRD_DE": f"2024{m:02d}", "DT": "10", "PRD_SE": "M"} for m in range(1, 12)])
     value, _ = aggregate_period(rows, "M", "2024", "sum", ("202401", "202411"))
     assert value == 110
+
+
+# --------------------------------------------------------------------------
+# 분기 PRD_DE 는 월간과 모양이 같다 (2026-08-04 실측)
+# --------------------------------------------------------------------------
+
+def test_quarterly_rows_are_not_summed_as_months():
+    """DT_1K41012 를 prdSe=Q 로 물으면 202501/202502/202503/202504 가 온다.
+
+    분기를 2자리로 채우므로 '202501' 이 1분기인지 1월인지 **글자로는 구분이 안 된다.**
+    PRD_SE 필드를 봐야 한다. 안 보면 분기 넷을 월 넷으로 합쳐 조용히 틀린 답을 낸다.
+    """
+    from kosis_verify_claim_values import row_periodicity
+    quarterly = [{"PRD_DE": f"2024{q:02d}", "DT": "100", "PRD_SE": "Q"} for q in range(1, 5)]
+    assert row_periodicity(quarterly[0]) == "Q"
+    assert aggregate_period(quarterly, "M", "2024", "sum", ("202401", "202411")) == (None, "")
+
+
+def test_monthly_rows_still_sum():
+    monthly = [{"PRD_DE": f"2024{m:02d}", "DT": "10", "PRD_SE": "M"} for m in range(1, 12)]
+    assert aggregate_period(monthly, "M", "2024", "sum", ("202401", "202411"))[0] == 110
+
+
+def test_korean_periodicity_labels_are_understood():
+    """getMeta 는 '년'/'분기'/'월' 로, 자료 행은 'Y'/'Q'/'M' 으로 답한다."""
+    from kosis_verify_claim_values import row_periodicity
+    assert row_periodicity({"PRD_SE": "월"}) == "M"
+    assert row_periodicity({"PRD_SE": "분기"}) == "Q"
+    assert row_periodicity({"PRD_SE": "년"}) == "Y"
+    assert row_periodicity({"PRD_SE": ""}) == ""
+
+
+def test_rows_without_a_periodicity_are_not_summed():
+    """PRD_SE 가 없으면 무엇인지 알 수 없다. 모르면 합치지 않는다."""
+    rows = [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 12)]
+    assert aggregate_period(rows, "M", "2024", "sum", ("202401", "202411")) == (None, "")
