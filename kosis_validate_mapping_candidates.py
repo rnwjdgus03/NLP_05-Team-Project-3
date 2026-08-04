@@ -838,6 +838,7 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
 from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_ITEM_TOKENS,
     AGGREGATE_OBJ_NAMES,
+    normalize_periodicity,
 )
 # 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
@@ -1002,6 +1003,32 @@ def required_periods_for_row(row: Mapping[str, Any]) -> list[str]:
     return [period for period in dict.fromkeys(periods) if period]
 
 
+def table_periodicities(meta_rows) -> set[str]:
+    """이 표가 제공하는 수록 주기. 메타에 없으면 빈 집합(모름)."""
+    codes: set[str] = set()
+    for meta in meta_rows:
+        for token in str(meta.get("prd_se_list", "")).split("|"):
+            code = normalize_periodicity(token)
+            if code:
+                codes.add(code)
+    return codes
+
+
+def periodicity_unavailable(row, meta_rows) -> str:
+    """주장이 필요로 하는 주기를 표가 못 주면 사유 코드. 줄 수 있거나 모르면 빈 문자열.
+
+    **모르면 막지 않는다.** prd_se_list 는 --with-periodicity 로 수집해야 채워지고,
+    그 전 산출물에는 없다. 없는 것을 '못 준다'로 읽으면 전부 죽는다.
+    """
+    wanted = normalize_periodicity(row.get("prd_se") or row.get("measurement_prd_se"))
+    if not wanted:
+        return ""
+    available = table_periodicities(meta_rows)
+    if not available or wanted in available:
+        return ""
+    return f"PERIODICITY_NOT_AVAILABLE: 표는 {'/'.join(sorted(available))} 만 제공, 주장은 {wanted}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate bounded KOSIS ITEM/OBJ combinations")
     parser.add_argument("--input", required=True)
@@ -1102,6 +1129,20 @@ def main() -> None:
             continue
         key = (str(row.get("org_id", "")), str(row.get("tbl_id", "")))
         meta_rows = meta_by_table.get(key, [])
+        # 표가 그 주기를 제공하지 않으면 **조회하지 않는다.**
+        # KOSIS 는 없는 주기를 물어도 에러를 내지 않고 연간 행을 그대로 준다
+        # (실측 DT_127005_005: prdSe=M 에 PRD_DE=['2019'..'2024']).
+        # 조회해버리면 분기 주장에 연간값이 붙어 거짓 불일치가 난다.
+        unavailable = periodicity_unavailable(row, meta_rows)
+        if unavailable:
+            results.append({
+                **row,
+                "mapping_status": MAPPING_FAILED,
+                "mapping_reason": unavailable,
+                "mapping_confidence": 0.0,
+                "api_valid_combination_count": 0,
+            })
+            continue
         grouped = group_official_meta(meta_rows)
         claim_text = build_claim_context(row)
         obj_text = build_obj_context(row)
