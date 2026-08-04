@@ -1,0 +1,5 @@
+retrieval_mode,top_k,candidate_rows,retrieval_hits,retrieval_gold,retrieval_recall,retrieval_coverage,ready_rows,technical_valid_rows,needs_confirmation_rows,api_error_rows,not_evaluated_rows,item_correct,item_labeled,obj_correct,obj_labeled,item_obj_correct,item_obj_labeled,technical_item_obj_hits,technical_item_obj_gold,verified_rows,verdict_correct,verdict_labeled
+lexical,1,39,13,24,0.5416666666666666,1.0,4,25,22,0,0,3,3,3,3,3,3,4,20,4,3,3
+lexical,2,74,15,24,0.625,1.0,4,26,26,0,0,3,3,3,3,3,3,4,20,4,3,3
+lexical,3,109,15,24,0.625,1.0,4,28,34,0,0,3,3,3,3,3,3,5,20,4,3,3
+lexical,5,179,15,24,0.625,1.0,4,33,44,0,0,3,3,3,3,3,3,5,20,4,3,3

@@ -1,0 +1,81 @@
+{
+  "baseline_version": "repro-v1-20260727",
+  "repository": "https://github.com/rnwjdgus03/NLP_05-Team-Project-3",
+  "official_baseline": {
+    "branch": "Poc",
+    "commit": "6ceb3ff8f71946267c8105bcce8dbf61bb26f47a"
+  },
+  "mapping_extension": {
+    "branch": "mapping-end",
+    "commit": "db31b61423930f4b7b07f1b387bc5e8f21cec25a",
+    "integration_policy": "Import the standalone coordinate verifier and sample only; do not replace the newer Poc pipeline."
+  },
+  "gold": {
+    "label_version": "v1",
+    "gate_version": "trade_scope_v1",
+    "source_commit": "0846657",
+    "source": {
+      "path": "outputs/gold/gold_measurement_scopefix.csv",
+      "sha256": "3eb7e2fabd22991b0788735cf206b2b4e644639668ece5dba37143a87e3b449a"
+    },
+    "ready": {
+      "path": "outputs/gold/gold_measurement_scopefix_kosis_ready.csv",
+      "sha256": "3aec94bd3491fad2a33fc2e015dccf4f72c72246dde96373668a929fd4c5ed86"
+    },
+    "locked": {
+      "path": "outputs/gold/gold_measurement_v1_locked.csv",
+      "sha256": "5e3b81133b2f09069b8b8946ffd25cf7bcbe24eda949e723a36d01ecb497fc9a"
+    },
+    "metrics": {
+      "rows": 109,
+      "unique_measurement_ids": 109,
+      "label_changes": 10,
+      "gold_verifiable_y": 32,
+      "gold_verifiable_n": 77,
+      "ready": 39,
+      "rejected": 70,
+      "gate_precision": 0.7435897435897436,
+      "gate_recall": 0.90625,
+      "ready_extraction_accuracy": 0.8461538461538461
+    }
+  },
+  "coordinate_verification": {
+    "input": "data/gold/gold_measurement_tail_100_final.csv",
+    "input_sha256": "8b47065b954478cb3885bb2b5cddbd6ca60067db5966fdd3571ef0646b23a5dc",
+    "coordinate_complete_rows": 12,
+    "reproduced_on": "2026-07-27",
+    "result_counts": {
+      "MATCH": 8,
+      "MISMATCH": 3,
+      "HOLD": 1
+    },
+    "result_sha256": "3376f6f1fca52133ee392b8eaf2956cf7a2de1644a90c30e17ef2367f83e8d59"
+  },
+  "tests": {
+    "official_baseline": "117 passed",
+    "mapping_extension": "125 passed",
+    "integrated_repro_branch": "120 passed",
+    "python": "3.12"
+  },
+  "locked_v1_evaluation": {
+    "retrieval_mode": "lexical",
+    "recommended_top_k": 2,
+    "table_index_sha256": "0b0fa15b50c05e6bb39e8fe63e09f8f3ebd6b0c08961c2cb0afa6d255af2195e",
+    "retrieval_recall_at_1": 0.5416666666666666,
+    "retrieval_recall_at_2": 0.625,
+    "retrieval_recall_at_3": 0.625,
+    "retrieval_recall_at_5": 0.625,
+    "ready_rows": 4,
+    "ready_input_rows": 39,
+    "ready_table_correct": 3,
+    "ready_table_labeled": 4,
+    "ready_item_obj_correct": 3,
+    "ready_item_obj_labeled": 3,
+    "verified_rows": 4,
+    "verdict_correct": 3,
+    "verdict_labeled_reached": 3,
+    "total_gold_verdict_labeled": 22,
+    "topk_summary_sha256": "b1f7020872d55e5f4cf788d7ecc8ad1aa34033fa64f2d40271ef5e4f1c8417bd",
+    "top2_verified_sha256": "38163b47909ba0bf29158db736f26dda648e40cf655f2f110366642c91fd9dff"
+  }
+}
