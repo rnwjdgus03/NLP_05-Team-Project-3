@@ -101,8 +101,17 @@ def cumulative_span(claim_text, period) -> tuple[str, str] | None:
     return f"{year}{start:02d}", f"{year}{end:02d}"
 
 
-def share_claim(indicator, claim_text) -> bool:
-    """분자와 분모가 둘 다 필요한 구성비 주장인가."""
+def share_claim(indicator, claim_text, dimension="") -> bool:
+    """분자와 분모가 둘 다 필요한 구성비 주장인가.
+
+    **구성비의 값은 항상 % 다.** 달러·명·개면 구성비일 수 없다.
+    이 조건이 없으면 한 문장에 측정이 여럿일 때 엉뚱한 것까지 잡는다 —
+    실측: '작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%' 에서
+    **수출액 1274억달러** 까지 구성비로 판정돼 누적 합산 경로가 막혔다.
+    CES 문장과 같은 계열의 실수다(한 문장, 여러 측정).
+    """
+    if dimension and dimension != "rate":
+        return False
     ind = _t(indicator)
     if any(word in ind for word in _NOT_SHARE):
         return False
@@ -152,7 +161,7 @@ def cumulative_is_answerable(row) -> tuple[str, str] | None:
                            row.get("measurement_period") or row.get("period"))
 
 
-def claim_shape_exclusion(row) -> tuple[str, str]:
+def claim_shape_exclusion(row, dimension="", semantic="") -> tuple[str, str]:
     """빼야 할 모양이면 (코드, 사유). 아니면 ('', '')."""
     text = row.get("claim_text")
     prd_se = row.get("measurement_prd_se") or row.get("prd_se")
@@ -160,7 +169,7 @@ def claim_shape_exclusion(row) -> tuple[str, str]:
 
     if cumulative_period(text, prd_se) and not cumulative_is_answerable(row):
         return "CUMULATIVE_PERIOD_UNSUPPORTED", CODES["CUMULATIVE_PERIOD_UNSUPPORTED"]
-    if share_claim(indicator, text):
+    if share_claim(indicator, text, dimension):
         return "SHARE_CLAIM_UNSUPPORTED", CODES["SHARE_CLAIM_UNSUPPORTED"]
     period = row.get("measurement_period") or row.get("period")
     if period_granularity_mismatch(text, prd_se, period):

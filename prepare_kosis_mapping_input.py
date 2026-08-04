@@ -289,7 +289,7 @@ def exclusion(row: dict, dimension: str, semantic: str):
     # 홀드아웃 50건에서 확정 4건이 전부 '불일치' 였고 넷 다 오판이었다 —
     # 분기를 연간으로, 1~11월 누적을 12개월과, 구성비를 수준값 좌표와 대조했다.
     # 차이가 6.1%p~34.5%p 라 extreme_error 문턱(100%p/300%)에 안 걸린다.
-    shape_code, shape_reason = claim_shape_exclusion(row)
+    shape_code, shape_reason = claim_shape_exclusion(row, dimension, semantic)
     if shape_code:
         return shape_code, shape_reason
     return "", ""

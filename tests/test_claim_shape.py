@@ -243,3 +243,27 @@ def test_claim_period_span_reads_the_columns():
 ])
 def test_bad_spans_fall_back_to_none(row):
     assert claim_period_span(row) is None
+
+
+def test_a_currency_measurement_is_never_a_share():
+    """한 문장에 측정이 여럿일 때 엉뚱한 것까지 잡으면 안 된다.
+
+    실측: '작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%' 에서
+    **수출액 1274억달러** 까지 구성비로 판정돼 누적 합산 경로가 막혔다.
+    구성비의 값은 항상 % 다.
+    """
+    text = "작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%로 나타났다."
+    assert not share_claim("반도체 수출 총액", text, "currency")
+    assert share_claim("중국 비율", text, "rate")
+
+
+def test_the_cumulative_level_claim_survives_the_share_gate():
+    row = {"claim_text": "작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%로 나타났다.",
+           "measurement_prd_se": "Y", "measurement_indicator": "반도체 수출 총액",
+           "measurement_period": "2024", "semantic_type": "amount"}
+    assert claim_shape_exclusion(row, "currency", "amount") == ("", "")
+    assert cumulative_is_answerable(row) == ("202401", "202411")
+
+
+def test_share_still_caught_without_a_dimension_hint():
+    assert share_claim("전시 분야 비중", "")
