@@ -70,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--model", default="HCX-007")
     parser.add_argument("--device", default="")
+    parser.add_argument("--article-prefix", default="",
+                        help="기사 ID 접두어. 런을 나눠 돌릴 때 겹치지 않게 할 것 (기본 A)")
     parser.add_argument("--article-limit", type=int, default=0)
     parser.add_argument("--span-limit", type=int, default=0)
     parser.add_argument("--measurement-limit", type=int, default=0)
@@ -118,6 +120,10 @@ def main() -> None:
         "--splitter",
         args.splitter,
     ]
+    if args.article_prefix:
+        # 기본값은 'A' 라서 런을 나눠 돌리면 두 런이 같은 A0018 을 만든다.
+        # 홀드아웃처럼 별도 기사 묶음을 돌릴 때는 반드시 다른 접두어를 줄 것.
+        preprocess.extend(["--article-prefix", args.article_prefix])
     if args.article_limit:
         preprocess.extend(["--limit", args.article_limit])
     if args.force:
