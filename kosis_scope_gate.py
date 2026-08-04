@@ -401,6 +401,33 @@ def has_own_source(claim_text: str) -> bool:
     return bool(_has(claim_text, OWN_SOURCE_MARKERS))
 
 
+# 기사 전체가 범위 밖일 때 홀로 남는 문장 (2026-08-04)
+#
+# CES 기사(A0005)에서 네 문장 중 셋이 OUT_OF_KOSIS_SCOPE 로 거부됐는데
+# '분야는 생활가전(18%) 디지털헬스(17%)...' 한 문장이 살아남아 평가 집합에 들어왔다.
+# **무엇의 분야인지가 이 문장에 없다.** 주어가 앞 문장에 있다.
+# 문장 단위 게이트는 이런 문장을 볼 수 없다 — 문장만 봐서는 범위를 알 수 없기 때문이다.
+#
+# '정부의 연간 누적 대출'과 같은 계열이지만 촉발 코드가 다르다.
+# 그쪽은 출처 귀속(ARTICLE_SCOPED_CODES), 이쪽은 주제 범위다.
+ARTICLE_SCOPE_CODES = frozenset({
+    "OUT_OF_KOSIS_SCOPE", "FOREIGN_ORG_SOURCE", "INTERNAL_DOCUMENT_SOURCE",
+    "ENUMERATED_COMPANIES", "SINGLE_COMPANY_METRIC", "FOREIGN_MARKET_VALUE",
+})
+
+# 앞 문장에 기대는 문장. 이 목록을 넓히면 정당한 문장이 죽는다 —
+# 추출 프롬프트에서 규칙을 넓혔다가 대상 있음이 50% -> 22% 로 떨어진 전례가 있다.
+# 넓히기 전에 반드시 88건 전수로 재고, 확정 건이 하나도 안 빠지는지 확인할 것.
+ANAPHORIC_OPENERS = ("이는", "이 ", "그 ", "해당", "분야는", "전체", "나머지",
+                     "이중", "이 중", "그중", "그 중", "반면", "또한", "아울러")
+
+
+def starts_with_anaphor(claim_text: str) -> bool:
+    """문장이 앞 문장을 가리키는 말로 시작하는가."""
+    text = _text(claim_text).lstrip()
+    return text.startswith(ANAPHORIC_OPENERS)
+
+
 def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
     """문장별 판정을 낸 뒤, 출처 귀속 판정을 같은 기사의 나머지 문장에 **표시만** 한다.
 

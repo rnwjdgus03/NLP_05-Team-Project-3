@@ -14,7 +14,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from kosis_scope_gate import gate_decision, propagate_by_article
+from kosis_scope_gate import (ARTICLE_SCOPE_CODES, gate_decision, has_own_source,
+                              propagate_by_article, starts_with_anaphor)
 
 
 EMPTY = {"", "-", "nan", "none", "null"}
@@ -457,6 +458,53 @@ def apply_article_scope(rows) -> int:
     return changed
 
 
+def apply_orphan_scope(rows) -> int:
+    """기사의 다른 측정 문장이 **전부** 범위 밖이고, 남은 문장이 자기 주어가 없으면 뺀다.
+
+    2026-08-04 실측. CES 기사(A0005)에서 네 문장 중 셋이 OUT_OF_KOSIS_SCOPE 로
+    거부됐는데 '분야는 생활가전(18%)...' 이 살아남아 평가 집합 88건에 들어와 있었다.
+    CES 전시 분야 비중은 미국 CTA 주최 행사 자료라 KOSIS 에 있을 수 없다.
+
+    조건을 셋 다 걸어야 안전하다.
+      1. 그 기사에서 거부된 측정 문장이 **하나도 빠짐없이** 범위 코드일 것
+      2. 살아남은 문장이 **모두** 앞 문장을 가리키는 말로 시작할 것
+      3. 자체 출처가 없을 것 (있으면 그 문장의 출처다 — 로봇산업진흥원 전례)
+
+    전수 측정: 88건 중 4건 제거, **확정 16건은 하나도 안 빠진다.**
+    조건을 하나라도 빼면 정당한 문장이 죽는다. 넓히기 전에 다시 측정할 것.
+    """
+    by_article: dict[str, list] = {}
+    for row in rows:
+        article = nz(row.get("article_id"))
+        if article:
+            by_article.setdefault(article, []).append(row)
+
+    changed = 0
+    for article, group in by_article.items():
+        rejected = [r for r in group if r.get("mapping_eligible") == "N"]
+        alive = [r for r in group if r.get("mapping_eligible") != "N"]
+        if not rejected or not alive:
+            continue
+        if any(nz(r.get("mapping_exclusion_code")) not in ARTICLE_SCOPE_CODES
+               for r in rejected):
+            continue
+        if not all(starts_with_anaphor(r.get("claim_text"))
+                   and not has_own_source(nz(r.get("claim_text"))) for r in alive):
+            continue
+        for row in alive:
+            row["mapping_gate"] = "REJECT"
+            row["mapping_gate_reason"] = "ORPHAN_IN_OUT_OF_SCOPE_ARTICLE"
+            row["mapping_exclusion_code"] = "ORPHAN_IN_OUT_OF_SCOPE_ARTICLE"
+            row["mapping_exclusion_reason"] = (
+                "같은 기사의 다른 측정 문장이 모두 범위 밖이고, "
+                "이 문장은 주어가 앞 문장에 있어 단독으로 범위를 알 수 없다")
+            row["mapping_eligible"] = "N"
+            row["in_ready"] = "N"
+            row["enrichment_actions"] = ""
+            changed += 1
+    return changed
+
+
 def prepare(
     input_path: Path,
     output_path: Path,
@@ -470,6 +518,7 @@ def prepare(
         normalized = [normalize_row(row) for row in reader]
 
     apply_article_scope(normalized)
+    apply_orphan_scope(normalized)
 
     fields = list(dict.fromkeys(source_fields + DERIVED_FIELDS))
     accepted = [row for row in normalized if row["mapping_eligible"] == "Y"]
