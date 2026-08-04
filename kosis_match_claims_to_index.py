@@ -119,6 +119,10 @@ ITEM_FAMILIES = {
 }
 
 
+from kosis_meta_coordinates import (normalize_periodicity, periodicity_satisfied,
+                                    table_periodicities)
+
+
 def read_csv(path: Path):
     with path.open(encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
@@ -1316,6 +1320,19 @@ def main():
                 norm_claim,
                 table,
             )
+            # 표가 그 주기를 못 주면 후보에서 뺀다 (2026-08-04).
+            # 홀드아웃1 표 245개 중 연간 전용이 115개, 격년이 69개였다 —
+            # 분기·월 주장은 대부분 답할 수 없는 표로 갔고,
+            # KOSIS 는 없는 주기를 물어도 에러 없이 연간을 돌려줘서 그대로 비교됐다.
+            table_prd_se = "|".join(sorted(table_periodicities(table_meta_rows)))
+            if not periodicity_satisfied(
+                    normalize_periodicity(norm_claim.get("prd_se")),
+                    table_periodicities(table_meta_rows)):
+                candidate_status = "REJECT"
+                candidate_status_code = "PERIODICITY_NOT_AVAILABLE"
+                candidate_status_reason = (
+                    f"표는 {table_prd_se or '?'} 만 제공, 주장은 "
+                    f"{normalize_periodicity(norm_claim.get('prd_se'))}")
             meta_candidates = top_meta_candidates(table_meta_rows, tokens, args.top_meta)
             if meta_candidates:
                 meta_summary = " | ".join(
@@ -1346,6 +1363,7 @@ def main():
                 "candidate_rank": rank,
                 "candidate_score": table_score,
                 "candidate_runner_up_score": runner_up_score if runner_up_score is not None else "",
+                "table_prd_se_list": table_prd_se,
                 "candidate_status": candidate_status,
                 "candidate_status_code": candidate_status_code,
                 "candidate_status_reason": candidate_status_reason,
@@ -1372,6 +1390,7 @@ def main():
         "value", "unit", "raw_unit", "unit_dimension", "semantic_type", "entity_type",
         "value_type", "measurement_role", "measurement_usage", "period", "prd_se", "change_base", "comparison_period",
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
+        "table_prd_se_list",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
         "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
         "table_override_rule", "mapping_override_rule",

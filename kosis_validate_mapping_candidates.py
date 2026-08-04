@@ -840,6 +840,7 @@ from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_OBJ_NAMES,
     normalize_periodicity,
     periodicity_satisfied,
+    table_periodicities,
 )
 # 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
@@ -1002,17 +1003,6 @@ def required_periods_for_row(row: Mapping[str, Any]) -> list[str]:
             if previous:
                 periods.append(previous)
     return [period for period in dict.fromkeys(periods) if period]
-
-
-def table_periodicities(meta_rows) -> set[str]:
-    """이 표가 제공하는 수록 주기. 메타에 없으면 빈 집합(모름)."""
-    codes: set[str] = set()
-    for meta in meta_rows:
-        for token in str(meta.get("prd_se_list", "")).split("|"):
-            code = normalize_periodicity(token)
-            if code:
-                codes.add(code)
-    return codes
 
 
 def periodicity_unavailable(row, meta_rows) -> str:

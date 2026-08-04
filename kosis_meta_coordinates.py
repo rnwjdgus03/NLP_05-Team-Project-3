@@ -470,3 +470,18 @@ def periodicity_satisfied(wanted: str, available) -> bool:
 def normalize_periodicity(value) -> str:
     """'월'·'M' 을 모두 'M' 으로. 모르는 값이면 빈 문자열."""
     return PRD_SE_ALIASES.get(str(value or "").strip(), "")
+
+
+def table_periodicities(meta_rows) -> set:
+    """이 표가 제공하는 수록 주기. 메타에 없으면 빈 집합(모름).
+
+    `prd_se_list` 는 kosis_build_meta_index --with-periodicity 로 채워진다.
+    표 단위 값이라 행마다 같으므로 집합으로 모은다.
+    """
+    codes = set()
+    for meta in meta_rows or []:
+        for token in str(meta.get("prd_se_list", "")).split("|"):
+            code = normalize_periodicity(token)
+            if code:
+                codes.add(code)
+    return codes

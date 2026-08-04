@@ -142,3 +142,38 @@ def test_a_monthly_table_cannot_answer_a_quarterly_claim():
 def test_multi_year_labels_are_recognised(label, code):
     from kosis_meta_coordinates import normalize_periodicity
     assert normalize_periodicity(label) == code
+
+
+# --------------------------------------------------------------------------
+# 표 후보 단계에서도 막는다 (라우팅)
+# --------------------------------------------------------------------------
+
+def test_match_rejects_tables_that_cannot_serve_the_periodicity():
+    """검증 직전에만 막으면 그 표가 1순위를 차지한 채로 끝난다.
+
+    후보 단계에서 빼야 답할 수 있는 표가 위로 올라온다.
+    홀드아웃1 표 245개 중 연간 전용 115개, 격년 69개 —
+    분기·월 주장은 대부분 답할 수 없는 표로 갔다.
+    """
+    import inspect
+
+    import kosis_match_claims_to_index as match
+    source = inspect.getsource(match.main)
+    assert "periodicity_satisfied(" in source
+    assert "PERIODICITY_NOT_AVAILABLE" in source
+
+
+def test_the_periodicity_column_is_written():
+    """무엇 때문에 빠졌는지 산출물에서 보여야 한다."""
+    import inspect
+
+    import kosis_match_claims_to_index as match
+    source = inspect.getsource(match.main)
+    assert '"table_prd_se_list": table_prd_se' in source
+
+
+def test_there_is_one_table_periodicities():
+    """구현이 둘이면 어긋난다. validate 도 공용 것을 쓴다."""
+    from kosis_meta_coordinates import table_periodicities as canonical
+    import kosis_validate_mapping_candidates as validate
+    assert validate.table_periodicities is canonical
