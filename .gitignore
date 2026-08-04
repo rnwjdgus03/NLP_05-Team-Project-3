@@ -31,3 +31,4 @@ outputs/runs/**
 .codex_analysis/
 outputs/*/
 !outputs/gold/
+.env

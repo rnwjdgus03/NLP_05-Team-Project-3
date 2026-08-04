@@ -18,6 +18,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from kosis_mapping_status import decide_final_status
+from kosis_mapping_feasibility import classify_mapping_feasibility
+
 
 READY = "READY"
 PROVISIONAL = "PROVISIONAL"
@@ -40,6 +43,12 @@ def _first(row: Mapping[str, Any], *names: str, default: Any = "") -> Any:
         if value is not None and str(value).strip() != "":
             return value
     return default
+
+
+def _boolish(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "t", "y", "yes", "ready", "success"}
 
 
 def _score(row: Mapping[str, Any]) -> float:
@@ -347,9 +356,11 @@ def choose_or_abstain(
     base = {"mapping_status": MAPPING_FAILED, "mapping_confidence": 0.0,
             "mapping_reason": "INVALID_COMBINATION", "selected_combination": None}
     if not ranked:
-        return base
+        return {**base, "top1_score": 0.0, "top2_score": 0.0, "candidate_margin": 0.0}
     first = dict(ranked[0])
     confidence = float(first.get("final_confidence", first.get("ranking_score", 0.0)))
+    top2_score = float(ranked[1].get("final_confidence", ranked[1].get("ranking_score", 0.0))) if len(ranked) > 1 else 0.0
+    candidate_margin = confidence - top2_score if len(ranked) > 1 else confidence
     reason = "validated candidate"
     status = READY
     if not first.get("period_valid", True):
@@ -361,13 +372,13 @@ def choose_or_abstain(
     elif confidence < ready_threshold:
         status, reason = NEEDS_CONFIRMATION, "absolute score is below READY threshold"
     elif len(ranked) > 1:
-        margin = confidence - float(ranked[1].get("final_confidence", ranked[1].get("ranking_score", 0.0)))
-        if margin < margin_threshold:
+        if candidate_margin < margin_threshold:
             status = PROVISIONAL if allow_provisional else NEEDS_CONFIRMATION
-            reason = f"top candidates have small margin ({margin:.4f})"
+            reason = f"top candidates have small margin ({candidate_margin:.4f})"
     return {"mapping_status": status, "mapping_confidence": confidence,
             "mapping_reason": reason, "selected_combination": first,
-            "candidate_count": len(ranked)}
+            "candidate_count": len(ranked), "top1_score": confidence,
+            "top2_score": top2_score, "candidate_margin": candidate_margin}
 
 
 def validate_mapping_candidates(
@@ -445,6 +456,10 @@ def validate_mapping_candidates(
     elif empty_responses == len(combinations):
         decision.update(mapping_status=MAPPING_FAILED, mapping_reason="EMPTY_RESPONSE")
     selected = decision.get("selected_combination") or {}
+    selected_metadata_valid = bool(selected.get("metadata_valid"))
+    selected_api_request_success = bool(selected.get("api_valid"))
+    selected_coordinate_exact_match = bool(selected.get("response_code_valid"))
+    selected_value_exists = bool(selected.get("matching_rows"))
     output = {
         "candidate_itm_ids": [x["code"] for x in _normalize_candidates(item_candidates)[:item_top_k]],
         "candidate_obj_combinations": attempted,
@@ -457,7 +472,15 @@ def validate_mapping_candidates(
         "selected_itm_name": selected.get("itm_name", ""),
         "item_meta_valid": bool(selected.get("item_meta_valid")),
         "obj_meta_valid": bool(selected.get("obj_meta_valid")),
+        "metadata_valid": selected_metadata_valid,
+        "api_valid": selected_api_request_success,
+        "api_request_attempted": "Y" if selected or attempted else "N",
+        "api_request_success": "Y" if selected_api_request_success else "N",
+        "api_failure_code": selected.get("api_error", ""),
+        "api_failure_message": selected.get("api_error", ""),
         "response_code_valid": bool(selected.get("response_code_valid")),
+        "api_coordinate_exact_match": "Y" if selected_coordinate_exact_match else "N",
+        "api_value_exists": "Y" if selected_value_exists else "N",
         "unit_valid": bool(selected.get("unit_valid")),
         "period_valid": bool(selected.get("period_valid")),
         "default_reason": selected.get("default_reason", ""),
@@ -696,6 +719,21 @@ SEMANTIC_ANCHOR_GROUPS = (
         ("\uc218\uc785\ucc28",),
         ("\uc218\uc785\ucc28", "\uc790\ub3d9\ucc28", "\uc2b9\uc6a9\ucc28"),
     ),
+    (
+        "CPI_TOURISM_TABLE_MISMATCH",
+        ("소비자물가", "물가상승", "물가상승률", "소비자물가상승률"),
+        ("소비자물가", "소비자물가지수", "등락률"),
+    ),
+    (
+        "EXCHANGE_RATE_LOAN_TABLE_MISMATCH",
+        ("환율", "원달러", "달러원", "원화환율", "달러당원화"),
+        ("환율", "원달러", "달러원", "대미달러", "재정환율"),
+    ),
+    (
+        "REVENUE_EXPORT_SOURCE_MISMATCH",
+        ("매출", "매출액", "성장세", "시장전망", "wsts"),
+        ("매출", "시장", "전망", "반도체시장", "기업매출"),
+    ),
 )
 
 
@@ -926,6 +964,9 @@ def downstream_validated_rank1(row: Mapping[str, Any], result: Mapping[str, Any]
     # (실측 오매핑: 농수산식품 수출 → '건조기(농산물용의 것)', 반도체 → '인산에스테르 및 그 염…')
     if not claim_item_matches_selection(row, result):
         return False
+    gate = semantic_ready_gate(row, result)
+    if not gate.get("semantic_gate_valid"):
+        return False
     # 2026-08-02: 상류 표 점수 마진 조건을 제거했다.
     #
     # 이 조건은 '1·2위 표 점수가 비슷하면 표 선택이 애매하다'는 상류 신호였다.
@@ -964,6 +1005,75 @@ FALLBACK_TRIGGER_REASONS = (
 
 def measurement_key(row: Mapping[str, Any]) -> str:
     return str(row.get("claim_measurement_id") or row.get("claim_id") or "").strip()
+
+
+def append_final_status_columns(row: Mapping[str, Any]) -> dict[str, Any]:
+    output = dict(row)
+    for key, value in classify_mapping_feasibility(output).items():
+        output.setdefault(key, value)
+    if output.get("table_can_represent_claim") == "N" and output.get("mapping_status") == READY:
+        output["mapping_status"] = NEEDS_CONFIRMATION
+        output["mapping_reason"] = "TABLE_CANNOT_REPRESENT_CLAIM"
+    selected = output.get("selected_combination")
+    if isinstance(selected, str):
+        try:
+            selected = json.loads(selected) if selected.strip() else {}
+        except json.JSONDecodeError:
+            selected = {}
+    if not isinstance(selected, Mapping):
+        selected = {}
+
+    metadata_valid = output.get("metadata_combination_valid")
+    if metadata_valid in (None, ""):
+        metadata_valid = output.get("metadata_valid")
+    if metadata_valid in (None, ""):
+        metadata_valid = selected.get("metadata_valid")
+
+    api_success = output.get("api_request_success")
+    if api_success in (None, ""):
+        api_success = output.get("api_valid")
+    if api_success in (None, ""):
+        api_success = selected.get("api_request_success")
+    if api_success in (None, ""):
+        api_success = selected.get("api_valid")
+
+    coordinate_exact = output.get("api_coordinate_exact_match")
+    if coordinate_exact in (None, ""):
+        coordinate_exact = output.get("response_code_valid")
+    if coordinate_exact in (None, ""):
+        coordinate_exact = selected.get("coordinate_exact_match")
+    if coordinate_exact in (None, ""):
+        coordinate_exact = selected.get("response_code_valid")
+
+    value_exists = output.get("api_value_exists")
+    if value_exists in (None, ""):
+        value_exists = selected.get("value_exists")
+    if value_exists in (None, ""):
+        value_exists = bool(selected.get("matching_rows"))
+
+    semantic_gate = output.get("semantic_ready_gate_passed")
+    if semantic_gate in (None, ""):
+        semantic_gate = output.get("semantic_gate_valid")
+
+    output["metadata_combination_valid"] = "Y" if _boolish(metadata_valid) else "N"
+    output["api_request_success"] = "Y" if _boolish(api_success) else "N"
+    output["api_coordinate_exact_match"] = "Y" if _boolish(coordinate_exact) else "N"
+    output["unit_compatible"] = "Y" if _boolish(output.get("unit_compatible") or output.get("unit_valid")) else "N"
+    output["period_compatible"] = "Y" if _boolish(output.get("period_compatible") or output.get("period_valid")) else "N"
+    output["api_value_exists"] = "Y" if _boolish(value_exists) else "N"
+    output["semantic_ready_gate_passed"] = "Y" if _boolish(semantic_gate) else "N"
+    output.setdefault("api_request_attempted", "Y" if output.get("attempted_combination_count") not in (None, "", "0", 0) else "N")
+    output.setdefault("api_failure_code", "")
+    output.setdefault("api_failure_message", "")
+
+    status_row = {
+        **output,
+    }
+    output.update(decide_final_status(status_row))
+    output.setdefault("not_kosis_reason", "")
+    output.setdefault("review_reason", "")
+    output.setdefault("verdict", "")
+    return output
 
 
 def needs_fallback(result: Mapping[str, Any]) -> bool:
@@ -1007,6 +1117,11 @@ def main() -> None:
     parser.add_argument("--input", required=True)
     parser.add_argument("--meta-index", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--capability-profile",
+        default="data/claims/kosis_table_capabilities.csv",
+        help="Optional table capability profile used only as a READY safety gate.",
+    )
     parser.add_argument("--item-top-k", type=int, default=3)
     parser.add_argument("--obj-top-k", type=int, default=2)
     parser.add_argument("--max-combinations", type=int, default=20)
@@ -1064,6 +1179,11 @@ def main() -> None:
     meta_by_table: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
     for meta in _read_csv(Path(args.meta_index)):
         meta_by_table[(str(meta.get("org_id", "")), str(meta.get("tbl_id", "")))].append(meta)
+    capability_by_table: dict[tuple[str, str], dict[str, str]] = {}
+    capability_path = Path(args.capability_profile)
+    if capability_path.exists():
+        for cap in _read_csv(capability_path):
+            capability_by_table[(str(cap.get("org_id", "")), str(cap.get("tbl_id", "")))] = cap
     work = rows[:args.limit] if args.limit else rows
     estimated = len(work) * max(0, args.max_combinations)
     print(f"candidate_rows={len(work)} max_combinations_per_row={args.max_combinations} estimated_api_calls<={estimated}")
@@ -1082,23 +1202,23 @@ def main() -> None:
             # 이 measurement가 아직 성공하지 못했다면 저순위도 폴백 대상으로 평가한다.
             priority_reason = ""
         if priority_reason:
-            outputs.append({
+            outputs.append(append_final_status_columns({
                 **row,
                 "mapping_status": NOT_EVALUATED,
                 "mapping_reason": priority_reason,
                 "attempted_combination_count": 0,
                 "api_valid_combination_count": 0,
-            })
+            }))
             continue
         if args.fallback_ranks and not fallback_state.get(mkey, True):
             # 앞 순위에서 이미 사용 가능한 좌표를 찾음 → 추가 API 호출 없이 스킵
-            outputs.append({
+            outputs.append(append_final_status_columns({
                 **row,
                 "mapping_status": NOT_EVALUATED,
                 "mapping_reason": "FALLBACK_NOT_NEEDED",
                 "attempted_combination_count": 0,
                 "api_valid_combination_count": 0,
-            })
+            }))
             continue
         key = (str(row.get("org_id", "")), str(row.get("tbl_id", "")))
         meta_rows = meta_by_table.get(key, [])
@@ -1156,6 +1276,14 @@ def main() -> None:
                 mapping_type=str(row.get("mapping_type") or "direct"),
                 allow_provisional=args.allow_provisional,
             )
+        capability = capability_by_table.get(key, {})
+        if capability:
+            for cap_key in (
+                "capability_source", "capability_review_status", "evidence_url",
+                "evidence_note", "reviewed_by", "reviewed_at",
+            ):
+                if cap_key in capability:
+                    result[cap_key] = capability.get(cap_key, "")
         # 이중 게이트 해제 (2026-07-31)
         # validate는 이미 공식 메타 코드 + 실제 API 응답 + 단위·기간 정합을 독립 검증한다.
         # 그래놓고 상류 표 후보가 rank-1 READY가 아니라는 이유로 다시 강등하는 것은
@@ -1180,6 +1308,23 @@ def main() -> None:
             # 어떤 경로로 READY가 됐는지 추적 가능하게 남긴다(감사용).
             result["ready_path"] = "DOWNSTREAM_VALIDATED"
         result = apply_semantic_ready_gate(row, result)
+        feasibility = classify_mapping_feasibility({**row, **result})
+        result.update(feasibility)
+        if result.get("table_can_represent_claim") == "N" and result.get("mapping_status") == READY:
+            result["mapping_status"] = NEEDS_CONFIRMATION
+            result["mapping_reason"] = "TABLE_CANNOT_REPRESENT_CLAIM"
+        final_gate_row = {
+            **row,
+            **result,
+            "metadata_combination_valid": result.get("metadata_valid"),
+            "api_request_success": result.get("api_valid"),
+            "api_coordinate_exact_match": result.get("response_code_valid"),
+            "unit_compatible": result.get("unit_valid"),
+            "period_compatible": result.get("period_valid"),
+            "api_value_exists": bool(result.get("selected_combination")),
+            "semantic_ready_gate_passed": result.get("semantic_gate_valid"),
+        }
+        result.update(decide_final_status(final_gate_row))
         if args.fallback_ranks:
             if needs_fallback(result):
                 fallback_state[mkey] = True   # 계속 다음 순위 평가
@@ -1190,12 +1335,13 @@ def main() -> None:
                     result["fallback_recovered"] = "Y"
                     result["fallback_attempt"] = "Y"
                 fallback_state[mkey] = False  # 사용 가능한 좌표 확보 → 이후 순위 스킵
-        outputs.append({**row, **result})
+        outputs.append(append_final_status_columns({**row, **result}))
     if not args.skip_table_ambiguity:
         outputs = resolve_table_ambiguity(
             outputs,
             allow_provisional=args.allow_provisional,
         )
+        outputs = [append_final_status_columns(row) for row in outputs]
     _write_csv(Path(args.output), outputs)
     print(f"validated_rows={len(outputs)} output={args.output}")
 

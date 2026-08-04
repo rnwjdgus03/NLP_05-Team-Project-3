@@ -16,6 +16,7 @@ from kosis_validate_mapping_candidates import (
     _seeded_item_candidates,
     _seeded_obj_candidates,
     apply_semantic_ready_gate,
+    append_final_status_columns,
     choose_or_abstain,
     group_official_meta,
     low_priority_reason,
@@ -413,6 +414,57 @@ def test_max_combinations_bounds_api_calls_and_invalid_codes_never_reach_fetcher
     assert calls[0]["itmId"] != "I_UNKNOWN"
 
 
+def test_selected_combination_gate_values_are_exported_before_final_status():
+    row = append_final_status_columns({
+        "claim_measurement_id": "M_READY",
+        "mapping_status": READY,
+        "selected_combination": {
+            "metadata_valid": True,
+            "api_valid": True,
+            "response_code_valid": True,
+            "matching_rows": [{"DT": "100"}],
+        },
+        "item_meta_valid": True,
+        "obj_meta_valid": True,
+        "unit_valid": True,
+        "period_valid": True,
+        "semantic_gate_valid": True,
+        "capability_review_status": "OFFICIAL_REVIEWED",
+    })
+
+    assert row["metadata_combination_valid"] == "Y"
+    assert row["api_request_success"] == "Y"
+    assert row["api_coordinate_exact_match"] == "Y"
+    assert row["api_value_exists"] == "Y"
+    assert row["unit_compatible"] == "Y"
+    assert row["period_compatible"] == "Y"
+    assert row["semantic_ready_gate_passed"] == "Y"
+    assert row["final_status"] == READY
+
+
+def test_selected_combination_coordinate_mismatch_stays_review():
+    row = append_final_status_columns({
+        "claim_measurement_id": "M_REVIEW",
+        "mapping_status": READY,
+        "selected_combination": {
+            "metadata_valid": True,
+            "api_valid": True,
+            "response_code_valid": False,
+            "matching_rows": [],
+        },
+        "item_meta_valid": True,
+        "obj_meta_valid": True,
+        "unit_valid": True,
+        "period_valid": True,
+        "semantic_gate_valid": True,
+    })
+
+    assert row["api_request_success"] == "Y"
+    assert row["api_coordinate_exact_match"] == "N"
+    assert row["final_status"] == "REVIEW"
+    assert "api_coordinate_exact_match" in row["review_reason"]
+
+
 def test_table_ambiguity_is_recomputed_for_each_top_k_slice():
     rows = [
         {"claim_measurement_id": "m1", "candidate_rank": "1", "mapping_status": READY},
@@ -574,3 +626,54 @@ def test_vehicle_count_suffix_is_not_treated_as_age_scope():
         },
     )
     assert "AGE_SCOPE_MISMATCH" not in gated["semantic_gate_details"]
+
+
+def test_semantic_ready_gate_blocks_cpi_to_tourism_satisfaction():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "소비자 물가 상승률은 1.8%로 전망됐다.",
+            "indicator": "소비자 물가 상승률",
+            "tbl_name": "관광 숙박여행 만족도_관광지 물가",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "만족도",
+            "selected_combination": {"objL1_name": "관광지 물가"},
+        },
+    )
+    assert gated["mapping_status"] == NEEDS_CONFIRMATION
+    assert "CPI_TOURISM_TABLE_MISMATCH" in gated["semantic_gate_details"]
+
+
+def test_semantic_ready_gate_blocks_exchange_rate_to_loan_table():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "달러 대비 원화 환율",
+            "indicator": "원화 환율",
+            "tbl_name": "한국은행 원화대출금",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "대출금",
+            "selected_combination": {"objL1_name": "총액"},
+        },
+    )
+    assert gated["mapping_status"] == NEEDS_CONFIRMATION
+    assert "EXCHANGE_RATE_LOAN_TABLE_MISMATCH" in gated["semantic_gate_details"]
+
+
+def test_semantic_ready_gate_blocks_revenue_growth_to_export_table():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "WSTS가 메모리반도체 매출 성장세를 전망했다.",
+            "indicator": "메모리반도체 매출 성장세",
+            "tbl_name": "품목별 수출액, 수입액",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "수출액",
+            "selected_combination": {"objL1_name": "반도체"},
+        },
+    )
+    assert gated["mapping_status"] == NEEDS_CONFIRMATION
+    assert "REVENUE_EXPORT_SOURCE_MISMATCH" in gated["semantic_gate_details"]

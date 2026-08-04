@@ -97,9 +97,32 @@ def test_extracts_scaled_currency_approximate_counts_and_ranges():
     assert prefixed[0]["value_approximate"] == "Y"
 
     assert candidate_pairs("정비사는 대당 16~18명 수준이다.") == {
-        ("16", "명"),
-        ("18", "명"),
+        ("16", "명/대"),
+        ("18", "명/대"),
     }
+
+
+def test_extracts_percent_band_as_range_not_exact_point():
+    candidates = extract_numeric_candidates("물가 상승률은 1%대에 머물 것으로 전망했다.")
+    band = next(item for item in candidates if item["measurement_text"] == "1%대")
+
+    assert band["value"] == "1"
+    assert band["value_min"] == "1"
+    assert band["value_max"] == "1.9"
+    assert band["value_approximate"] == "Y"
+    assert band["measurement_observation_type"] == "FORECAST"
+    assert band["measurement_usage"] == "CONTEXT"
+
+
+def test_extracts_percent_point_and_company_ratio_scope():
+    pp = extract_numeric_candidates("전망치는 기존보다 0.3%포인트 낮아졌다.")
+    assert pp[0]["unit"] == "%p"
+    assert pp[0]["value_type"] == "증감량"
+
+    ratio = extract_numeric_candidates("회사 측은 항공기 대당 12.7명이라고 밝혔다.")
+    assert ratio[0]["unit"] == "명/대"
+    assert ratio[0]["measurement_observation_type"] == "COMPANY_REPORTED"
+    assert ratio[0]["source_scope"] == "COMPANY"
 
 
 def test_policy_threshold_is_condition_but_support_amount_is_policy_value():

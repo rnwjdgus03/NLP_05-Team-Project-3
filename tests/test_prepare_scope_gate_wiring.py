@@ -56,7 +56,9 @@ def test_forecast_claim_is_blocked():
         claim_text="기재부는 올해 경제 성장률이 1.8%로 전망된다고 밝혔다.",
         value="1.8", unit="%", value_type="비율"))
     assert out["in_ready"] == "N"
-    assert out["mapping_exclusion_code"] == "FORECAST_VALUE"
+    assert out["mapping_exclusion_code"] == "FORECAST_NOT_OBSERVED"
+    assert out["measurement_observation_type"] == "FORECAST"
+    assert out["source_scope"] == "POLICY_FORECAST"
 
 
 def test_branded_product_price_is_blocked():

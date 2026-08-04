@@ -249,19 +249,19 @@ def test_missing_indicator_is_not_judged():
 # 2차 확장 ① 장중·일별 시세 — KOSIS 는 월·연 평균만 수록
 # --------------------------------------------------------------------------
 
-def test_intraday_exchange_rate_is_rejected():
+def test_intraday_exchange_rate_is_reviewed():
     code, _, severity = scope_violation(_row(
         "2일 서울 외환시장에서 달러 대비 원화 환율은 오후 3시 30분 기준 "
         "전 거래일보다 5.9원 떨어진 달러당 1466.6원을 기록했다.",
         measurement_indicator="달러 대비 원화 환율", unit="원", value="1466.6"))
-    assert code == "INTRADAY_MARKET_RATE" and severity == REJECT
+    assert code == "INTRADAY_MARKET_RATE" and severity == REVIEW
 
 
-def test_daily_close_without_clock_time_is_rejected():
+def test_daily_close_without_clock_time_is_reviewed():
     code, _, severity = scope_violation(_row(
         "환율은 전 거래일보다 오른 1470원에 마감했다.",
         measurement_indicator="환율", unit="원", value="1470"))
-    assert code == "DAILY_MARKET_RATE" and severity == REJECT
+    assert code == "DAILY_MARKET_RATE" and severity == REVIEW
 
 
 def test_monthly_average_rate_is_kept():

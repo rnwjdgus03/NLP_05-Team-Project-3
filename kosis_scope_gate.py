@@ -243,9 +243,11 @@ def derived_indicator(claim_text: str, row: Mapping[str, Any]):
 
 
 def intraday_market_rate(claim_text: str, row: Mapping[str, Any]):
-    """특정 시각·거래일 기준 시세. KOSIS 는 월평균·연평균만 수록한다.
+    """특정 시각·거래일 기준 시세.
 
     실측: '오후 3시 30분 기준 1466.6원' 을 월평균 환율 표에 대면 값이 맞을 리 없다.
+    다만 환율 실측값 자체는 일별/일중 공식 표가 있을 수 있으므로 hard reject 하지
+    않고 REVIEW 로 남긴다. 전망·우려 문장은 forecast gate 에서 별도로 제외된다.
     """
     subject = _has(claim_text, MARKET_SUBJECT) or _has(
         _first(row, "measurement_indicator", "indicator"), MARKET_SUBJECT)
@@ -253,11 +255,11 @@ def intraday_market_rate(claim_text: str, row: Mapping[str, Any]):
         return None
     if TIME_OF_DAY.search(claim_text):
         return ("INTRADAY_MARKET_RATE",
-                f"특정 시각 기준 {subject} — KOSIS 는 월·연 평균만 수록", REJECT)
+                f"특정 시각 기준 {subject} — 일별/일중 공식 표 확인 전까지 REVIEW", REVIEW)
     hint = _has(claim_text, MARKET_DAILY_HINT)
     if hint and _has(claim_text, ("환율", "종가", "주가")):
         return ("DAILY_MARKET_RATE",
-                f"일별 {subject} 기준({hint}) — 월·연 평균과 비교 불가", REJECT)
+                f"일별 {subject} 기준({hint}) — 일별 공식 표 확인 전까지 REVIEW", REVIEW)
     return None
 
 

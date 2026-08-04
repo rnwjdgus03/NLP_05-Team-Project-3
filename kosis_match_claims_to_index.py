@@ -345,6 +345,47 @@ def claim_item_family(claim):
     return ""
 
 
+
+
+def semantic_table_mismatch_reason(norm_claim, table_text):
+    """Return a general semantic mismatch reason for claim/table retrieval.
+
+    This is not an override and never injects a target tbl_id.  It only prevents
+    broadly similar but conceptually wrong tables from being promoted by lexical
+    or dense retrieval.
+    """
+    indicator = compact(norm_claim.get("indicator"))
+    claim_text = compact(" ".join([
+        str(norm_claim.get("claim_text", "")),
+        str(norm_claim.get("indicator", "")),
+        str(norm_claim.get("industry_or_item", "")),
+        str(norm_claim.get("metric_domain", "")),
+        str(norm_claim.get("value_type", "")),
+        str(norm_claim.get("measurement_role", "")),
+    ])).lower()
+
+    if any(token in indicator for token in ("소비자물가", "물가상승", "물가상승률", "소비자물가상승률")):
+        if any(token in table_text for token in ("관광", "만족도", "평가", "여행", "관광객")):
+            return "CPI_TOURISM_TABLE_MISMATCH"
+
+    if any(token in indicator or token in claim_text for token in ("환율", "원달러", "달러원", "원화환율", "달러당원화")):
+        if any(token in table_text for token in ("대출", "예금", "수신", "금리", "이자", "여신")):
+            return "EXCHANGE_RATE_LOAN_TABLE_MISMATCH"
+
+    if any(token in indicator or token in claim_text for token in ("매출", "매출액", "성장세", "시장전망", "wsts")):
+        if any(token in table_text for token in ("수출", "수입", "무역")):
+            return "REVENUE_EXPORT_SOURCE_MISMATCH"
+
+    if any(token in indicator for token in ("취업자수증가폭", "취업자증가폭", "취업자수증감", "취업자증감")):
+        if not any(token in table_text for token in ("취업", "고용", "경제활동")):
+            return "EMPLOYMENT_INCREASE_TABLE_MISMATCH"
+
+    if "정비사" in indicator:
+        if not any(token in table_text for token in ("정비", "항공사", "직무별", "종사자")):
+            return "MECHANIC_POPULATION_TABLE_MISMATCH"
+
+    return ""
+
 def table_year_penalty(table_text, period):
     match = re.search(r"(?:19|20)\d{2}", str(period or ""))
     if not match:
@@ -364,6 +405,9 @@ def score_table(row, tokens, claim):
     score = score_name * 2 + score_path
     norm_claim = normalized_claim_row(claim)
     table_text = compact(f"{row['tbl_name']} {row['category_path']}")
+    semantic_mismatch = semantic_table_mismatch_reason(norm_claim, table_text)
+    if semantic_mismatch:
+        return -10**9, [semantic_mismatch]
     anchors = measurement_anchors(norm_claim)
     family = claim_item_family(norm_claim)
 
@@ -817,7 +861,12 @@ def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
 
 
 def apply_mapping_override(structured_meta, meta_rows, norm_claim, rule):
-    """공식 메타에 실제로 존재하는 코드만 감사 가능한 규칙으로 시드한다."""
+    """공식 메타에 실제로 존재하는 override를 prior/seed로만 반영한다.
+
+    예전에는 score=1000으로 사실상 정답처럼 선택했다.  이제 override는
+    후보 prior일 뿐이며, claim 의미·semantic gate·API exact 검증을 별도로
+    통과해야 READY가 될 수 있다.
+    """
     selected = dict(structured_meta)
     item_code = str(rule.get("itm_id", "")).strip()
     item_row = next(
@@ -841,7 +890,7 @@ def apply_mapping_override(structured_meta, meta_rows, norm_claim, rule):
             "selected_itm_id": item_code,
             "selected_itm_name": item_name,
             "selected_itm_unit": source_unit,
-            "selected_itm_score": 1000,
+            "selected_itm_score": max(float(selected.get("selected_itm_score") or 0), 2.0),
             "mapping_type": mapping_type,
             "unit_compatibility_reason": unit_reason,
         })
@@ -864,10 +913,13 @@ def apply_mapping_override(structured_meta, meta_rows, norm_claim, rule):
                 f"selected_obj_l{level}_axis_name": obj_row.get("axis_name") or obj_row.get("OBJ_NM", ""),
                 f"selected_obj_l{level}": code,
                 f"selected_obj_l{level}_name": obj_row.get("code_name") or obj_row.get("ITM_NM", ""),
-                f"selected_obj_l{level}_score": 1000,
+                f"selected_obj_l{level}_score": max(float(selected.get(f"selected_obj_l{level}_score") or 0), 2.0),
             })
     selected["mapping_override_rule"] = str(rule.get("rule_id", "")).strip()
-    selected["selected_code_status"] = "코드북 후보 선택"
+    selected["override_applied"] = "Y"
+    selected["override_rule_id"] = selected["mapping_override_rule"]
+    selected["override_prior_score"] = str(rule.get("prior_score") or rule.get("boost") or "2.0")
+    selected["selected_code_status"] = "override prior 후보 선택"
     return selected
 
 
@@ -1182,6 +1234,11 @@ def main():
         help="공식 ITEM/OBJ 코드로 검증되는 매핑 override CSV. 빈 문자열이면 사용하지 않음",
     )
     parser.add_argument(
+        "--enable-legacy-overrides",
+        action="store_true",
+        help="Claim ID 기반/강한 레거시 override를 켠다. 기본 실행에서는 사용하지 않음",
+    )
+    parser.add_argument(
         "--ranking-input",
         default="",
         help="첫 패스 후보 CSV를 재사용해 모델 재로딩 없이 메타만 결합",
@@ -1190,6 +1247,12 @@ def main():
         "--allow-legacy",
         action="store_true",
         help="measurement 계약이 없는 구형 CSV 허용. 기본은 mapping_eligible=Y만 처리",
+    )
+    parser.add_argument(
+        "--assume-verification-input-ready",
+        action="store_true",
+        help=("입력 CSV 전체를 이미 1차 verification_input_ready를 통과한 2차 매핑 입력으로 취급한다. "
+              "prepare/in_ready 게이트를 다시 적용하지 않는다."),
     )
     args = parser.parse_args()
 
@@ -1205,7 +1268,7 @@ def main():
         normalized = normalized_claim_row(claim)
         eligible = normalized.get("mapping_eligible") == "Y"
         legacy = "measurement_usage" not in claim and "mapping_eligible" not in claim
-        if eligible or (args.allow_legacy and legacy):
+        if args.assume_verification_input_ready or eligible or (args.allow_legacy and legacy):
             claims.append(claim)
         else:
             code = normalized.get("mapping_exclusion_code") or "INPUT_CONTRACT_MISSING"
@@ -1223,7 +1286,7 @@ def main():
     )
     mapping_overrides = (
         load_mapping_overrides(Path(args.mapping_overrides).expanduser())
-        if args.mapping_overrides
+        if args.mapping_overrides and args.enable_legacy_overrides
         else []
     )
 
@@ -1324,6 +1387,7 @@ def main():
                 )
             else:
                 meta_summary = "meta_index 없음 또는 코드명 매칭 없음"
+            override_applied = structured_meta.get("override_applied", "N")
             out.append({
                 "claim_id": norm_claim.get("claim_id", ""),
                 "claim_measurement_id": norm_claim.get("claim_measurement_id", ""),
@@ -1350,6 +1414,9 @@ def main():
                 "candidate_status_code": candidate_status_code,
                 "candidate_status_reason": candidate_status_reason,
                 "candidate_hits": ",".join(list(dict.fromkeys(table_hits))[:20]),
+                "override_applied": override_applied,
+                "override_rule_id": structured_meta.get("override_rule_id", ""),
+                "override_prior_score": structured_meta.get("override_prior_score", ""),
                 "retrieval_backend": candidate.get("retrieval_backend", retrieval_mode),
                 "lexical_score": candidate.get("lexical_score") if candidate.get("lexical_score") is not None else "",
                 "lexical_eligible": "Y" if candidate.get("lexical_eligible", True) else "N",
@@ -1373,6 +1440,7 @@ def main():
         "value_type", "measurement_role", "measurement_usage", "period", "prd_se", "change_base", "comparison_period",
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
+        "override_applied", "override_rule_id", "override_prior_score",
         "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
         "table_override_rule", "mapping_override_rule",
         "org_id", "tbl_id", "tbl_name", "stat_id", "category_path",

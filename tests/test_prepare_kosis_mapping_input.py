@@ -86,13 +86,14 @@ def test_fallback_and_unknown_scope_are_sent_to_enrichment():
     assert fallback["enrichment_actions"] == "CONFIRM_MEASUREMENT_BINDING"
 
     unknown_scope = normalize_row(measurement_row(claim_domain_scope="기타"))
-    assert unknown_scope["mapping_gate"] == "ENRICH"
-    assert unknown_scope["enrichment_actions"] == "CONFIRM_KOSIS_SCOPE"
+    assert unknown_scope["mapping_gate"] == "REJECT"
+    assert unknown_scope["mapping_exclusion_code"] == "SOURCE_SCOPE_UNCONFIRMED"
+    assert unknown_scope["source_scope"] == "UNCONFIRMED"
 
 
 def test_only_target_role_is_hard_rejected():
     target = normalize_row(measurement_row(measurement_role="목표값"))
-    assert target["mapping_exclusion_code"] == "TARGET_VALUE_NOT_OBSERVED"
+    assert target["mapping_exclusion_code"] == "TARGET_NOT_OBSERVED"
     assert target["mapping_gate"] == "REJECT"
     assert target["in_ready"] == "N"
 
@@ -101,6 +102,77 @@ def test_only_target_role_is_hard_rejected():
         assert reviewable["mapping_exclusion_code"] == "ROLE_NOT_DIRECT_TARGET"
         assert reviewable["mapping_gate"] == "ENRICH"
         assert reviewable["in_ready"] == "N"
+
+
+def test_front_gate_blocks_forecast_company_and_foreign_market_values():
+    forecast = normalize_row(measurement_row(
+        claim_text="정부는 물가 상승률이 1.8%로 둔화될 것으로 봤다.",
+        measurement_indicator="물가 상승률 전망",
+        value="1.8",
+        unit="%",
+    ))
+    assert forecast["measurement_observation_type"] == "FORECAST"
+    assert forecast["source_scope"] == "POLICY_FORECAST"
+    assert forecast["mapping_gate"] == "REJECT"
+    assert forecast["mapping_exclusion_code"] == "FORECAST_NOT_OBSERVED"
+
+    company = normalize_row(measurement_row(
+        claim_text="회사 측은 정비사가 총 5849명이라고 밝혔다.",
+        measurement_indicator="정비사 수",
+        value="5849",
+        unit="명",
+    ))
+    assert company["measurement_observation_type"] == "COMPANY_REPORTED"
+    assert company["source_scope"] == "COMPANY"
+    assert company["mapping_gate"] == "REJECT"
+
+    wsts = normalize_row(measurement_row(
+        claim_text="WSTS는 메모리반도체 시장이 20.6% 성장할 것으로 전망했다.",
+        measurement_indicator="메모리반도체 시장 성장률 전망",
+        value="20.6",
+        unit="%",
+    ))
+    assert wsts["source_scope"] == "FOREIGN_OR_MARKET"
+    assert wsts["mapping_gate"] == "REJECT"
+
+    export_forecast = normalize_row(measurement_row(
+        claim_text="수출 증가율은 작년 8.2%에서 올해 1.5%로 쪼그라들 것으로 봤다.",
+        measurement_indicator="수출 증가율",
+        measurement_period="2025",
+        value="1.5",
+        unit="%",
+    ))
+    assert export_forecast["measurement_observation_type"] == "FORECAST"
+    assert export_forecast["mapping_gate"] == "REJECT"
+
+
+def test_front_gate_keeps_derived_ratio_and_relative_date_as_diagnostics():
+    ratio = normalize_row(measurement_row(
+        claim_text="항공기 대당 정비사는 12.7명이다.",
+        measurement_indicator="정비사 수",
+        value="12.7",
+        unit="명",
+        value_type="수준값",
+    ))
+    assert ratio["unit"] == "명/대"
+    assert ratio["unit_dimension"] == "ratio"
+    assert ratio["measurement_observation_type"] == "DERIVED_RATIO"
+    assert ratio["mapping_gate"] == "REJECT"
+
+    relative = normalize_row(measurement_row(
+        date="2025-01-02",
+        claim_text="지난달 말(30일) 오후 3시 30분 기준 원달러 환율은 1472.5원이었다.",
+        measurement_indicator="원달러 환율",
+        measurement_period="지난달 말(30일)",
+        measurement_prd_se="D",
+        value="1472.5",
+        unit="원",
+    ))
+    assert relative["measurement_period_normalized"] == "20241230"
+    assert relative["relative_date_status"] == "ARTICLE_DATE_RELATIVE_EXPLICIT_DAY"
+    assert relative["mapping_gate"] == "ENRICH"
+    assert relative["mapping_exclusion_code"] == "INTRADAY_MARKET_RATE"
+    assert relative["enrichment_actions"] == "CONFIRM_DAILY_OR_INTRADAY_OFFICIAL_TABLE"
 
 
 def test_person_entity_wins_over_airline_context():

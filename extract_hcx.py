@@ -170,9 +170,11 @@ OUT_COLS = ["claim_id", "claim_measurement_id", "article_id", "title", "date", "
             "measurement_prd_se", "measurement_binding_source",
             "measurement_role", "value", "value_min", "value_max", "value_approximate",
             "unit", "value_type", "direction", "change_base",
+            "measurement_observation_type", "source_scope", "source_org_raw",
             "evidence_text", "extraction_confidence", "needs_review", "review_reason",
             "measurement_repaired", "measurement_fallback_count", "measurement_binding_fallback_count",
-            "extraction_model", "prompt_version", "extracted_at"]
+            "extraction_model", "prompt_version", "extracted_at",
+            "hcx_model", "hcx_raw_response", "hcx_parse_success", "hcx_error"]
 PROMPT_VERSION = "v1.5-measurement-binding"
 RETRIEVAL_PROMPT_VERSION = "v1.6-early-kosis-context"
 
@@ -183,7 +185,7 @@ NUMBER_TOKEN = (
 NUMBER_WITH_UNIT_RE = re.compile(
     rf"(?<![\dA-Za-z])(?P<number>{NUMBER_TOKEN})\s*"
     r"(?P<approx_before>여|가량|정도|쯤|내외)?\s*"
-    r"(?P<unit>퍼센트포인트|%p|퍼센트|%|개월|시간|분기|달러|개사|가구|명|원|건|대|세|년|월|일|위|배|개|사)"
+    r"(?P<unit>퍼센트포인트|%포인트|%p|퍼센트|%|개월|시간|분기|달러|개사|가구|명|원|건|대|세|년|월|일|위|배|개|사)"
     r"(?P<approx_after>가량|정도|쯤|내외)?"
 )
 NUMBER_LIST_RE = re.compile(
@@ -193,14 +195,20 @@ NUMBER_LIST_RE = re.compile(
 NUMBER_RANGE_RE = re.compile(
     rf"(?<![\dA-Za-z])(?P<low>{NUMBER_TOKEN})\s*(?:~|∼|-)\s*"
     rf"(?P<high>{NUMBER_TOKEN})\s*"
-    r"(?P<unit>퍼센트포인트|%p|퍼센트|%|개월|시간|분기|달러|개사|가구|명|원|건|대|세|년|월|일|위|배|개|사)"
+    r"(?P<unit>퍼센트포인트|%포인트|%p|퍼센트|%|개월|시간|분기|달러|개사|가구|명|원|건|대|세|년|월|일|위|배|개|사)"
 )
+PERCENT_BAND_RE = re.compile(r"(?<![\dA-Za-z])(?P<base>\d+(?:\.\d+)?)\s*%\s*대")
 MAGNITUDES = {"조": Decimal("1000000000000"), "억": Decimal("100000000"),
               "만": Decimal("10000"), "천": Decimal("1000"), "백": Decimal("100")}
-UNIT_MAP = {"퍼센트포인트": "%p", "%p": "%p", "퍼센트": "%", "%": "%"}
+UNIT_MAP = {"퍼센트포인트": "%p", "%포인트": "%p", "%p": "%p", "퍼센트": "%", "%": "%"}
 POLICY_WORDS = ("급여", "월급", "수당", "지원", "최저임금", "봉급", "보조금", "한도", "소득기준", "장학금", "연금")
 INCREASE_WORDS = ("증가", "상승", "인상", "올랐", "오른", "늘었", "늘어난", "확대")
 DECREASE_WORDS = ("감소", "하락", "인하", "내렸", "줄었", "줄어든", "축소")
+FORECAST_WORDS = ("전망", "예측", "예상", "내다봤", "전망해", "것으로 봤", "우려")
+COMPANY_REPORTED_WORDS = ("회사 측은 밝혔다", "회사측은 밝혔다", "관계자는 밝혔다", "측은 밝혔다")
+COMPANY_REPORTED_COMPACT_WORDS = ("회사측은밝혔다", "관계자는밝혔다", "측은밝혔다")
+COMPANY_REPORTED_PATTERN = re.compile(r"(?:회사측|회사|관계자|[가-힣A-Za-z0-9]+측)은.{0,80}밝혔")
+FOREIGN_MARKET_WORDS = ("WSTS", "세계반도체시장통계기구", "가트너", "IDC")
 
 
 def normalize_number(value):
@@ -233,6 +241,41 @@ def canonical_unit(unit):
     return UNIT_MAP.get(str(unit).strip(), str(unit).strip())
 
 
+def has_company_reported_pattern(text):
+    raw = str(text or "")
+    compacted = re.sub(r"\s+", "", raw)
+    return (
+        any(word in raw for word in COMPANY_REPORTED_WORDS)
+        or any(word in compacted for word in COMPANY_REPORTED_COMPACT_WORDS)
+        or bool(COMPANY_REPORTED_PATTERN.search(compacted))
+    )
+
+
+def observation_type_from_context(text, unit=""):
+    compacted = re.sub(r"\s+", "", str(text or ""))
+    if has_company_reported_pattern(text):
+        return "COMPANY_REPORTED"
+    if any(word in text for word in FORECAST_WORDS):
+        if any(word in compacted for word in ("돌파우려", "넘을우려", "밑돌우려", "웃돌우려")):
+            return "FORECAST_THRESHOLD"
+        if any(word in compacted for word in ("감소분", "차이", "하향", "상향")):
+            return "FORECAST_REVISION"
+        return "FORECAST"
+    if unit == "명/대" or "대당" in compacted:
+        return "DERIVED_RATIO"
+    return "OBSERVED"
+
+
+def source_scope_from_context(text, observation_type):
+    if has_company_reported_pattern(text):
+        return "COMPANY"
+    if any(word.lower() in str(text).lower() for word in FOREIGN_MARKET_WORDS):
+        return "FOREIGN_OR_MARKET"
+    if observation_type in {"FORECAST", "TARGET", "FORECAST_REVISION", "FORECAST_THRESHOLD"}:
+        return "POLICY_FORECAST"
+    return "UNCONFIRMED" if observation_type != "OBSERVED" else "DOMESTIC_OFFICIAL"
+
+
 def _direction(text):
     if any(word in text for word in INCREASE_WORDS):
         return "증가"
@@ -245,6 +288,11 @@ def _candidate_usage(text, start, end, value, unit):
     before = text[max(0, start - 30):start]
     after = text[end:min(len(text), end + 30)]
     context = before + text[start:end] + after
+    observation_type = observation_type_from_context(context, unit)
+    if observation_type in {"FORECAST", "FORECAST_REVISION", "FORECAST_THRESHOLD", "TARGET"}:
+        return "CONTEXT"
+    if observation_type == "COMPANY_REPORTED":
+        return "CONTEXT"
     if re.match(r"^\s*(?:을|를)?\s*돌파", after):
         return "CONTEXT"
     if re.match(r"^\s*당", after):
@@ -310,13 +358,21 @@ def _make_candidate(text, raw_number, raw_unit, start, end, measurement_text=Non
     approximate = approximate or bool(re.search(r"약\s*$", text[max(0, start - 4):start]))
     value = normalize_number(raw_number)
     unit = canonical_unit(raw_unit)
+    after = text[end:min(len(text), end + 10)]
+    if unit == "명" and (after.lstrip().startswith("/대") or "대당" in text[max(0, start - 15):start]):
+        unit = "명/대"
     usage = _candidate_usage(text, start, end, value, unit)
     role = _candidate_role(text, start, end, unit, usage)
+    local_context = text[max(0, start - 40):min(len(text), end + 40)]
+    observation_type = observation_type_from_context(local_context, unit)
+    source_scope = source_scope_from_context(text, observation_type)
     return {
         "measurement_text": measurement_text or text[start:end],
         "value": value,
         "unit": unit,
         "measurement_usage": usage,
+        "measurement_observation_type": observation_type,
+        "source_scope": source_scope,
         "measurement_role": role,
         "value_type": _candidate_value_type(unit, role),
         "direction": _direction(text),
@@ -329,7 +385,23 @@ def _make_candidate(text, raw_number, raw_unit, start, end, measurement_text=Non
 def extract_numeric_candidates(text):
     """Return deduplicated value/unit candidates with deterministic hints."""
     candidates = []
+    occupied_spans = []
+    for match in PERCENT_BAND_RE.finditer(text):
+        base = Decimal(match.group("base"))
+        high = base + Decimal("0.9")
+        candidate = _make_candidate(
+            text, match.group("base"), "%", match.start("base"), match.end(),
+            f"{match.group('base')}%대", approximate=True,
+        )
+        candidate["value_min"] = normalize_number(str(base))
+        candidate["value_max"] = normalize_number(str(high))
+        candidate["value_approximate"] = "Y"
+        candidates.append(candidate)
+        occupied_spans.append((match.start(), match.end()))
+
     for match in NUMBER_WITH_UNIT_RE.finditer(text):
+        if any(match.start() >= start and match.end() <= end for start, end in occupied_spans):
+            continue
         candidates.append(_make_candidate(
             text, match.group("number"), match.group("unit"),
             match.start(), match.end(), match.group(0),
@@ -672,6 +744,10 @@ def normalize_hcx_measurements(result, candidates, text=""):
             item["measurement_usage"] = candidate_usage
         if candidate.get("value_approximate") == "Y":
             item["value_approximate"] = "Y"
+        if norm(item.get("measurement_observation_type")) == "-" and candidate.get("measurement_observation_type"):
+            item["measurement_observation_type"] = candidate.get("measurement_observation_type")
+        if norm(item.get("source_scope")) == "-" and candidate.get("source_scope"):
+            item["source_scope"] = candidate.get("source_scope")
         if item["measurement_usage"] == "-":
             item["measurement_usage"] = "CONTEXT"
         item["_source"] = "hcx"
@@ -741,6 +817,9 @@ def add_fallback_measurements(result, candidates):
             "value_type": candidate["value_type"],
             "direction": candidate["direction"],
             "change_base": candidate["change_base"],
+            "measurement_observation_type": candidate.get("measurement_observation_type", "OBSERVED"),
+            "source_scope": candidate.get("source_scope", "UNCONFIRMED"),
+            "source_org_raw": "-",
             "_source": "rule_fallback",
             "_binding_source": "rule_fallback",
         })
@@ -803,6 +882,9 @@ def extract_claim(api_key, model, claim, effort="none"):
         if norm(claim.get("_retrieval_context")) not in {"-", "[]"}
         else PROMPT_VERSION
     )
+    result["_raw_response"] = raw
+    result["_parse_success"] = "Y"
+    result["_hcx_error"] = ""
     return result
 
 
@@ -836,11 +918,15 @@ def to_rows(claim, j, model):
                                        "prd_se", "time_resolution_status", "evidence_text",
                                        "extraction_confidence", "needs_review", "review_reason"]},
         "extraction_model": model,
+        "hcx_model": model,
         "prompt_version": norm(j.get("_prompt_version", PROMPT_VERSION)),
         "extracted_at": time.strftime("%Y-%m-%d"),
         "measurement_repaired": norm(j.get("_measurement_repaired", "N")),
         "measurement_fallback_count": norm(j.get("_measurement_fallback_count", "0")),
         "measurement_binding_fallback_count": norm(j.get("_measurement_binding_fallback_count", "0")),
+        "hcx_raw_response": norm(j.get("_raw_response")),
+        "hcx_parse_success": norm(j.get("_parse_success", "Y")),
+        "hcx_error": norm(j.get("_hcx_error", "")),
     })
     meas = j.get("measurements") or []
     if not meas:
@@ -850,7 +936,8 @@ def to_rows(claim, j, model):
                                      "measurement_item", "measurement_period", "measurement_prd_se",
                                      "measurement_binding_source", "measurement_role",
                                      "value", "value_min", "value_max", "value_approximate", "unit",
-                                     "value_type", "direction", "change_base"]})
+                                     "value_type", "direction", "change_base",
+                                     "measurement_observation_type", "source_scope", "source_org_raw"]})
         return [row]
     rows = []
     for k, m in enumerate(meas, 1):
@@ -864,7 +951,8 @@ def to_rows(claim, j, model):
                                            "measurement_period", "measurement_prd_se",
                                            "measurement_role", "value", "value_min", "value_max",
                                            "value_approximate", "unit", "value_type", "direction",
-                                           "change_base"]},
+                                           "change_base", "measurement_observation_type",
+                                           "source_scope", "source_org_raw"]},
         })
         rows.append(row)
     return rows

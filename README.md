@@ -35,6 +35,20 @@ KOSIS 후보 선별
 actual_value 비교 및 verdict 생성
 ```
 
+## KOSIS 상태 컬럼 의미
+
+KOSIS 파이프라인에서는 비슷해 보이는 READY 계열 컬럼이 여러 단계에 존재합니다. 이들은 같은 뜻이 아니며, 최종 값 검증 기준은 `final_status=READY`입니다.
+
+| 컬럼 | 의미 | 사용 위치 |
+|---|---|---|
+| `verification_input_ready` | measurement가 KOSIS 매핑 단계에 들어갈 입력 조건을 만족하는지 | 1차 입력 게이트 |
+| `candidate_status` | 통계표 검색·메타 후보 단계의 후보 상태 | 표 후보/메타 후보 탐색 |
+| `mapping_status` | 기존 코드 호환을 위한 좌표 검증 상태 | 과거 산출물 호환, 디버깅 |
+| `final_status` | `READY` / `REVIEW` / `NOT_KOSIS` 최종 매핑 판정 | 실제 값 검증 진입 기준 |
+| `verdict` | `final_status=READY`인 좌표에서 실제 KOSIS 값과 claim 값을 비교한 결과 | 최종 사실검증 결과 |
+
+`mapping_status=READY`는 과거 호환 상태일 뿐이며 `final_status=READY`와 같은 개념이 아닙니다. 새로 생성되는 검증 파일은 `final_status`를 반드시 포함하고, 과거 CSV처럼 `final_status`가 없는 경우에만 `mapping_status`를 임시 fallback으로 사용합니다. 이때 결과에는 `legacy_status_fallback=Y`를 남깁니다.
+
 | 단계 | 스크립트 | 입력 → 출력 |
 |---|---|---|
 | 1. 기사 정제 | `preprocess_news.py` | 기사 원문 CSV → 정제 문장 CSV |
@@ -741,3 +755,14 @@ READY/ENRICH/REJECT` 실행 경로를 추가했습니다.
 - `feature/기능명`, `fix/버그명`: 기능·수정 브랜치
 
 커밋 메시지는 `feat:`, `fix:`, `docs:`, `chore:` 등 Conventional Commits 형식을 사용합니다.
+
+
+### 2025년 12건 개발 회귀 세트 원칙
+
+`data/claims/kosis_mapping_ready_500_real.csv` 안의 2025년 관련 12개 measurement는 최종 골든셋이나 holdout이 아니라 파이프라인 개선을 위한 `DEV_REGRESSION_ONLY` 에러 분석 세트로만 사용한다.
+
+- `dev_gold`, `gold_*`, `holdout_gold` 이름으로 저장하지 않는다.
+- 해당 12건은 검색·ITEM/OBJ·feasibility gate의 회귀 확인에는 사용할 수 있지만 최종 성능 수치에는 포함하지 않는다.
+- 최종 성능은 이 개발 과정에서 사용하지 않은 별도 holdout 골든셋으로만 보고한다.
+- 개발 보고서에는 `evaluation_role=DEV_REGRESSION_ONLY`, `eligible_for_final_holdout=N`을 남긴다.
+- 2025가 아닌 값을 임의로 2025로 보정하지 않고, `measurement_period_raw`와 `measurement_year_normalized`를 분리해 기록한다.

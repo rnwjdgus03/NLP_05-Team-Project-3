@@ -27,6 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension as infer_unit_dimension
+from kosis_mapping_status import NOT_KOSIS, READY, REVIEW, decide_final_status
 
 PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
@@ -64,10 +65,46 @@ def mark_unverifiable(out, code, stage, reason, **extra):
             'verdict_code': code,
             'verdict_stage': stage,
             'verdict_reason': reason,
+            'verification_skipped': extra.pop('verification_skipped', out.get('verification_skipped', '')),
+            'verification_skip_reason': extra.pop('verification_skip_reason', out.get('verification_skip_reason', '')),
             **extra,
         }
     )
     return out
+
+
+def mark_skipped_by_final_status(out, final_status, reason):
+    verdict = '검증대상아님' if final_status == NOT_KOSIS else '판단불가'
+    code = 'NOT_KOSIS' if final_status == NOT_KOSIS else 'FINAL_STATUS_NOT_READY'
+    out.update(
+        {
+            'final_status': final_status,
+            'verdict': verdict,
+            'verdict_code': code,
+            'verdict_stage': 'final_status',
+            'verdict_reason': reason,
+            'verification_skipped': 'Y',
+            'verification_skip_reason': reason,
+        }
+    )
+    return out
+
+
+def effective_final_status(row):
+    """Return the final status used by value verification.
+
+    New validated files carry final_status.  Older CSVs do not, so we fall back
+    to mapping_status for compatibility and mark that fallback explicitly.
+    """
+    final_status = str(row.get('final_status', '')).strip()
+    if final_status:
+        return final_status, 'N', ''
+    mapping_status = str(row.get('mapping_status', '')).strip()
+    if mapping_status == READY:
+        return READY, 'Y', 'legacy fallback: final_status 없음, mapping_status=READY 사용'
+    if mapping_status:
+        return REVIEW, 'Y', f'legacy fallback: final_status 없음, mapping_status={mapping_status}'
+    return REVIEW, 'Y', 'legacy fallback: final_status 없음'
 
 
 def read_csv(path: Path):
@@ -82,6 +119,42 @@ def write_csv(path: Path, rows, fields):
         w = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
         w.writeheader()
         w.writerows(rows)
+
+
+def prepare_rows_for_verification(rows, fields, *, rank='1', allow_unconfirmed=False):
+    """Normalize legacy/new status inputs before value verification.
+
+    New files keep every row so REVIEW/NOT_KOSIS can be written to the verified
+    CSV with an explicit skip reason.  Legacy files without final_status fall
+    back to mapping_status and are marked with legacy_status_fallback=Y.
+    """
+    rows = [dict(row) for row in rows]
+    fields = list(fields)
+    warnings = []
+    has_final_status = 'final_status' in fields
+    if has_final_status:
+        if allow_unconfirmed:
+            for row in rows:
+                if row.get('final_status') != READY:
+                    row['verified_without_confirmation'] = 'Y'
+            if 'verified_without_confirmation' not in fields:
+                fields.append('verified_without_confirmation')
+            warnings.append('[진단 모드] final_status=READY가 아닌 행은 공식 판정이 아니라 skip/진단으로 남긴다.')
+    elif any(str(r.get('mapping_status', '')).strip() for r in rows):
+        warnings.append('[경고] 입력 CSV에 final_status 컬럼이 없습니다. mapping_status를 legacy fallback으로 사용합니다.')
+        for row in rows:
+            row['legacy_status_fallback'] = 'Y'
+        if 'legacy_status_fallback' not in fields:
+            fields.append('legacy_status_fallback')
+        if allow_unconfirmed:
+            for row in rows:
+                row['verified_without_confirmation'] = 'Y'
+            if 'verified_without_confirmation' not in fields:
+                fields.append('verified_without_confirmation')
+            warnings.append('[진단 모드] 확정되지 않은 legacy 매핑도 skip/진단 표시를 남긴다.')
+    else:
+        rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(rank)]
+    return rows, fields, warnings
 
 
 def compact(text):
@@ -494,6 +567,13 @@ def derive_actual(data_rows, prd_se, period, row):
         return (current - previous) / abs(previous) * 100, current_period, previous_period, f'수준값에서 증감률 계산; aggregation={method}'
     if mapping_type == 'difference_from_level':
         return current - previous, current_period, previous_period, f'수준값에서 증감량 계산; aggregation={method}'
+    if mapping_type == 'absolute_change':
+        return current - previous, current_period, previous_period, f'ABSOLUTE_CHANGE=current-base; aggregation={method}'
+    if mapping_type in {'trade_balance', 'trade_balance_change'}:
+        return None, current_period, previous_period, (
+            f'{mapping_type} requires paired export/import ITEM coordinates; '
+            'single selected_itm_id data cannot be used as trade balance'
+        )
     return None, current_period, previous_period, f'지원하지 않는 mapping_type={mapping_type}'
 
 
@@ -758,7 +838,7 @@ def extreme_error(claim_value, actual_value, threshold=MISMAPPING_PCT, *,
     return abs(actual_value - claim_value) / denominator * 100 >= threshold
 
 
-def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0):
+def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.0, rate_point_mode=False):
     """3구간 판정: 일치 / 판정보류(오차밴드) / 불일치.
 
     - 일치: 절대오차 tolerance_abs 이내 또는 상대오차 tolerance_pct% 이내
@@ -773,9 +853,13 @@ def judge(claim_value, actual_value, tolerance_abs, tolerance_pct, review_pct=5.
     diff = actual_value - claim_value
     abs_diff = abs(diff)
     pct = abs_diff / max(abs(claim_value), 1e-9) * 100
+    if rate_point_mode:
+        if abs_diff <= tolerance_abs:
+            return '일치', f'차이={abs_diff:.6g}%p'
+        if abs_diff <= MISMAPPING_RATE_POINT:
+            return '판정보류', f'차이={abs_diff:.6g}%p (증감률/등락률은 %p 기준으로 검토)'
+        return '불일치', f'차이={abs_diff:.6g}%p'
     # 팀 공식 기준(거의 정확일치, 엄격)에 맞춰 상대오차로 판정한다.
-    # 절대오차 지름길(0.5%p)은 1.4% vs 1.31% 같은 큰 상대오차를 일치로 오판해 제거했다.
-    # (골드 역산: 일치 <=1.23%, 불일치 >=5%. tolerance_pct/review_pct로 조정 가능.)
     if pct <= tolerance_pct:
         return '일치', f'차이={abs_diff:.6g}, 차이율={pct:.3g}%'
     if pct <= review_pct:
@@ -803,22 +887,46 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     out = dict(row)
     out['default_applied'] = 'N'
     out['default_reason'] = ''
+    final_status, legacy_fallback, fallback_reason = effective_final_status(row)
+    out['final_status'] = final_status
+    out['legacy_status_fallback'] = legacy_fallback
+    out.setdefault('verification_skipped', 'N')
+    out.setdefault('verification_skip_reason', '')
+    if legacy_fallback == 'Y':
+        out.setdefault('review_reason', row.get('review_reason', ''))
+        if fallback_reason and not out.get('review_reason') and final_status != READY:
+            out['review_reason'] = fallback_reason
+    if final_status == NOT_KOSIS:
+        reason = row.get('not_kosis_reason') or fallback_reason or 'KOSIS 검증 대상이 아님'
+        out['not_kosis_reason'] = reason
+        return mark_skipped_by_final_status(out, NOT_KOSIS, reason)
+    if final_status != READY:
+        reason = row.get('review_reason') or fallback_reason or 'final_status가 READY가 아님'
+        out['review_reason'] = reason
+        return mark_skipped_by_final_status(out, REVIEW, reason)
+
     claim_value = parse_number(row.get('value'))
     compare_value = signed_claim_value(row, claim_value)
     out['claim_value_numeric'] = claim_value if claim_value is not None else ''
 
-    # 확정 매핑이 아니면 판정하지 않는다. 단, --allow-unconfirmed 로 표시된 진단 행은
-    # 조회까지 진행한다(결과는 판정이 아니라 진단이며 출력에 표시가 남는다).
-    #
-    # 2026-08-02: 게이트가 두 겹이었다. CLI 의 행 필터만 열었더니 여기서 다시 막혀
-    # 24건이 전부 '판단불가'로 나왔다. validate 에서 고쳤던 이중 게이트와 같은 모양이다.
+    # final_status=READY 인 행만 값 비교를 진행한다. 단, --allow-unconfirmed 로
+    # 표시된 진단 행은 조회까지 진행한다(결과는 판정이 아니라 진단이며 출력에
+    # 표시가 남는다).
     diagnostic = str(row.get('verified_without_confirmation', '')).strip().upper() == 'Y'
-    if row.get('mapping_status') and row.get('mapping_status') != 'READY' and not diagnostic:
+    if row.get('final_status') and row.get('final_status') != READY and not diagnostic:
+        return mark_skipped_by_final_status(
+            out,
+            str(row.get('final_status')),
+            row.get('review_reason') or row.get('not_kosis_reason') or 'final_status가 READY가 아님',
+        )
+    if not row.get('final_status') and row.get('mapping_status') and row.get('mapping_status') != 'READY' and not diagnostic:
         return mark_unverifiable(
             out,
             row.get('mapping_status'),
             'mapping',
             row.get('mapping_reason', '확정 매핑이 아님'),
+            verification_skipped='Y',
+            verification_skip_reason=row.get('mapping_reason', '확정 매핑이 아님'),
         )
     if not row.get('mapping_status') and str(row.get('candidate_rank', '')).strip() != '1':
         return mark_unverifiable(out, 'NOT_TOP_CANDIDATE', 'candidate', 'candidate_rank=1이 아님')
@@ -841,7 +949,7 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     if not parse_period(row.get('period')):
         return mark_unverifiable(out, 'PERIOD_MISSING', 'input', 'measurement period가 없음')
     mapping_type = str(row.get('mapping_type', '')).strip()
-    if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level'}:
+    if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level', 'absolute_change', 'trade_balance', 'trade_balance_change'}:
         return mark_unverifiable(
             out,
             'MAPPING_TYPE_UNSUPPORTED',
@@ -862,11 +970,11 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     if use_pinned_item:
         item, item_reason = pin_item(meta_rows, row)
         if not item:
-            return mark_unverifiable(out, 'ITEM_NOT_IN_META', 'metadata', item_reason)
+            return mark_unverifiable(out, 'ITEM_NOT_IN_META', 'metadata', item_reason, item_semantic_match='N')
     else:
         item, item_reason = choose_item(meta_rows, row)
         if not item:
-            return mark_unverifiable(out, 'NO_COMPATIBLE_ITEM', 'metadata', item_reason)
+            return mark_unverifiable(out, 'NO_COMPATIBLE_ITEM', 'metadata', item_reason, item_semantic_match='N')
     has_obj_axis = any(meta.get('OBJ_ID') != 'ITEM' for meta in meta_rows)
     if has_obj_axis and not str(row.get('selected_obj_l1', '')).strip():
         return mark_unverifiable(out, 'OBJ_UNRESOLVED', 'metadata', 'selected_obj_l1이 확정되지 않음')
@@ -925,6 +1033,7 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     actual_raw, actual_period, previous_period, agg_reason = derive_actual(
         data_rows, prd_se, row.get('period'), row
     )
+    agg_method = aggregation_method(row)
     kosis_unit_value = (item.get('UNIT_NM') or (data_rows[0].get('UNIT_NM') if data_rows else ''))
     if mapping_type == 'rate_from_level':
         factor, unit_reason = 1.0, '수준값 증감률 계산에서는 단위 배율 상쇄'
@@ -949,7 +1058,7 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         verdict, reason = '판단불가', manual_review_reason
         verdict_code, verdict_stage = 'OBJ_CODE_REVIEW_REQUIRED', 'metadata'
     else:
-        verdict, reason = judge(compare_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.5, review_pct=4.0)
+        verdict, reason = judge(compare_value, actual_converted, tolerance_abs=0.5, tolerance_pct=1.5, review_pct=4.0, rate_point_mode=(mapping_type == 'rate_from_level'))
         if compare_value != claim_value:
             reason += f' (방향부호 적용: claim={compare_value})'
         verdict_code = {'일치': 'MATCH', '불일치': 'VALUE_MISMATCH',
@@ -964,6 +1073,7 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
                 compare_value, actual_converted, rate_like=rate_like):
             verdict = '판단불가'
             verdict_code = 'LIKELY_MISMAPPING'
+            out['likely_mismapping'] = 'Y'
             verdict_stage = 'mapping'
             reason += (f' (차이율이 {MISMAPPING_PCT:.0f}% 를 넘어 좌표 매핑 오류로 의심'
                        ' — 기사 오류로 단정하지 않고 사람 검토로 보낸다)')
@@ -999,12 +1109,32 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         'kosis_actual_raw': actual_raw if actual_raw is not None else '',
         'kosis_actual_value': actual_converted if actual_converted is not None else '',
         'kosis_rows_used': len(data_rows),
+        'item_semantic_match': 'Y',
+        'aggregation_method': agg_method,
+        'derived_formula': agg_reason,
+        'base_period': previous_period,
+        'current_period': actual_period,
+        'likely_mismapping': out.get('likely_mismapping', 'N'),
+        'verified_without_confirmation': out.get('verified_without_confirmation', 'N'),
         'value_diff': (actual_converted - compare_value) if actual_converted is not None and compare_value is not None else '',
         'verdict': verdict,
         'verdict_code': verdict_code,
         'verdict_stage': verdict_stage,
         'verdict_reason': ' / '.join(p for p in reason_parts if p),
+        'mapping_status': row.get('mapping_status', ''),
     })
+    out.update(decide_final_status({
+        **row, **out,
+        'metadata_combination_valid': 'Y' if item else 'N',
+        'item_meta_valid': 'Y' if item else 'N',
+        'obj_meta_valid': 'Y' if (not has_obj_axis or obj_l1) else 'N',
+        'api_request_success': 'Y' if data is not None else 'N',
+        'api_coordinate_exact_match': 'Y',
+        'unit_compatible': 'Y' if compatible else 'N',
+        'period_compatible': 'Y' if actual_period else 'N',
+        'api_value_exists': 'Y' if actual_raw is not None else 'N',
+        'semantic_ready_gate_passed': 'Y' if not manual_review else 'N',
+    }, require_value=True))
     return out
 
 
@@ -1027,20 +1157,14 @@ def main():
     inp = Path(args.input).expanduser()
     outp = Path(args.output).expanduser() if args.output else inp.with_name(inp.stem.replace('_kosis_index_candidates_with_meta', '') + '_kosis_verified.csv')
     rows, fields = read_csv(inp)
-    if any(str(r.get('mapping_status', '')).strip() for r in rows):
-        # 기본은 READY 만. 확정 안 된 매핑에 판정을 내면 파이프라인의 원칙이 깨진다.
-        # 2026-08-02: '후보가 결정적이지 않음' 24건이 정말 틀린 좌표인지 재려면
-        # 조회는 해봐야 해서 진단용 통로를 열되, 출력에 표시를 남긴다.
-        if not args.allow_unconfirmed:
-            rows = [r for r in rows if r.get('mapping_status') == 'READY']
-        else:
-            for row in rows:
-                row['verified_without_confirmation'] = 'Y'
-            if 'verified_without_confirmation' not in fields:
-                fields.append('verified_without_confirmation')
-            print('[진단 모드] 확정되지 않은 매핑을 조회한다. 결과를 판정으로 쓰지 말 것.')
-    else:
-        rows = [r for r in rows if str(r.get('candidate_rank', '')).strip() == str(args.rank)]
+    rows, fields, warnings = prepare_rows_for_verification(
+        rows,
+        fields,
+        rank=args.rank,
+        allow_unconfirmed=args.allow_unconfirmed,
+    )
+    for warning in warnings:
+        print(warning)
     if args.skip_empty_value:
         rows = [r for r in rows if parse_number(r.get('value')) is not None]
     if args.limit:
@@ -1084,6 +1208,11 @@ def main():
         'kosis_unit', 'kosis_prd_se', 'kosis_period_used', 'kosis_previous_period_used',
         'kosis_actual_raw', 'kosis_actual_value', 'kosis_rows_used', 'value_diff',
         'default_applied', 'default_reason', 'kosis_lst_chn_de',
+        'item_semantic_match', 'aggregation_method', 'derived_formula', 'base_period', 'current_period',
+        'likely_mismapping', 'verified_without_confirmation', 'final_status', 'review_reason', 'not_kosis_reason',
+        'api_coordinate_exact_match', 'semantic_ready_gate_passed', 'metadata_combination_valid',
+        'unit_compatible', 'period_compatible', 'legacy_status_fallback',
+        'verification_skipped', 'verification_skip_reason',
         'verdict', 'verdict_code', 'verdict_stage', 'verdict_reason',
     ]
     final_fields = list(dict.fromkeys(fields + extra_fields))
