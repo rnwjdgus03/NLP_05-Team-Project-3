@@ -148,15 +148,22 @@ CODES = {
 # 누적 기간을 실제로 답하려면 월 자료를 합산해야 한다.
 # **수준값만** 지원한다. 증감률 누적('1~11월 대비 전년 1~11월')은 비교 기간도
 # 같은 폭으로 잡아야 하고 틀리면 새 거짓 판정이 생긴다. 한 번에 하나씩 연다.
-_RATE_SEMANTICS = {"rate_change", "rate_level"}
+_RATE_SEMANTICS = {"rate_change", "rate_level", "absolute_change"}
 
 
 def cumulative_is_answerable(row) -> tuple[str, str] | None:
-    """누적 주장이지만 월 합산으로 답할 수 있으면 (start, end)."""
+    """누적 주장이지만 월 합산으로 답할 수 있으면 (start, end).
+
+    **`change_base` 로 판단하면 안 된다.** 추출이 헐겁게 붙인다 —
+    실측: '작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%' 에서
+    수준값인 '반도체 수출 총액' 에도 `change_base='전년'` 이 붙었다.
+    문장 뒷부분의 비교 표현 때문이고, 그 측정 자체는 비교가 아니다.
+    1차 시도가 이걸로 막혀 누적 경로가 한 건도 안 열렸다.
+
+    `semantic_type` 은 단위와 지표에서 계산한 값이라 이보다 믿을 수 있다.
+    """
     if _t(row.get("semantic_type")) in _RATE_SEMANTICS:
         return None
-    if _t(row.get("change_base")):
-        return None          # 비교 기준이 붙으면 증감 계산이다. 아직 안 연다
     return cumulative_span(row.get("claim_text"),
                            row.get("measurement_period") or row.get("period"))
 

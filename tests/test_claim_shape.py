@@ -195,9 +195,28 @@ def test_rate_claims_stay_closed():
     assert cumulative_is_answerable(row) is None
 
 
-def test_change_base_claims_stay_closed():
-    row = {"claim_text": "1~11월 수출은 1274억달러였다.", "measurement_period": "2024",
-           "change_base": "전년"}
+def test_change_base_does_not_close_a_level_claim():
+    """추출이 change_base 를 헐겁게 붙인다. 그걸 근거로 막으면 누적 경로가 안 열린다.
+
+    실측: '작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%' 에서
+    수준값인 '반도체 수출 총액' 에도 change_base='전년' 이 붙었다.
+    문장 뒷부분의 비교 표현 때문이고 그 측정 자체는 비교가 아니다.
+    """
+    row = {"claim_text": "작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%로 나타났다.",
+           "measurement_period": "2024", "semantic_type": "amount", "change_base": "전년"}
+    assert cumulative_is_answerable(row) == ("202401", "202411")
+
+
+def test_absolute_change_stays_closed():
+    row = {"claim_text": "1~11월 수출은 200억달러 늘었다.", "measurement_period": "2024",
+           "semantic_type": "absolute_change"}
+    assert cumulative_is_answerable(row) is None
+
+
+def test_share_rows_in_the_same_sentence_stay_closed():
+    """같은 문장의 '중국 비율 33.3%' 는 증감률이라 계속 닫혀 있어야 한다."""
+    row = {"claim_text": "작년 1~11월 반도체 수출(1274억달러) 가운데 중국 비율은 33.3%로 나타났다.",
+           "measurement_period": "2024", "semantic_type": "rate_change"}
     assert cumulative_is_answerable(row) is None
 
 
