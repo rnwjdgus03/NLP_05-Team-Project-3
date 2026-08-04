@@ -177,3 +177,16 @@ def test_there_is_one_table_periodicities():
     from kosis_meta_coordinates import table_periodicities as canonical
     import kosis_validate_mapping_candidates as validate
     assert validate.table_periodicities is canonical
+
+
+def test_the_pipeline_collects_periodicity():
+    """주기를 안 담으면 하류의 가드가 전부 잠든다.
+
+    prd_se_list 가 비면 '모름' 으로 읽어 막지 않도록 설계했기 때문이다
+    (그게 옛 산출물 호환을 위해 맞는 선택이다).
+    그래서 파이프라인이 --with-periodicity 를 반드시 넘겨야 한다.
+    """
+    import inspect
+
+    import run_kosis_measurement_pipeline as pipeline
+    assert '"--with-periodicity"' in inspect.getsource(pipeline)
