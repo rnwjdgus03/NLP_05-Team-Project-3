@@ -178,6 +178,10 @@ def period_range(period, prd_se, comparison_period="", span=None):
             start_year = comparison[:4] if comparison else p
             return {'startPrdDe': start_year + '01', 'endPrdDe': p + '12'}, '연도 기준 월자료 조회'
     if prd_se == 'Q':
+        if len(p) == 6:
+            # '202202' = 2022년 2분기. 월간과 모양이 같다 — PRD_SE 로 구분한다.
+            start = comparison if len(comparison) == 6 else p
+            return {'startPrdDe': start, 'endPrdDe': p}, ''
         if len(p) == 4:
             start_year = comparison[:4] if comparison else p
             return {'startPrdDe': start_year + '01', 'endPrdDe': p + '04'}, '연도 기준 분기자료 조회'
@@ -473,6 +477,9 @@ def aggregation_method(row):
     return 'latest'
 
 
+_PRD_SE_CANON = {'Y': 'Y', 'H': 'H', 'Q': 'Q', 'M': 'M', 'D': 'D'}
+
+
 def row_periodicity(row) -> str:
     """자료 행의 수록 주기. 어휘 처리는 kosis_meta_coordinates 한 곳에만 둔다."""
     return normalize_periodicity(row.get('PRD_SE'))
@@ -500,7 +507,12 @@ def aggregate_period(data_rows, prd_se, target_period, method, span=None):
         if not values:
             return None, ''
         return sum(values), f"{span[0]}~{span[1]}({len(values)}개월)"
-    matching = [r for r in data_rows if str(r.get('PRD_DE', '')).startswith(target_period)]
+    # 구간이 아닌 경우에도 주기를 확인한다.
+    # **분기 '202202' 와 월간 '202202'(2월) 는 글자가 같다.** 섞이면 조용히 틀린 값이 나온다.
+    wanted = _PRD_SE_CANON.get(str(prd_se or '').strip().upper(), '')
+    candidates = [r for r in data_rows
+                  if not wanted or not row_periodicity(r) or row_periodicity(r) == wanted]
+    matching = [r for r in candidates if str(r.get('PRD_DE', '')).startswith(target_period)]
     if not matching:
         return None, ''
     matching.sort(key=lambda row: str(row.get('PRD_DE', '')))

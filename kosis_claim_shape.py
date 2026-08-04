@@ -56,6 +56,30 @@ _SHARE_CONTEXT = re.compile(r"(가운데|중)\s*[^.]{0,40}?\d+(?:\.\d+)?\s*%")
 #   '하반기 유가 하락'      + period=2024            → 안 잡는다
 _YEAR_QUARTER = re.compile(r"(\d{4})\s*년\s*(?:\d\s*/?\s*4?\s*분기|상반기|하반기)")
 
+# 분기를 **거부하지 않고 변환**한다 (2026-08-04, 좌표 모델 확장 2단계).
+# KOSIS 분기 PRD_DE 형식은 실측으로 확인했다(DT_1K41012, prdSe=Q):
+#   202501 202502 202503 202504
+# 연도 뒤에 분기를 **2자리로 0을 채운다.** 월간과 모양이 같으므로
+# 조회·집계할 때 반드시 PRD_SE 를 함께 봐야 한다.
+_YEAR_QUARTER_N = re.compile(r"(\d{4})\s*년\s*([1-4])\s*/?\s*4?\s*분기")
+# 반기(H)는 아직 열지 않는다. 제공하는 표가 드물고, 잘못 열면 새 거짓 판정이 생긴다.
+_YEAR_HALF = re.compile(r"(\d{4})\s*년\s*(상반기|하반기)")
+
+
+def quarter_period(claim_text, period) -> str:
+    """'2022년 2분기' 를 '202202' 로. 추출된 해와 같을 때만.
+
+    같은 문장에 여러 해의 분기가 나오므로(예: '2024년 3분기 ... 2022년 2분기 이래')
+    **이 측정의 해**와 일치하는 것만 잡는다.
+    """
+    year = re.sub(r"\D", "", _t(period))[:4]
+    if len(year) != 4:
+        return ""
+    for match in _YEAR_QUARTER_N.finditer(_t(claim_text)):
+        if match.group(1) == year:
+            return f"{year}{int(match.group(2)):02d}"
+    return ""
+
 
 def _t(value) -> str:
     return "" if value is None else str(value).strip()
@@ -179,6 +203,7 @@ def claim_shape_exclusion(row, dimension="", semantic="") -> tuple[str, str]:
     if share_claim(indicator, text, dimension):
         return "SHARE_CLAIM_UNSUPPORTED", CODES["SHARE_CLAIM_UNSUPPORTED"]
     period = row.get("measurement_period") or row.get("period")
-    if period_granularity_mismatch(text, prd_se, period):
+    # 분기는 변환할 수 있으면 빼지 않는다. prepare 가 prd_se=Q 로 바꿔 넘긴다.
+    if period_granularity_mismatch(text, prd_se, period) and not quarter_period(text, period):
         return "PERIOD_GRANULARITY_MISMATCH", CODES["PERIOD_GRANULARITY_MISMATCH"]
     return "", ""

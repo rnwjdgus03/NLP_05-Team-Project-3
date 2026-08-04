@@ -14,7 +14,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from kosis_claim_shape import claim_shape_exclusion, cumulative_is_answerable
+from kosis_claim_shape import (claim_shape_exclusion, cumulative_is_answerable,
+                               quarter_period)
 from kosis_scope_gate import (ARTICLE_SCOPE_CODES, gate_decision, has_own_source,
                               propagate_by_article, starts_with_anaphor)
 
@@ -376,6 +377,14 @@ def normalize_row(row: dict) -> dict:
         out["prd_se"] = "M"
         out["period"] = span[1]
         out["period_aggregation"] = "sum"
+    else:
+        # 분기는 빼지 않고 **변환**한다. KOSIS 분기 PRD_DE 는 '202202' 형식이다
+        # (실측 DT_1K41012). 연간으로 물어보면 '2022년 2분기 -0.2%' 를
+        # 2022년 연간 +5.88% 와 대조해 거짓 불일치가 난다.
+        quarter = quarter_period(row.get("claim_text"), out["period"])
+        if quarter:
+            out["prd_se"] = "Q"
+            out["period"] = quarter
     out["raw_unit"] = raw_unit
     out["canonical_unit"] = canonical_unit
     out["unit"] = canonical_unit

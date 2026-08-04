@@ -148,3 +148,90 @@ def test_missing_periodicity_is_blank_not_an_error():
     table = {"org_id": "101", "tbl_id": "DT_X", "tbl_name": "표", "category_path": ""}
     rows = builder.convert_meta_rows(table, [{"OBJ_ID": "ITEM", "ITM_ID": "T1"}])
     assert rows[0]["prd_se_list"] == ""
+
+
+# --------------------------------------------------------------------------
+# 분기를 거부하지 않고 변환한다 (2단계)
+# --------------------------------------------------------------------------
+from kosis_claim_shape import claim_shape_exclusion, quarter_period
+from kosis_verify_claim_values import aggregate_period, period_range
+
+RETAIL = ("대표적인 내수경기 지표인 소매판매액지수는 2024년 3분기 100.6으로 1년 전보다 "
+          "1.9% 감소했는데, 2022년 2분기(-0.2%) 이래 10개 분기 연속으로 감소세가 이어지고 있다.")
+
+
+def test_the_holdout_case_is_converted():
+    """홀드아웃1 [1]. 이걸 연간으로 물어봐서 거짓 불일치가 났다."""
+    assert quarter_period(RETAIL, "2022") == "202202"
+
+
+def test_the_year_decides_which_quarter():
+    """같은 문장에 2024년 3분기도 있다. 이 측정의 해와 맞는 것만 잡아야 한다."""
+    assert quarter_period(RETAIL, "2024") == "202403"
+
+
+def test_a_year_without_a_quarter_returns_nothing():
+    assert quarter_period(RETAIL, "2019") == ""
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("2023년 1분기 수출은", "202301"),
+    ("2023년 4/4분기 수출은", "202304"),
+    ("2023년 4 분기 수출은", "202304"),
+])
+def test_quarter_forms(text, expected):
+    assert quarter_period(text, "2023") == expected
+
+
+def test_a_bare_half_year_is_not_converted():
+    """'하반기 파업 영향' 은 연간 주장이다. 반기는 아직 열지 않는다."""
+    text = "자동차 수출은 하반기 파업 영향으로 전년도와 보합세인 708억 달러를 기록했다."
+    assert quarter_period(text, "2024") == ""
+
+
+def test_a_convertible_quarter_is_no_longer_excluded():
+    row = {"claim_text": RETAIL, "measurement_prd_se": "Y",
+           "measurement_indicator": "소매판매액지수", "measurement_period": "2022"}
+    assert claim_shape_exclusion(row) == ("", "")
+
+
+def test_a_half_year_claim_is_still_excluded():
+    """변환할 수 없으면 빼는 쪽이 맞다 — 틀린 답보다 모른다고 하는 편이 낫다."""
+    row = {"claim_text": "2024년 상반기 수출은 3000억달러였다.", "measurement_prd_se": "Y",
+           "measurement_indicator": "수출액", "measurement_period": "2024"}
+    assert claim_shape_exclusion(row)[0] == "PERIOD_GRANULARITY_MISMATCH"
+
+
+# --------------------------------------------------------------------------
+# 조회와 집계
+# --------------------------------------------------------------------------
+
+def test_a_quarter_queries_that_quarter():
+    params, _ = period_range("202202", "Q")
+    assert params == {"startPrdDe": "202202", "endPrdDe": "202202"}
+
+
+def test_a_quarter_with_a_comparison_spans_both():
+    params, _ = period_range("202202", "Q", "202102")
+    assert params == {"startPrdDe": "202102", "endPrdDe": "202202"}
+
+
+def test_a_monthly_row_is_not_read_as_a_quarter():
+    """'202202' 는 2022년 2분기이기도 하고 2022년 2월이기도 하다.
+
+    PRD_SE 를 안 보면 2월 값을 2분기 값으로 답한다. 조용히 틀린다.
+    """
+    monthly = [{"PRD_DE": "202202", "DT": "99", "PRD_SE": "M"}]
+    assert aggregate_period(monthly, "Q", "202202", "latest") == (None, "")
+
+
+def test_a_quarterly_row_is_read():
+    quarterly = [{"PRD_DE": "202202", "DT": "100.6", "PRD_SE": "Q"}]
+    value, used = aggregate_period(quarterly, "Q", "202202", "latest")
+    assert value == 100.6 and used == "202202"
+
+
+def test_rows_without_a_periodicity_are_still_accepted_outside_spans():
+    """옛 산출물에는 PRD_SE 가 없을 수 있다. 없으면 막지 않는다(구간 합산만 엄격하다)."""
+    rows = [{"PRD_DE": "2022", "DT": "5.88"}]
+    assert aggregate_period(rows, "Y", "2022", "latest")[0] == 5.88
