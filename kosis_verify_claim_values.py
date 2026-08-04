@@ -26,6 +26,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+from kosis_meta_coordinates import normalize_periodicity
 from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension as infer_unit_dimension
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -472,18 +473,9 @@ def aggregation_method(row):
     return 'latest'
 
 
-# KOSIS 는 주기를 두 가지 어휘로 답한다.
-#   자료 행     PRD_SE = 'Y' / 'Q' / 'M'
-#   getMeta PRD PRD_SE = '년' / '분기' / '월'
-_PRD_SE_ALIASES = {'Y': 'Y', '년': 'Y', '연': 'Y', '연간': 'Y',
-                   'H': 'H', '반기': 'H',
-                   'Q': 'Q', '분기': 'Q',
-                   'M': 'M', '월': 'M', '월간': 'M',
-                   'D': 'D', '일': 'D'}
-
-
 def row_periodicity(row) -> str:
-    return _PRD_SE_ALIASES.get(str(row.get('PRD_SE', '')).strip(), '')
+    """자료 행의 수록 주기. 어휘 처리는 kosis_meta_coordinates 한 곳에만 둔다."""
+    return normalize_periodicity(row.get('PRD_SE'))
 
 
 def aggregate_period(data_rows, prd_se, target_period, method, span=None):

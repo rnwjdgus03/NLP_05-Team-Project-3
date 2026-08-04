@@ -424,3 +424,29 @@ def read_csv_rows(path) -> list[dict]:
     csv.field_size_limit(2 ** 31 - 1)
     with open(path, encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+# --------------------------------------------------------------------------
+# 수록 주기 (2026-08-04)
+# --------------------------------------------------------------------------
+# KOSIS 는 주기를 **두 어휘**로 답한다. 하나만 처리하면 조용히 어긋난다.
+#   자료 행      PRD_SE = 'Y' / 'Q' / 'M'
+#   getMeta PRD  PRD_SE = '년' / '분기' / '월'
+#
+# 그리고 **분기 PRD_DE 는 월간과 모양이 같다.** 실측(DT_1K41012, prdSe=Q):
+#   202501 202502 202503 202504 202601 202602
+# 분기를 2자리로 채우므로 '202501' 이 1분기인지 1월인지 글자로는 구분이 안 된다.
+# 반드시 PRD_SE 를 함께 봐야 한다.
+PRD_SE_ALIASES = {
+    "Y": "Y", "년": "Y", "연": "Y", "연간": "Y", "년도": "Y",
+    "H": "H", "반기": "H",
+    "Q": "Q", "분기": "Q",
+    "M": "M", "월": "M", "월간": "M",
+    "D": "D", "일": "D",
+    "IR": "IR", "부정기": "IR",
+}
+
+
+def normalize_periodicity(value) -> str:
+    """'월'·'M' 을 모두 'M' 으로. 모르는 값이면 빈 문자열."""
+    return PRD_SE_ALIASES.get(str(value or "").strip(), "")

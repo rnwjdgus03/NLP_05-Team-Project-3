@@ -27,6 +27,7 @@ if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
 from kosis_api_test import get_meta  # noqa: E402
+from kosis_meta_coordinates import normalize_periodicity  # noqa: E402
 
 
 DEFAULT_TABLE_INDEX = PROJECT_DIR / "data/claims/kosis_table_index.csv"
@@ -63,6 +64,34 @@ def norm_table_row(row):
     }
 
 
+def collect_periodicity(org_id, tbl_id):
+    """표가 어떤 주기를 제공하는가 (2026-08-04 추가).
+
+    이걸 몰라서 **분기 주장에 연간을 물어봤다.** 홀드아웃1 의 거짓 불일치 하나가
+    그 때문이다 — '소매판매액지수 2022년 2분기 -0.2%' 를 2022년 연간 +5.88% 와 대조했다.
+
+    KOSIS 는 없는 주기를 물어도 **에러를 내지 않는다.** 실측(DT_127005_005):
+    prdSe=M 으로 물으면 PRD_DE=['2019'..'2024'] 인 연간 행이 그대로 온다.
+    그래서 조회 전에 표가 무엇을 줄 수 있는지 알아야 한다.
+
+    반환: ('Y|Q|M', '1970~2025') 형태. 실패하면 ('', '') — 수집을 멈추지 않는다.
+    """
+    try:
+        rows = get_meta(org_id, tbl_id, "PRD")
+    except Exception:
+        return "", ""
+    codes, spans = [], []
+    for row in rows or []:
+        code = normalize_periodicity(row.get("PRD_SE"))
+        if code and code not in codes:
+            codes.append(code)
+        start = str(row.get("STRT_PRD_DE") or "").strip()
+        end = str(row.get("END_PRD_DE") or "").strip()
+        if start or end:
+            spans.append(f"{code}:{start}~{end}")
+    return "|".join(codes), ";".join(spans)
+
+
 def convert_meta_rows(table, meta_rows):
     out = []
     for r in meta_rows:
@@ -83,6 +112,9 @@ def convert_meta_rows(table, meta_rows):
             "unit_id": r.get("UNIT_ID", ""),
             "unit_name": r.get("UNIT_NM", ""),
             "unit_eng_name": r.get("UNIT_ENG_NM", ""),
+            # 표 단위 값이라 행마다 같다. 하류가 표를 고를 때 이것만 보면 되도록 붙여둔다.
+            "prd_se_list": table.get("prd_se_list", ""),
+            "prd_ranges": table.get("prd_ranges", ""),
         })
     return out
 
@@ -105,6 +137,8 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="테스트용 처리 표 수. 0이면 전체")
     parser.add_argument("--delay", type=float, default=0.12)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--with-periodicity", action="store_true",
+                        help="표별 수록 주기를 함께 수집한다 (표당 API 1회 추가)")
     parser.add_argument("--keyword", action="append", default=[], help="tbl_name/category_path 필터. 여러 번 가능")
     args = parser.parse_args()
 
@@ -128,6 +162,10 @@ def main():
     fail = 0
     for i, table in enumerate(todo, 1):
         try:
+            if args.with_periodicity:
+                table["prd_se_list"], table["prd_ranges"] = collect_periodicity(
+                    table["org_id"], table["tbl_id"])
+                time.sleep(args.delay)
             meta = get_meta(table["org_id"], table["tbl_id"], "ITM")
             rows = convert_meta_rows(table, meta)
             append_csv(out, rows)
