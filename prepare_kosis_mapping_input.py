@@ -14,6 +14,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from kosis_claim_shape import claim_shape_exclusion
 from kosis_scope_gate import (ARTICLE_SCOPE_CODES, gate_decision, has_own_source,
                               propagate_by_article, starts_with_anaphor)
 
@@ -284,6 +285,13 @@ def exclusion(row: dict, dimension: str, semantic: str):
         return "VALUE_TYPE_UNIT_CONFLICT", f"semantic_type={semantic}, unit_dimension={dimension}"
     if semantic == "rank":
         return "RANK_NOT_DIRECTLY_COMPARABLE", "순위는 KOSIS 원자료와 직접 비교하지 않음"
+    # 값을 비교하기 **전에** 주장의 모양을 본다.
+    # 홀드아웃 50건에서 확정 4건이 전부 '불일치' 였고 넷 다 오판이었다 —
+    # 분기를 연간으로, 1~11월 누적을 12개월과, 구성비를 수준값 좌표와 대조했다.
+    # 차이가 6.1%p~34.5%p 라 extreme_error 문턱(100%p/300%)에 안 걸린다.
+    shape_code, shape_reason = claim_shape_exclusion(row)
+    if shape_code:
+        return shape_code, shape_reason
     return "", ""
 
 
