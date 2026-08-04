@@ -475,8 +475,15 @@ def aggregation_method(row):
 def aggregate_period(data_rows, prd_se, target_period, method, span=None):
     if span:
         # 구간 합산은 **반드시 sum** 이다. latest 를 쓰면 마지막 달 값만 나온다.
+        #
+        # **KOSIS 는 월 자료가 없는 표에 prdSe=M 을 줘도 에러를 내지 않는다.**
+        # 2026-08-04 실측: DT_127005_005 에 prdSe=M/Q 로 물었더니
+        # PRD_DE=['2019'..'2024'] 인 **연간** 행이 그대로 돌아왔다.
+        # 그걸 합치면 6개 연도의 합이 '11개월 누적'으로 둔갑한다.
+        # 그래서 자릿수를 명시적으로 확인한다. 우연에 기대지 않는다.
         matching = [r for r in data_rows
-                    if span[0] <= str(r.get('PRD_DE', '')) <= span[1]]
+                    if len(str(r.get('PRD_DE', ''))) == len(span[0])
+                    and span[0] <= str(r.get('PRD_DE', '')) <= span[1]]
         values = [parse_number(r.get('DT')) for r in matching]
         values = [v for v in values if v is not None]
         if not values:

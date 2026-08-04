@@ -286,3 +286,23 @@ def test_the_cumulative_level_claim_survives_the_share_gate():
 
 def test_share_still_caught_without_a_dimension_hint():
     assert share_claim("전시 분야 비중", "")
+
+
+def test_annual_rows_are_never_summed_as_months():
+    """KOSIS 는 월 자료가 없는 표에 prdSe=M 을 줘도 **에러를 내지 않는다.**
+
+    2026-08-04 실측: DT_127005_005 에 prdSe=M 으로 물었더니
+    PRD_DE=['2019'..'2024'] 인 연간 행이 그대로 돌아왔다.
+    그걸 합치면 6개 연도의 합이 '11개월 누적'으로 둔갑한다.
+    """
+    annual = [{"PRD_DE": str(y), "DT": "100000"} for y in range(2019, 2025)]
+    value, used = aggregate_period(annual, "M", "2024", "sum", ("202401", "202411"))
+    assert value is None
+    assert used == ""
+
+
+def test_mixed_rows_take_only_the_months():
+    rows = ([{"PRD_DE": "2024", "DT": "999999"}]
+            + [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 12)])
+    value, _ = aggregate_period(rows, "M", "2024", "sum", ("202401", "202411"))
+    assert value == 110
