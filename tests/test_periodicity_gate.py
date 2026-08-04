@@ -110,3 +110,35 @@ def test_validate_calls_the_gate():
     import kosis_validate_mapping_candidates as validate
     source = inspect.getsource(validate.main)
     assert "periodicity_unavailable(row, meta_rows)" in source
+
+
+# --------------------------------------------------------------------------
+# 격년 조사표 (2026-08-04 실측)
+# --------------------------------------------------------------------------
+# 245개 표 중 **69개(28%)** 가 PRD_SE='2년' 이었다. 처음엔 모르는 값이라 빈칸이 됐는데
+# 실패가 아니라 실제 주기다. '전년 대비 고객사 수 증감 현황', '물품기부' 같은 조사표들이다.
+
+def test_a_biennial_table_answers_an_annual_claim():
+    """격년이라도 그 해 자료가 있으면 답할 수 있다. 없으면 빈 응답으로 걸러진다."""
+    assert periodicity_unavailable({"prd_se": "Y"}, _meta("2년")) == ""
+
+
+def test_a_biennial_table_cannot_answer_a_quarterly_claim():
+    """더 굵은 주기로 분기를 대신할 수 없다. 이게 이 가드의 요점이다."""
+    assert periodicity_unavailable({"prd_se": "Q"}, _meta("2년"))
+
+
+def test_monthly_tables_can_answer_an_annual_claim():
+    """월 자료는 합산해 연간을 만들 수 있다(aggregate_period 가 한다)."""
+    assert periodicity_unavailable({"prd_se": "Y"}, _meta("M")) == ""
+
+
+def test_a_monthly_table_cannot_answer_a_quarterly_claim():
+    """월->분기 합산은 아직 구현하지 않았다. 못 하는 것은 못 한다고 한다."""
+    assert periodicity_unavailable({"prd_se": "Q"}, _meta("M"))
+
+
+@pytest.mark.parametrize("label,code", [("2년", "Y2"), ("3년", "Y3"), ("5년", "Y5")])
+def test_multi_year_labels_are_recognised(label, code):
+    from kosis_meta_coordinates import normalize_periodicity
+    assert normalize_periodicity(label) == code

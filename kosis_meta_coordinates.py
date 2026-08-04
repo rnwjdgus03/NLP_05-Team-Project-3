@@ -444,7 +444,27 @@ PRD_SE_ALIASES = {
     "M": "M", "월": "M", "월간": "M",
     "D": "D", "일": "D",
     "IR": "IR", "부정기": "IR",
+    # 격년·3년·5년 주기 조사표. 2026-08-04 실측에서 245개 중 **69개(28%)** 가 '2년' 이었다.
+    # 처음엔 '모르는 값'으로 떨어져 빈칸이 됐는데, 실패가 아니라 실제 주기다.
+    "2년": "Y2", "3년": "Y3", "5년": "Y5", "반년": "H",
 }
+
+# 연간 요청을 받아줄 수 있는 주기들.
+#   · 격년 조사표라도 그 해 자료가 있으면 답할 수 있다(없으면 빈 응답으로 걸러진다)
+#   · 월·분기 자료는 합산해 연간을 만들 수 있다(aggregate_period 가 한다)
+# 반대로 **분기·월 요청은 더 굵은 주기로 대신할 수 없다.** 그게 이 가드의 요점이다.
+ANNUAL_COMPATIBLE = frozenset({"Y", "Y2", "Y3", "Y5", "IR", "H", "Q", "M", "D"})
+
+
+def periodicity_satisfied(wanted: str, available) -> bool:
+    """표가 제공하는 주기(available)로 주장이 필요로 하는 주기(wanted)를 답할 수 있는가."""
+    if not wanted or not available:
+        return True          # 모르면 막지 않는다
+    if wanted in available:
+        return True
+    if wanted == "Y":
+        return bool(set(available) & ANNUAL_COMPATIBLE)
+    return False
 
 
 def normalize_periodicity(value) -> str:

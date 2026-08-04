@@ -839,6 +839,7 @@ from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_ITEM_TOKENS,
     AGGREGATE_OBJ_NAMES,
     normalize_periodicity,
+    periodicity_satisfied,
 )
 # 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
@@ -1024,7 +1025,7 @@ def periodicity_unavailable(row, meta_rows) -> str:
     if not wanted:
         return ""
     available = table_periodicities(meta_rows)
-    if not available or wanted in available:
+    if periodicity_satisfied(wanted, available):
         return ""
     return f"PERIODICITY_NOT_AVAILABLE: 표는 {'/'.join(sorted(available))} 만 제공, 주장은 {wanted}"
 
