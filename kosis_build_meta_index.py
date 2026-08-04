@@ -39,14 +39,21 @@ def read_csv(path: Path):
         return list(csv.DictReader(f))
 
 
+# extrasaction="ignore" 라서 여기 없는 키는 **조용히 버려진다.**
+# 2026-08-04: convert_meta_rows 에 prd_se_list 를 넣었는데 이 목록을 안 고쳐서
+# 520개 표를 다 수집하고도 컬럼이 없었다. 사전만 검사하는 테스트는 이걸 못 잡는다.
+FIELDS = [
+    "org_id", "tbl_id", "tbl_name", "category_path",
+    "axis_id", "axis_name", "axis_order",
+    "code_id", "code_name", "parent_code_id",
+    "is_item", "unit_id", "unit_name", "unit_eng_name",
+    "prd_se_list", "prd_ranges",
+]
+
+
 def append_csv(path: Path, rows, write_header=False):
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = [
-        "org_id", "tbl_id", "tbl_name", "category_path",
-        "axis_id", "axis_name", "axis_order",
-        "code_id", "code_name", "parent_code_id",
-        "is_item", "unit_id", "unit_name", "unit_eng_name",
-    ]
+    fields = FIELDS
     mode = "w" if write_header else "a"
     with path.open(mode, encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")

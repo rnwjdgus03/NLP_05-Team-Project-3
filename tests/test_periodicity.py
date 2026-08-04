@@ -235,3 +235,30 @@ def test_rows_without_a_periodicity_are_still_accepted_outside_spans():
     """옛 산출물에는 PRD_SE 가 없을 수 있다. 없으면 막지 않는다(구간 합산만 엄격하다)."""
     rows = [{"PRD_DE": "2022", "DT": "5.88"}]
     assert aggregate_period(rows, "Y", "2022", "latest")[0] == 5.88
+
+
+def test_the_written_columns_include_periodicity(tmp_path):
+    """사전에 키를 넣는 것만으로는 부족하다.
+
+    DictWriter 가 extrasaction='ignore' 라 FIELDS 에 없는 키는 **조용히 버려진다.**
+    2026-08-04 실측: 520개 표를 다 수집하고도 prd_se_list 컬럼이 없었다.
+    사전만 검사하는 테스트(test_rows_carry_the_table_periodicity)는 이걸 통과시켰다.
+    """
+    import csv
+    out = tmp_path / "meta.csv"
+    table = {"org_id": "101", "tbl_id": "DT_X", "tbl_name": "표", "category_path": "",
+             "prd_se_list": "Y|Q", "prd_ranges": "Q:196001~202504"}
+    rows = builder.convert_meta_rows(table, [{"OBJ_ID": "ITEM", "ITM_ID": "T1"}])
+    builder.append_csv(out, rows, write_header=True)
+    written = list(csv.DictReader(out.open(encoding="utf-8-sig")))
+    assert "prd_se_list" in written[0]
+    assert written[0]["prd_se_list"] == "Y|Q"
+    assert written[0]["prd_ranges"] == "Q:196001~202504"
+
+
+def test_every_produced_key_has_a_column():
+    """convert_meta_rows 가 만드는 키는 전부 FIELDS 에 있어야 한다."""
+    table = {"org_id": "1", "tbl_id": "T", "tbl_name": "", "category_path": "",
+             "prd_se_list": "", "prd_ranges": ""}
+    produced = set(builder.convert_meta_rows(table, [{"OBJ_ID": "ITEM"}])[0])
+    assert produced - set(builder.FIELDS) == set()
