@@ -190,3 +190,18 @@ def test_the_pipeline_collects_periodicity():
 
     import run_kosis_measurement_pipeline as pipeline
     assert '"--with-periodicity"' in inspect.getsource(pipeline)
+
+
+def test_the_gate_appends_to_the_real_output_list():
+    """변수명을 잘못 써서 NameError 로 죽은 적이 있다 (results vs outputs).
+
+    이 경로는 '표가 그 주기를 못 줄 때' 만 지나가므로 평소엔 안 밟힌다.
+    홀드아웃3 을 20분 돌리고 나서야 터졌다.
+    """
+    import inspect
+
+    import kosis_validate_mapping_candidates as validate
+    source = inspect.getsource(validate.main)
+    assert "results.append" not in source
+    marker = source.index("unavailable = periodicity_unavailable(row, meta_rows)")
+    assert "outputs.append(" in source[marker:marker + 400]

@@ -1126,7 +1126,7 @@ def main() -> None:
         # 조회해버리면 분기 주장에 연간값이 붙어 거짓 불일치가 난다.
         unavailable = periodicity_unavailable(row, meta_rows)
         if unavailable:
-            results.append({
+            outputs.append({
                 **row,
                 "mapping_status": MAPPING_FAILED,
                 "mapping_reason": unavailable,
