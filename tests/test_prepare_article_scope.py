@@ -62,6 +62,28 @@ def test_clean_article_is_untouched():
     assert prepare.apply_article_scope(rows) == 0
 
 
+def test_both_item_fields_are_cleared():
+    """한쪽만 지우면 하류 게이트가 옛 값을 보고 다시 막는다.
+
+    claim_item_grounded 는 measurement_item 을 **먼저** 읽는다:
+        raw = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
+
+    2026-08-04 실측: prepare 가 industry_or_item 만 지워서
+    '전체 수출액 6838억' 이 UNGROUNDED_CLAIM_ITEM 으로 재차단됐고 확정 3건을 잃었다.
+    """
+    import inspect
+    source = inspect.getsource(prepare.normalize_row)
+    assert 'out["industry_or_item"] = ""' in source
+    assert 'out["measurement_item"] = ""' in source
+
+
+def test_cleared_row_passes_the_grounding_check():
+    """지운 뒤에는 근거 검사를 통과해야 한다(대상 없는 주장으로 취급)."""
+    row = {"measurement_item": "", "industry_or_item": "",
+           "claim_text": "작년 한 해 전체 수출액이 6838억달러였다"}
+    assert prepare.claim_item_grounded(row)
+
+
 def test_prepare_calls_it():
     """함수만 만들고 파이프라인에 연결하지 않으면 아무 일도 일어나지 않는다."""
     import inspect

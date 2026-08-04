@@ -348,6 +348,12 @@ def normalize_row(row: dict) -> dict:
         out["item_ungrounded"] = "Y"
         out["dropped_item"] = out["industry_or_item"]
         out["industry_or_item"] = ""
+        # measurement_item 도 함께 지워야 한다. claim_item_grounded 는 그쪽을 **먼저** 읽는다:
+        #     raw = nz(row.get("measurement_item")) or nz(row.get("industry_or_item"))
+        # 한쪽만 지우면 하류 게이트가 여전히 옛 값을 보고 막는다.
+        # 2026-08-04 실측: 이것 때문에 확정 3건을 잃었다
+        # ('전체 수출액 6838억' 이 UNGROUNDED_CLAIM_ITEM 으로 재차단됨).
+        out["measurement_item"] = ""
     out["prd_se"] = nz(row.get("measurement_prd_se"))
     out["period"], out["period_alignment_status"] = align_change_period(row)
     out["raw_unit"] = raw_unit
