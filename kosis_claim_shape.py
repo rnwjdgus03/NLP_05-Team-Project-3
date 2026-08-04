@@ -68,6 +68,39 @@ def cumulative_period(claim_text, prd_se) -> bool:
     return bool(_CUMULATIVE.search(_t(claim_text)))
 
 
+_SPAN_RANGE = re.compile(r"(?<!\d)(\d{1,2})\s*[~∼〜–—-]\s*(\d{1,2})\s*월")
+_SPAN_FROM_TO = re.compile(r"(\d{1,2})\s*월\s*부터\s*(\d{1,2})\s*월")
+_SPAN_UNTIL = re.compile(r"(\d{1,2})\s*월\s*(?:까지|누적)")
+
+
+def cumulative_span(claim_text, period) -> tuple[str, str] | None:
+    """'1~11월' 을 (202401, 202411) 로 푼다. 못 풀면 None.
+
+    KOSIS 는 월 자료를 주므로 합산하면 답할 수 있다. 다만 **연간값과 대면 안 된다** —
+    실측에서 반도체 수출 1~11월 1274억을 12개월치 1420억과 대조해 '불일치'가 났다.
+    차이 11.5% 가 정확히 12월 한 달이었다.
+    """
+    year = re.sub(r"\D", "", _t(period))[:4]
+    if len(year) != 4:
+        return None
+    text = _t(claim_text)
+    for pattern in (_SPAN_RANGE, _SPAN_FROM_TO):
+        match = pattern.search(text)
+        if match:
+            start, end = int(match.group(1)), int(match.group(2))
+            break
+    else:
+        match = _SPAN_UNTIL.search(text)
+        if not match:
+            return None
+        start, end = 1, int(match.group(1))
+    if not (1 <= start <= end <= 12):
+        return None
+    if start == 1 and end == 12:
+        return None          # 열두 달이면 그냥 연간이다. 굳이 월로 쪼갤 이유가 없다
+    return f"{year}{start:02d}", f"{year}{end:02d}"
+
+
 def share_claim(indicator, claim_text) -> bool:
     """분자와 분모가 둘 다 필요한 구성비 주장인가."""
     ind = _t(indicator)
@@ -103,13 +136,29 @@ CODES = {
 }
 
 
+# 누적 기간을 실제로 답하려면 월 자료를 합산해야 한다.
+# **수준값만** 지원한다. 증감률 누적('1~11월 대비 전년 1~11월')은 비교 기간도
+# 같은 폭으로 잡아야 하고 틀리면 새 거짓 판정이 생긴다. 한 번에 하나씩 연다.
+_RATE_SEMANTICS = {"rate_change", "rate_level"}
+
+
+def cumulative_is_answerable(row) -> tuple[str, str] | None:
+    """누적 주장이지만 월 합산으로 답할 수 있으면 (start, end)."""
+    if _t(row.get("semantic_type")) in _RATE_SEMANTICS:
+        return None
+    if _t(row.get("change_base")):
+        return None          # 비교 기준이 붙으면 증감 계산이다. 아직 안 연다
+    return cumulative_span(row.get("claim_text"),
+                           row.get("measurement_period") or row.get("period"))
+
+
 def claim_shape_exclusion(row) -> tuple[str, str]:
     """빼야 할 모양이면 (코드, 사유). 아니면 ('', '')."""
     text = row.get("claim_text")
     prd_se = row.get("measurement_prd_se") or row.get("prd_se")
     indicator = row.get("measurement_indicator") or row.get("indicator")
 
-    if cumulative_period(text, prd_se):
+    if cumulative_period(text, prd_se) and not cumulative_is_answerable(row):
         return "CUMULATIVE_PERIOD_UNSUPPORTED", CODES["CUMULATIVE_PERIOD_UNSUPPORTED"]
     if share_claim(indicator, text):
         return "SHARE_CLAIM_UNSUPPORTED", CODES["SHARE_CLAIM_UNSUPPORTED"]

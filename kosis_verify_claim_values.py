@@ -147,7 +147,24 @@ def infer_comparison_period(row):
     return '', ''
 
 
-def period_range(period, prd_se, comparison_period=""):
+def claim_period_span(row):
+    """'1~11월' 같은 누적 구간. prepare 가 넣어준다. 없으면 None.
+
+    2026-08-04: 반도체 수출 1~11월 1274억달러를 2024년 **12개월** 1420억과 대조해
+    '불일치' 가 났다. 차이 11.5% 가 정확히 12월 한 달이었다.
+    월 자료를 그 구간만 합산하면 답할 수 있다.
+    """
+    start = str(row.get('period_span_start') or '').strip()
+    end = str(row.get('period_span_end') or '').strip()
+    if len(start) == 6 and len(end) == 6 and start <= end:
+        return start, end
+    return None
+
+
+def period_range(period, prd_se, comparison_period="", span=None):
+    if span:
+        return {'startPrdDe': span[0], 'endPrdDe': span[1]}, (
+            f'누적 구간 {span[0]}~{span[1]} 월 자료 조회')
     p = parse_period(period)
     if not p:
         return {}, '기간 없음'
@@ -455,7 +472,16 @@ def aggregation_method(row):
     return 'latest'
 
 
-def aggregate_period(data_rows, prd_se, target_period, method):
+def aggregate_period(data_rows, prd_se, target_period, method, span=None):
+    if span:
+        # 구간 합산은 **반드시 sum** 이다. latest 를 쓰면 마지막 달 값만 나온다.
+        matching = [r for r in data_rows
+                    if span[0] <= str(r.get('PRD_DE', '')) <= span[1]]
+        values = [parse_number(r.get('DT')) for r in matching]
+        values = [v for v in values if v is not None]
+        if not values:
+            return None, ''
+        return sum(values), f"{span[0]}~{span[1]}({len(values)}개월)"
     matching = [r for r in data_rows if str(r.get('PRD_DE', '')).startswith(target_period)]
     if not matching:
         return None, ''
@@ -477,10 +503,14 @@ def derive_actual(data_rows, prd_se, period, row):
     if not target:
         return None, '', '', '기간 없음'
     method = aggregation_method(row)
-    current, current_period = aggregate_period(data_rows, prd_se, target, method)
+    span = claim_period_span(row)
+    current, current_period = aggregate_period(data_rows, prd_se, target, method, span)
     mapping_type = row.get('mapping_type') or 'direct'
+    if span and mapping_type != 'direct':
+        # 누적 증감률은 비교 기간도 같은 폭으로 잡아야 한다. 아직 안 연다.
+        return None, current_period, '', '누적 구간의 증감률은 지원하지 않는다'
     if mapping_type == 'direct':
-        return current, current_period, '', f'aggregation={method}'
+        return current, current_period, '', f'aggregation=sum; 누적 {current_period}' if span else f'aggregation={method}'
 
     previous_target = parse_period(row.get('comparison_period'))
     if not previous_target:
@@ -896,7 +926,8 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
             ).strip('; ')
     if mapping_type in {'rate_from_level', 'difference_from_level'} and not parse_period(comparison):
         return mark_unverifiable(out, 'COMPARISON_PERIOD_MISSING', 'input', '증감 계산 비교 시점 없음')
-    prd_params, period_note = period_range(row.get('period'), prd_se, comparison)
+    prd_params, period_note = period_range(row.get('period'), prd_se, comparison,
+                                          claim_period_span(row))
 
     try:
         data = get_stat_data(

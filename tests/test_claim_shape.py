@@ -112,12 +112,21 @@ def test_quarterly_prd_se_is_untouched():
 # --------------------------------------------------------------------------
 
 def test_exclusion_returns_a_code_and_a_reason():
-    row = {"claim_text": "작년 1~11월 반도체 수출은 1274억달러였다.",
-           "measurement_prd_se": "Y", "measurement_indicator": "반도체 수출 총액",
-           "measurement_period": "2024"}
+    """누적 **증감률** 은 아직 못 답한다. 비교 기간도 같은 폭으로 잡아야 하기 때문이다."""
+    row = {"claim_text": "작년 1~11월 반도체 수출은 전년보다 8.2% 늘었다.",
+           "measurement_prd_se": "Y", "measurement_indicator": "반도체 수출 증감률",
+           "measurement_period": "2024", "semantic_type": "rate_change"}
     code, reason = claim_shape_exclusion(row)
     assert code == "CUMULATIVE_PERIOD_UNSUPPORTED"
     assert reason
+
+
+def test_a_cumulative_level_claim_is_no_longer_excluded():
+    """수준값 누적은 월 합산으로 답한다 — 좌표 모델 확장 1단계."""
+    row = {"claim_text": "작년 1~11월 반도체 수출은 1274억달러였다.",
+           "measurement_prd_se": "Y", "measurement_indicator": "반도체 수출 총액",
+           "measurement_period": "2024", "semantic_type": "amount"}
+    assert claim_shape_exclusion(row) == ("", "")
 
 
 def test_clean_claim_passes():
@@ -147,3 +156,90 @@ def test_previously_matched_claims_still_pass(indicator, text):
     row = {"claim_text": text, "measurement_prd_se": "Y",
            "measurement_indicator": indicator, "measurement_period": "2024"}
     assert claim_shape_exclusion(row) == ("", "")
+
+
+# --------------------------------------------------------------------------
+# 누적 구간을 실제로 답하기 (좌표 모델 확장 1단계)
+# --------------------------------------------------------------------------
+from kosis_claim_shape import cumulative_is_answerable, cumulative_span
+from kosis_verify_claim_values import (aggregate_period, claim_period_span,
+                                       period_range)
+
+
+def test_span_is_parsed():
+    assert cumulative_span("작년 1~11월 반도체 수출은 1274억달러였다.", "2024") == ("202401", "202411")
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("2024년 1~9월 기준 수출순위", ("202401", "202409")),
+    ("1월부터 11월까지 수출은", ("202401", "202411")),
+    ("11월 누적 기준 수출은", ("202401", "202411")),
+])
+def test_other_span_forms(text, expected):
+    assert cumulative_span(text, "2024") == expected
+
+
+def test_a_full_year_is_not_a_span():
+    """열두 달이면 그냥 연간이다. 굳이 월로 쪼갤 이유가 없다."""
+    assert cumulative_span("1~12월 수출은", "2024") is None
+
+
+def test_a_reversed_range_is_rejected():
+    assert cumulative_span("11~1월 수출은", "2024") is None
+
+
+def test_rate_claims_stay_closed():
+    """누적 증감률은 비교 기간도 같은 폭으로 잡아야 한다. 한 번에 하나씩 연다."""
+    row = {"claim_text": "1~11월 수출은 전년보다 8.2% 늘었다.", "measurement_period": "2024",
+           "semantic_type": "rate_change"}
+    assert cumulative_is_answerable(row) is None
+
+
+def test_change_base_claims_stay_closed():
+    row = {"claim_text": "1~11월 수출은 1274억달러였다.", "measurement_period": "2024",
+           "change_base": "전년"}
+    assert cumulative_is_answerable(row) is None
+
+
+def test_level_claims_are_opened():
+    row = {"claim_text": "작년 1~11월 반도체 수출은 1274억달러였다.",
+           "measurement_period": "2024", "semantic_type": "amount"}
+    assert cumulative_is_answerable(row) == ("202401", "202411")
+
+
+def test_span_drives_the_query_range():
+    params, note = period_range("202411", "M", "", ("202401", "202411"))
+    assert params == {"startPrdDe": "202401", "endPrdDe": "202411"}
+    assert "누적" in note
+
+
+def test_span_sums_only_those_months():
+    rows = [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 13)]
+    value, used = aggregate_period(rows, "M", "2024", "latest", ("202401", "202411"))
+    assert value == 110          # 12월을 빼야 한다. 이걸 안 빼서 거짓 불일치가 났다
+    assert "11개월" in used
+
+
+def test_span_ignores_other_years():
+    rows = ([{"PRD_DE": f"2023{m:02d}", "DT": "99"} for m in range(1, 13)]
+            + [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 12)])
+    value, _ = aggregate_period(rows, "M", "2024", "sum", ("202401", "202411"))
+    assert value == 110
+
+
+def test_no_span_keeps_the_old_behaviour():
+    rows = [{"PRD_DE": f"2024{m:02d}", "DT": "10"} for m in range(1, 13)]
+    assert aggregate_period(rows, "M", "2024", "sum")[0] == 120
+
+
+def test_claim_period_span_reads_the_columns():
+    assert claim_period_span({"period_span_start": "202401",
+                              "period_span_end": "202411"}) == ("202401", "202411")
+
+
+@pytest.mark.parametrize("row", [
+    {}, {"period_span_start": "202401"}, {"period_span_start": "2024", "period_span_end": "2024"},
+    {"period_span_start": "202411", "period_span_end": "202401"},
+])
+def test_bad_spans_fall_back_to_none(row):
+    assert claim_period_span(row) is None

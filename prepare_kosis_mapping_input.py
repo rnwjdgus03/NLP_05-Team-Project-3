@@ -14,7 +14,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from kosis_claim_shape import claim_shape_exclusion
+from kosis_claim_shape import claim_shape_exclusion, cumulative_is_answerable
 from kosis_scope_gate import (ARTICLE_SCOPE_CODES, gate_decision, has_own_source,
                               propagate_by_article, starts_with_anaphor)
 
@@ -365,6 +365,17 @@ def normalize_row(row: dict) -> dict:
         out["measurement_item"] = ""
     out["prd_se"] = nz(row.get("measurement_prd_se"))
     out["period"], out["period_alignment_status"] = align_change_period(row)
+    # 누적 기간('1~11월')은 월 자료를 합산하면 답할 수 있다.
+    # 연간 좌표로 물어보면 빠진 개월 수만큼 어긋난다 —
+    # 실측: 반도체 수출 1~11월 1274억을 12개월치 1420억과 대조해 '불일치'가 났다.
+    out["period_span_start"] = ""
+    out["period_span_end"] = ""
+    span = cumulative_is_answerable({**row, "measurement_period": out["period"]})
+    if span:
+        out["period_span_start"], out["period_span_end"] = span
+        out["prd_se"] = "M"
+        out["period"] = span[1]
+        out["period_aggregation"] = "sum"
     out["raw_unit"] = raw_unit
     out["canonical_unit"] = canonical_unit
     out["unit"] = canonical_unit
@@ -407,6 +418,10 @@ DERIVED_FIELDS = [
     "dropped_item",
     "claim_period",
     "claim_prd_se",
+    # 누적 기간을 월 합산으로 답할 때 쓰는 구간 (비면 단일 기간)
+    "period_span_start",
+    "period_span_end",
+    "period_aggregation",
     "raw_measurement_period",
     "period_alignment_status",
     "raw_unit",
