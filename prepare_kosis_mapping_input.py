@@ -14,7 +14,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from kosis_scope_gate import gate_decision
+from kosis_scope_gate import gate_decision, propagate_by_article
 
 
 EMPTY = {"", "-", "nan", "none", "null"}
@@ -423,6 +423,34 @@ def write_csv(path: Path, rows: list[dict], fields: list[str]):
         writer.writerows(rows)
 
 
+def apply_article_scope(rows) -> int:
+    """출처 귀속 판정을 기사 단위로 전파한다. **여기서 해야 한다.**
+
+    2026-08-04: 깨끗한 재실행에서 드러난 버그.
+    전파는 lock_evaluation_set 에만 있었는데, prepare 가 먼저 게이트를 돌려
+    **출처를 밝힌 문장을 이미 제거**하기 때문에 lock 은 전파할 출처를 찾지 못한다.
+    그래서 '정부의 연간 누적 대출'(한은 제출자료) 같은 후속 문장이 살아남아
+    확정까지 가고 '불일치'로 판정됐다 — 범위 밖 주장에 거짓 딱지를 붙인 것이다.
+
+    lock 에도 전파가 남아 있지만 그때는 이미 걸러진 뒤라 무해하다(중복 안전).
+    """
+    decisions = propagate_by_article(rows)
+    changed = 0
+    for row, decision in zip(rows, decisions):
+        if decision["scope_gate_blocked"] != "Y" or row.get("scope_gate_blocked") == "Y":
+            continue
+        row.update(decision)
+        row["mapping_gate"] = "REJECT"
+        row["mapping_gate_reason"] = decision["scope_gate_code"]
+        row["mapping_exclusion_code"] = decision["scope_gate_code"]
+        row["mapping_exclusion_reason"] = decision["scope_gate_reason"]
+        row["mapping_eligible"] = "N"
+        row["in_ready"] = "N"
+        row["enrichment_actions"] = ""
+        changed += 1
+    return changed
+
+
 def prepare(
     input_path: Path,
     output_path: Path,
@@ -434,6 +462,8 @@ def prepare(
         reader = csv.DictReader(handle)
         source_fields = list(reader.fieldnames or [])
         normalized = [normalize_row(row) for row in reader]
+
+    apply_article_scope(normalized)
 
     fields = list(dict.fromkeys(source_fields + DERIVED_FIELDS))
     accepted = [row for row in normalized if row["mapping_eligible"] == "Y"]
