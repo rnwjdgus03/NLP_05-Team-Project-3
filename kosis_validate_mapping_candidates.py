@@ -758,6 +758,24 @@ def semantic_ready_gate(
     if not claim_item_matches_selection(row, result):
         reasons.append("CLAIM_ITEM_MISMATCH")
 
+    # 표가 지표와 **아무 관계 없는** 것은 아닌가.
+    #
+    # 2026-08-05: 지금까지 이 검사가 아예 없었다. 값이 그럴듯하면 통과했다.
+    # 실측 — '자사주 직접취득 11.8조' 에 '데이터 판매 서비스업 시장 규모' 14.6조가
+    # 붙어 확정됐다. 차이율 24% 는 extreme_error(300%) 아래라 원리적으로 못 잡는다.
+    # 홀드아웃4 에서도 '수입 커피 94.3% 폭등' 에 '가공식품 구입경험' 표가 붙었다.
+    #
+    # 좌표 문제가 시스템 한계의 80%(95/119) 다. 값이 아니라 의미로 막아야 한다.
+    indicator_reason = indicator_table_mismatch(
+        _first(row, "indicator", "measurement_indicator"),
+        _first(result, "tbl_name") or row.get("tbl_name", ""),
+        _first(result, "selected_itm_name") or row.get("selected_itm_name", ""),
+        " ".join(_semantic_compact(result.get(f"selected_obj_l{level}_name", ""))
+                 for level in range(1, 9)),
+    )
+    if indicator_reason:
+        reasons.append("INDICATOR_TABLE_MISMATCH")
+
     # claim 의 대상이 그 문장에 실제로 나오는가.
     #
     # 2026-08-02 실측: '작년 한 해 전체 수출액이 6838억달러' 라는 문장의
@@ -845,6 +863,7 @@ from kosis_meta_coordinates import (  # noqa: E402
 # 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
 from prepare_kosis_mapping_input import claim_item_grounded  # noqa: E402
+from kosis_indicator_table_match import indicator_table_mismatch  # noqa: E402
 
 
 def _normalize(value: Any) -> str:
