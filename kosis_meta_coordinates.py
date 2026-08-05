@@ -20,6 +20,8 @@ import hashlib
 import itertools
 import re
 from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension
@@ -46,6 +48,43 @@ AGGREGATE_OBJ_NAMES = ("계", "전체", "총계", "합계", "총액", "전국",
 
 # 주장이 세부 대상을 특정하지 않았음을 뜻하는 값들.
 AGGREGATE_ITEM_TOKENS = frozenset({"", "-", "전체", "총계", "합계", "총액"})
+
+# 문장만 보고도 안전하게 식별할 수 있는 외국 국가명. 국내 통계를 말할 때의
+# '한국/대한민국/우리나라'는 총계를 뜻하는 경우가 많아 일부러 넣지 않는다.
+# 후보 표의 OBJ 값은 아래 목록과 무관하게 claim_target_terms(axis_values=...)가
+# 직접 읽으므로, 이 목록은 축 후보가 누락된 경우에도 확정을 보류하기 위한 안전망이다.
+FOREIGN_COUNTRY_ALIASES = {
+    "대미": "미국", "미국": "미국",
+    "대중국": "중국", "대중": "중국", "중국": "중국",
+    "대일": "일본", "일본": "일본",
+    "홍콩": "홍콩", "대만": "대만", "타이완": "대만",
+    "베트남": "베트남", "싱가포르": "싱가포르", "인도네시아": "인도네시아",
+    "말레이시아": "말레이시아", "필리핀": "필리핀", "태국": "태국",
+    "러시아": "러시아", "우크라이나": "우크라이나", "독일": "독일",
+    "프랑스": "프랑스", "영국": "영국", "이탈리아": "이탈리아",
+    "스페인": "스페인", "네덜란드": "네덜란드", "벨기에": "벨기에",
+    "스위스": "스위스", "캐나다": "캐나다", "멕시코": "멕시코",
+    "브라질": "브라질", "호주": "호주", "뉴질랜드": "뉴질랜드",
+    "사우디아라비아": "사우디아라비아", "아랍에미리트": "아랍에미리트",
+    "이란": "이란", "이라크": "이라크", "튀르키예": "튀르키예", "터키": "튀르키예",
+    "폴란드": "폴란드",
+}
+
+TARGET_FIELDS = (
+    "industry_or_item", "measurement_item", "region",
+    "origin_country", "destination_country",
+)
+
+# 축 값이 문장에 우연히 겹쳐도 대상이라고 볼 수 없는 일반 통계어.
+GENERIC_AXIS_TARGET_NAMES = frozenset({
+    "증감", "증감률", "증가", "감소", "증가율", "감소율", "비율", "비중",
+    "지수", "금액", "수치", "값", "전년", "전월", "월", "연간", "분기",
+})
+
+_DEFAULT_REGION_TERMS = frozenset({
+    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+    "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+})
 
 
 def _text(value: Any) -> str:
@@ -78,10 +117,127 @@ def metadata_is_aggregate(metadata: Mapping[str, Any] | None, max_level: int = 3
     return all(is_aggregate_name(name) for name in names) if names else True
 
 
+@lru_cache(maxsize=4)
+def seed_region_terms(path: str = "") -> frozenset[str]:
+    """씨앗 CSV의 지역 어휘를 읽는다. 코드 체계는 달라도 이름 어휘는 공유한다."""
+    source = Path(path) if path else Path(__file__).resolve().parent / "data" / "seed_region_codes.csv"
+    terms: set[str] = set()
+    try:
+        with source.open(encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                term = _text(row.get("region"))
+                if term and term != "전국":
+                    terms.add(term)
+    except OSError:
+        # 배포본에서 데이터 파일이 빠져도 기존 파이프라인을 멈추지는 않는다.
+        # 정식 레포에는 CSV와 개수 테스트가 있어 이 경로가 조용히 굳지 않는다.
+        terms.update(_DEFAULT_REGION_TERMS)
+    return frozenset(terms or _DEFAULT_REGION_TERMS)
+
+
+def _claim_text(claim: Mapping[str, Any] | None) -> str:
+    row = claim or {}
+    return " ".join(_text(row.get(name)) for name in (
+        "claim_text", "measurement_indicator", "indicator",
+    ) if _text(row.get(name)))
+
+
+def _canonical_target(value: Any) -> str:
+    raw = _text(value)
+    normalized = normalize_obj_name(raw)
+    if not normalized:
+        return ""
+    for alias, canonical in FOREIGN_COUNTRY_ALIASES.items():
+        if normalize_obj_name(alias) == normalized:
+            return normalize_obj_name(canonical)
+    return normalized
+
+
+def _region_is_mentioned(text: str, region: str) -> bool:
+    normalized_text = normalize_obj_name(text)
+    normalized_region = normalize_obj_name(region)
+    if not normalized_region:
+        return False
+    # '경기'는 경기(景氣)와 동형이다. '경기도'가 아니면 후보 축 값과의 직접
+    # 대조에 맡겨 경제 문장을 지역 주장으로 오인하지 않는다.
+    if region == "경기":
+        return "경기도" in normalized_text
+    return normalized_region in normalized_text
+
+
+def _country_alias_is_mentioned(normalized_text: str, alias: str) -> bool:
+    normalized_alias = normalize_obj_name(alias)
+    if normalized_alias not in normalized_text:
+        return False
+    # '대중교통'의 대중과 서술형 어미 '이란'은 국가가 아니다. 이 둘과 대미/대일
+    # 축약형은 무역·국가 문맥이 바로 이어질 때만 문장 단독 안전망으로 쓴다.
+    if alias in {"대미", "대중", "대일", "이란"}:
+        context = "수출|수입|무역|교역|투자|의존|비중|적자|흑자|산"
+        return bool(re.search(f"{re.escape(normalized_alias)}(?:{context})", normalized_text))
+    return True
+
+
+def claim_target_terms(
+    claim: Mapping[str, Any] | None,
+    axis_values: Iterable[Any] = (),
+) -> tuple[str, ...]:
+    """주장이 특정한 국가·지역·품목을 보수적으로 찾는다.
+
+    구조화 추출 필드가 비어도 문장에 후보 표의 OBJ 값이 그대로 나오면 대상이다.
+    반환값은 정규화한 canonical term이며 검색 순위와 확정 게이트가 함께 쓴다.
+    """
+    row = claim or {}
+    text = _claim_text(row)
+    normalized_text = normalize_obj_name(text)
+    terms: set[str] = set()
+
+    for field in TARGET_FIELDS:
+        raw = _text(row.get(field))
+        if not raw or raw in AGGREGATE_ITEM_TOKENS:
+            continue
+        canonical = _canonical_target(raw)
+        if canonical:
+            terms.add(canonical)
+
+    for alias, canonical in FOREIGN_COUNTRY_ALIASES.items():
+        if _country_alias_is_mentioned(normalized_text, alias):
+            terms.add(normalize_obj_name(canonical))
+
+    for region in seed_region_terms():
+        if _region_is_mentioned(text, region):
+            terms.add(normalize_obj_name(region))
+
+    generic = {normalize_obj_name(value) for value in GENERIC_AXIS_TARGET_NAMES}
+    for value in axis_values:
+        raw = _text(value)
+        normalized = normalize_obj_name(raw)
+        if (len(normalized) < 2 or normalized.isdigit() or is_aggregate_name(raw)
+                or normalized in generic):
+            continue
+        if normalized in normalized_text:
+            terms.add(_canonical_target(raw))
+
+    return tuple(sorted(term for term in terms if term))
+
+
+def target_terms_match_text(target_terms: Iterable[Any], selected_values: Iterable[Any]) -> bool:
+    """찾은 모든 대상이 선택 좌표의 표·항목·OBJ 이름에 표현됐는가."""
+    selected = normalize_obj_name(" ".join(_text(value) for value in selected_values))
+    if not selected:
+        return False
+    for term in target_terms:
+        canonical = _canonical_target(term)
+        aliases = {normalize_obj_name(alias) for alias, target in FOREIGN_COUNTRY_ALIASES.items()
+                   if normalize_obj_name(target) == canonical}
+        aliases.add(canonical)
+        if not any(alias and alias in selected for alias in aliases):
+            return False
+    return True
+
+
 def claim_specifies_target(claim: Mapping[str, Any] | None) -> bool:
-    """주장이 세부 대상(품목·업종 등)을 특정했는가."""
-    item = _first(claim or {}, "industry_or_item", "measurement_item")
-    return bool(normalize_obj_name(item)) and item not in AGGREGATE_ITEM_TOKENS
+    """주장이 세부 대상(국가·지역·품목·업종)을 특정했는가."""
+    return bool(claim_target_terms(claim))
 
 
 def _first(row: Mapping[str, Any], *names: str, default: str = "") -> str:

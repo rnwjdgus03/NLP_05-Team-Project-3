@@ -856,9 +856,11 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
 from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_ITEM_TOKENS,
     AGGREGATE_OBJ_NAMES,
+    claim_target_terms,
     normalize_periodicity,
     periodicity_satisfied,
     table_periodicities,
+    target_terms_match_text,
 )
 # 대상 근거 검사는 상류(prepare)와 **같은 구현**을 쓴다.
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
@@ -898,17 +900,31 @@ def claim_item_matches_selection(row: Mapping[str, Any],
     그중 2건은 잘못된 좌표로 '불일치' 판정까지 갔다(실측).
     → 주장이 세부 대상을 말하지 않으면 좌표도 집계값이어야 한다.
     """
+    sources = dict(row)
+    if result:
+        sources.update({k: v for k, v in result.items() if v not in (None, "")})
+    selected_combination = sources.get("selected_combination")
+    selected_combination = (selected_combination
+                            if isinstance(selected_combination, Mapping) else {})
+    selected_values = [sources.get(key, "") for key in (
+        "selected_itm_name", "selected_obj_l1_name", "selected_obj_l2_name",
+        "selected_obj_l3_name", "kosis_obj_l1_name", "tbl_name",
+    )]
+    selected_values.extend(selected_combination.get(f"objL{level}_name", "")
+                           for level in range(1, 9))
+
+    recorded_terms = [term for term in str(row.get("claim_target_terms", "")).split("|")
+                      if term]
+    target_terms = tuple(recorded_terms) or claim_target_terms(row)
+    if target_terms:
+        return target_terms_match_text(target_terms, selected_values)
+
     raw_item = str(_first(row, "industry_or_item", "measurement_item")).strip()
     normalized_item = _normalize(raw_item)
     if not normalized_item or raw_item in AGGREGATE_ITEM_TOKENS:
         return selection_is_aggregate(result, row)
-    sources = dict(row)
-    if result:
-        sources.update({k: v for k, v in result.items() if v not in (None, "")})
-    selected = " ".join(str(sources.get(key, "")) for key in (
-        "selected_itm_name", "selected_obj_l1_name", "selected_obj_l2_name",
-        "selected_obj_l3_name", "kosis_obj_l1_name", "tbl_name",
-    ))
+
+    selected = " ".join(str(value) for value in selected_values)
     normalized_selected = re.sub(r"[^0-9A-Za-z가-힣]", "", selected).lower()
     if not normalized_selected:
         return True

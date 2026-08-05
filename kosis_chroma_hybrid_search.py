@@ -32,14 +32,15 @@ from kosis_meta_coordinates import (
     build_chroma_where,
     build_coordinate_query,
     build_coordinates,
+    claim_target_terms,
     claim_prd_se,
-    claim_specifies_target,
     coordinate_document,
     coordinate_metadata,
     metadata_is_aggregate,
     passes_hard_filter,
     prd_se_compatible,
     read_csv_rows,
+    target_terms_match_text,
 )
 from kosis_match_claims_to_index import item_mapping_type
 from kosis_semantic_search import (
@@ -215,6 +216,8 @@ def build_output_row(claim: Mapping[str, Any], table: Mapping[str, Any],
         # 주기가 안 맞아 강등된 후보인지 (배제하지 않고 기록만 한다)
         "prd_se_match": candidate.get("prd_se_match", ""),
         "coordinate_prd_se": meta.get("prd_se", ""),
+        "claim_target_terms": candidate.get("claim_target_terms", ""),
+        "obj_target_match": candidate.get("obj_target_match", ""),
     })
     for level in range(1, MAX_AXIS + 1):
         row[f"selected_obj_l{level}"] = meta.get(f"obj_l{level}", "")
@@ -358,7 +361,35 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
     lexical = lexical_search(query, pool, lexical_top_k)
     search_seconds = time.perf_counter() - started
 
-    fused = fuse_candidates(dense, lexical)[:rerank_top_k]
+    axis_values = [
+        entry["metadata"].get(f"obj_l{level}_name", "")
+        for entry in pool for level in range(1, MAX_AXIS + 1)
+    ]
+    target_terms = claim_target_terms(claim, axis_values)
+
+    def target_match(candidate: Mapping[str, Any]) -> bool:
+        metadata = candidate.get("metadata") or {}
+        selected_values = [metadata.get(f"obj_l{level}_name", "")
+                           for level in range(1, MAX_AXIS + 1)]
+        return target_terms_match_text(target_terms, selected_values) if target_terms else False
+
+    fused = fuse_candidates(dense, lexical)
+    if target_terms:
+        # exact OBJ 언급은 dense/lexical Top-K 밖이어도 reranker가 볼 수 있어야 한다.
+        # 그렇지 않으면 '축에 값이 있는데 후보 절단 때문에 못 찾음'과
+        # '축에 값이 없음'을 구분할 수 없다.
+        seen = {candidate["coordinate_id"] for candidate in fused}
+        for entry in pool:
+            if entry["coordinate_id"] in seen or not target_match(entry):
+                continue
+            fused.append({**entry, "dense_rank": None, "lexical_rank": None,
+                          "fusion_score": 0.0})
+            seen.add(entry["coordinate_id"])
+        fused.sort(key=lambda candidate: (
+            0 if target_match(candidate) else 1,
+            -float(candidate.get("fusion_score") or 0.0),
+        ))
+    fused = fused[:rerank_top_k]
     rerank_seconds = 0.0
     if reranker is not None and fused:
         started = time.perf_counter()
@@ -389,11 +420,15 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
     #
     # prd_se 와 마찬가지로 점수를 곱해 깎지 않는다(리랭커 로짓은 음수가 될 수 있다).
     # 정렬 키로만 쓰고, 주기 일치를 앞에 둔다 — 기간 불일치가 더 강한 제약이다.
-    prefer_aggregate = not claim_specifies_target(claim)
+    prefer_aggregate = not target_terms
     for candidate in fused:
-        candidate["obj_aggregate"] = metadata_is_aggregate(candidate.get("metadata"))
+        metadata = candidate.get("metadata") or {}
+        candidate["obj_aggregate"] = metadata_is_aggregate(metadata)
+        candidate["obj_target_match"] = target_match(candidate)
+        candidate["claim_target_terms"] = "|".join(target_terms)
     fused.sort(key=lambda c: (
         0 if c["prd_se_match"] else 1,
+        0 if (not target_terms or c["obj_target_match"]) else 1,
         0 if (not prefer_aggregate or c["obj_aggregate"]) else 1,
         -c["final_rank_score"],
     ))
@@ -405,6 +440,8 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         "fused_count": len(fused),
         "prd_se_demoted": sum(1 for c in fused if not c["prd_se_match"]),
         "prefer_aggregate": prefer_aggregate,
+        "claim_target_terms": "|".join(target_terms),
+        "target_matched_candidates": sum(1 for c in fused if c["obj_target_match"]),
         "aggregate_promoted": (sum(1 for c in fused if not c["obj_aggregate"])
                                if prefer_aggregate else 0),
         "search_seconds": search_seconds,
