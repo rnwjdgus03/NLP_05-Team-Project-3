@@ -85,6 +85,50 @@ def _t(value) -> str:
     return "" if value is None else str(value).strip()
 
 
+# --------------------------------------------------------------------------
+# 4. 순별(旬) — '1~10일', '1~20일', '월 초순' (2026-08-05, 홀드아웃4)
+# --------------------------------------------------------------------------
+# 관세청은 수출입을 **열흘 단위로 속보**한다. KOSIS 에는 그게 없다 —
+# 수록 주기는 Y/Q/M 이 끝이다. 그런데 우리는 이걸 월간 표에 붙여서 대조했다.
+#
+# 홀드아웃4 실측, 확정 14건 중 5건이 이 유형이었고 **다섯 다 기사가 맞았다**:
+#
+#   '4월 1일부터 20일까지 수출이 5.2% 줄었다'      → 월간값과 대조, 차이율 165%
+#   '이달 1~20일 수출액은 5.2% 줄었다'             → 같음, 165%
+#   '4월 1~10일 수출은 13.7% 증가'                 → 75.5%
+#   '월 초순(1~10일) 수출이 29% 급락'              → 114%
+#   '월초 일평균 수출액 기준 2023년 9월(-14.5%)'   → 48.2%
+#
+# 차이율이 48~165% 다. `extreme_error` 가드(1,120%)로는 절대 안 잡힌다.
+# **비교 자체가 성립하지 않으므로 값을 보기 전에 뺀다.**
+# `THRESHOLD_CLAIM_UNSUPPORTED` 를 만든 것과 같은 이유다 — 답이 틀린 게 아니라
+# 물음이 틀렸다.
+#
+# 누적(`1~11월`)과 헷갈리면 안 된다. 그건 월 자료를 합산해 답할 수 있어서 **열었다.**
+# 순별은 원자료가 아예 없어서 **닫는다.** 접미사(월/일)가 둘을 가른다.
+_SUB_MONTHLY = re.compile(
+    r"(?<!\d)\d{1,2}\s*[~∼〜–—-]\s*\d{1,2}\s*일"       # 1~10일 · 1~20일
+    r"|\d{1,2}\s*일\s*(?:부터|~)\s*\d{1,2}\s*일"        # 1일부터 20일까지
+    r"|[초중하]순"                                      # 초순 · 중순 · 하순
+    r"|월\s*초\s*일\s*평균"                             # 월초 일평균
+    r"|일\s*평균\s*(?:수출|수입)"                       # 일평균 수출액
+)
+
+
+def sub_monthly_claim(claim_text) -> bool:
+    """월보다 짧은 기간(순별)을 묻고 있는가.
+
+    **KOSIS 주기는 Y/Q/M 이 끝이다.** 순별은 관세청 속보에만 있다.
+
+    한 문장에 여러 측정이 있으면 월간 주장까지 같이 막을 위험이 있다 —
+    `share_claim` 이 정확히 그렇게 과잉 발동했었다(수출액 1274억달러까지 구성비로
+    판정). 다만 여기서는 한 문장 안에 순별과 월간이 같이 오는 경우가 드물고,
+    막아서 잃는 것(판정 못 함)보다 안 막아서 잃는 것(참인 기사에 거짓 딱지)이
+    훨씬 크다. **정밀도가 커버리지보다 먼저다.**
+    """
+    return bool(_SUB_MONTHLY.search(_t(claim_text)))
+
+
 def cumulative_period(claim_text, prd_se) -> bool:
     """부분 누적 기간을 연간 좌표로 물어보려 하는가."""
     if _t(prd_se).upper() != "Y":
@@ -166,6 +210,8 @@ CODES = {
         "구성비 주장은 분자·분모 축이 둘 다 필요해 현재 좌표 모델로 표현할 수 없다",
     "PERIOD_GRANULARITY_MISMATCH":
         "문장은 분기·반기인데 연간으로 추출됐다",
+    "SUB_MONTHLY_PERIOD_UNSUPPORTED":
+        "순별(1~10일 등)은 관세청 속보에만 있고 KOSIS 수록 주기는 Y/Q/M 뿐이다",
 }
 
 
@@ -198,6 +244,10 @@ def claim_shape_exclusion(row, dimension="", semantic="") -> tuple[str, str]:
     prd_se = row.get("measurement_prd_se") or row.get("prd_se")
     indicator = row.get("measurement_indicator") or row.get("indicator")
 
+    # 순별을 누적보다 **먼저** 본다. '4월 1~10일' 은 누적 패턴에 안 걸리지만
+    # 순서를 두면 나중에 누적 규칙을 넓혔을 때 순별이 그리로 새는 것을 막는다.
+    if sub_monthly_claim(text):
+        return "SUB_MONTHLY_PERIOD_UNSUPPORTED", CODES["SUB_MONTHLY_PERIOD_UNSUPPORTED"]
     if cumulative_period(text, prd_se) and not cumulative_is_answerable(row):
         return "CUMULATIVE_PERIOD_UNSUPPORTED", CODES["CUMULATIVE_PERIOD_UNSUPPORTED"]
     if share_claim(indicator, text, dimension):
