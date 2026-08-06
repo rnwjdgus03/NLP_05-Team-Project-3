@@ -1,0 +1,11 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.10,<3
+requests>=2.32,<3
+beautifulsoup4>=4.12,<5
+python-dotenv>=1,<2
+kss>=6,<7
+
+# 개발·테스트
+httpx>=0.27,<1
+pytest>=8,<10

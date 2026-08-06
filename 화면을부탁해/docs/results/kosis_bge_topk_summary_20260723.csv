@@ -1,0 +1,5 @@
+top_k,candidate_rows,retrieval_hits,retrieval_gold,retrieval_recall,technical_valid_rows,ready_rows,technical_item_obj_hits,technical_item_obj_gold,needs_confirmation_rows,api_error_rows,not_evaluated_rows
+1,39,12,24,0.5,11,0,0,20,13,0,0
+2,78,14,24,0.5833333333333334,19,0,0,20,21,0,0
+3,117,14,24,0.5833333333333334,19,0,0,20,22,0,0
+5,195,14,24,0.5833333333333334,21,0,0,20,26,0,0

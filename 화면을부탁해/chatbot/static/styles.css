@@ -1,0 +1,1560 @@
+/* =========================================================================
+   0. 전역 변수 & 리셋
+   ========================================================================= */
+:root {
+  color-scheme: light;
+
+  /* 색상 토큰 */
+  --ink: #17211d;
+  --muted: #68736d;
+  --line: #dce5df;
+  --paper: #f8faf7;
+  --surface: #ffffff;
+  --sidebar: #f1f4ef;
+  --brand: #166f4a;
+  --brand-dark: #0d5236;
+  --brand-soft: #e6f4ec;
+  --danger: #b7443e;
+  --danger-soft: #fae9e7;
+  --warning: #8a641c;
+  --warning-soft: #fff4da;
+  --shadow: 0 24px 70px rgba(30, 59, 44, 0.12);
+
+  /* 레이아웃 크기 토큰 ------------------------------------------------------
+     사이드바 너비. 이 값 하나로 .sidebar 너비, .main-content의 좌측 여백,
+     .composer/.service-note의 좌측 위치가 전부 함께 움직임(아래 각 규칙 참고). */
+  --sidebar-width: 300px;
+
+  font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", Inter, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--paper);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+select,
+summary {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgba(22, 111, 74, 0.2);
+  outline-offset: 2px;
+}
+
+
+/* =========================================================================
+   1. 전체 레이아웃 뼈대 (사이드바 + 메인 콘텐츠)
+   ========================================================================= */
+.app-layout {
+  min-height: 100vh;
+}
+
+.sidebar {
+  /* 사이드바는 화면 왼쪽에 고정. width는 --sidebar-width 변수를 그대로 사용 */
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  padding: 34px 20px 26px;
+  border-right: 1px solid #dce2dc;
+  background: rgba(241, 244, 239, 0.96);
+  backdrop-filter: blur(18px);
+}
+
+.main-content {
+  position: relative;
+  min-height: 100vh;
+  /* 사이드바 너비만큼 왼쪽 여백을 밀어줌 → 사이드바와 겹치지 않게 함 */
+  margin-left: var(--sidebar-width);
+  padding-bottom: 320px; /* 하단 고정된 .composer(입력창)에 콘텐츠가 가려지지 않도록 확보한 여백 */
+  background:
+    radial-gradient(circle at 50% 38%, rgba(230, 244, 236, .44), transparent 33%),
+    linear-gradient(rgba(255, 255, 255, .65), rgba(248, 250, 247, .65)),
+    radial-gradient(circle, rgba(22, 111, 74, .08) 1px, transparent 1.2px);
+  background-size: auto, auto, 22px 22px;
+}
+
+
+/* =========================================================================
+   2. 사이드바 내부 구성 (브랜드 / 새 검증 버튼 / 최근 목록 / 푸터)
+   ========================================================================= */
+.brand,
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brand {
+  padding: 0 10px;
+}
+
+.brand-mark {
+  /* 로고 배지 크기 */
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--brand);
+  box-shadow: 0 9px 22px rgba(22, 111, 74, 0.22);
+}
+
+.brand-mark svg,
+.hero-symbol svg {
+  width: 27px;
+  fill: none;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-copy strong,
+.brand-copy small {
+  display: block;
+}
+
+.brand-copy strong {
+  font-size: 20px;
+  letter-spacing: -0.045em;
+}
+
+.brand-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.new-analysis-button {
+  /* "새 통계 검증" 버튼 크기 — 사이드바 폭에 맞춰 100% 채움, 높이만 고정 */
+  width: 100%;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 34px 0 20px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 17px;
+  background: var(--ink);
+  color: white;
+  font-size: 14px;
+  font-weight: 750;
+  box-shadow: 0 14px 30px rgba(23, 33, 29, 0.13);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.new-analysis-button:hover {
+  background: #26332d;
+  transform: translateY(-1px);
+}
+
+.new-analysis-button span {
+  font-size: 25px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 5px;
+}
+
+.nav-item {
+  width: 100%;
+  height: 48px; /* 네비게이션 항목 높이 */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, .66);
+  color: var(--ink);
+}
+
+.nav-item.active {
+  border-color: var(--line);
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 5px 16px rgba(26, 51, 37, .05);
+}
+
+.nav-item span {
+  width: 20px;
+  color: var(--brand);
+  text-align: center;
+}
+
+.recent-section {
+  min-height: 0;
+  margin-top: 32px;
+}
+
+.recent-section h2 {
+  margin: 0 0 13px;
+  padding: 0 10px;
+  color: #929b96;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.recent-list {
+  display: grid;
+  gap: 5px;
+  max-height: 34vh; /* 최근 목록이 길어져도 사이드바를 넘치지 않도록 높이 제한 + 스크롤 */
+  overflow-y: auto;
+}
+
+.recent-empty {
+  margin: 0;
+  padding: 9px 10px;
+  color: #919b95;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.recent-item {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.recent-item:hover {
+  background: white;
+}
+
+.recent-item strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-item small {
+  color: var(--brand);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 20px 10px 0;
+  border-top: 1px solid #dce2dc;
+}
+
+.sidebar-footer p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sidebar-footer small {
+  color: #97a09b;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: #31a36c;
+  box-shadow: 0 0 0 4px rgba(49, 163, 108, .12);
+}
+
+
+/* =========================================================================
+   3. 모바일 헤더 (760px 이하에서만 노출 — 하단 미디어쿼리에서 display 변경)
+   ========================================================================= */
+.mobile-header {
+  display: none;
+}
+
+
+/* =========================================================================
+   4. 홈 히어로 섹션 (기사 입력 전 첫 화면)
+   ========================================================================= */
+.home-hero {
+  /* 화면 전체 높이에서 하단 입력창 영역(약 330px)을 뺀 만큼을 히어로 영역으로 사용 */
+  min-height: calc(100vh - 630px);
+  display: grid;
+  place-items: center;
+  padding: 56px 40px 24px;
+}
+
+.hero-inner {
+  max-width: 870px; /* 히어로 텍스트 최대 폭 */
+  text-align: center;
+  animation: hero-in 520ms ease both;
+}
+
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.hero-symbol {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 24px;
+  border: 1px solid #cfe3d7;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 18px 42px rgba(22, 111, 74, .11);
+}
+
+.hero-symbol svg {
+  width: 36px;
+  stroke: var(--brand);
+  stroke-width: 1.8;
+}
+
+.hero-eyebrow {
+  margin: 0 0 21px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .18em;
+}
+
+.hero-inner h1 {
+  margin: 0;
+  /* 반응형 제목 크기: 최소 45px ~ 최대 76px, 뷰포트 폭의 5.2%로 가변 */
+  font-size: clamp(45px, 5.2vw, 60px);
+  line-height: 1.12;
+  letter-spacing: -.065em;
+}
+
+.hero-inner h1 em {
+  position: relative;
+  color: var(--brand);
+  font-style: normal;
+}
+
+.hero-inner h1 em::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -5px;
+  left: 0;
+  height: 7px;
+  border-radius: 50%;
+  border-top: 2px solid rgba(22, 111, 74, .45);
+  transform: rotate(1deg);
+}
+
+.hero-copy {
+  margin: 28px auto 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.feature-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.feature-row i {
+  color: var(--brand);
+  font-style: normal;
+  font-weight: 900;
+}
+
+
+/* =========================================================================
+   5. 대화 스테이지 (채팅 스트림 + 우측 가이드 패널) — 2단 레이아웃
+   ========================================================================= */
+.conversation-stage {
+  display: none; /* 검증이 시작되기 전엔 숨김. .conversation-active가 붙으면 grid로 표시 */
+  /* 좌측 채팅 영역(가변) + 우측 가이드 패널(270px 고정) 2단 구성.
+     이 270px 값이 곧 .guide-panel의 실질적인 너비를 결정함 */
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 26px;
+  width: min(1180px, calc(100% - 64px)); /* 최대 1180px, 화면이 좁으면 좌우 32px씩 여백 확보 */
+  margin: 0 auto;
+  padding: 46px 0 40px;
+}
+
+.conversation-active .home-hero {
+  display: none;
+}
+
+.conversation-active .conversation-stage {
+  display: grid;
+}
+
+.conversation-active .main-content {
+  padding-bottom: 300px;
+}
+
+.chat-stream {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message {
+  display: flex;
+  gap: 13px;
+  animation: message-in 320ms ease both;
+}
+
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.avatar {
+  /* 아바타(발화자 아이콘) 크기 */
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--brand);
+  color: white;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  box-shadow: 0 8px 20px rgba(22, 111, 74, .2);
+}
+
+.message-body {
+  min-width: 0;
+  max-width: 820px; /* 말풍선 최대 폭 */
+  padding: 23px 25px;
+  border: 1px solid rgba(210, 224, 216, .95);
+  border-radius: 7px 22px 22px 22px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 14px 40px rgba(30, 59, 44, .08);
+}
+
+.message h2,
+.message h3,
+.message p {
+  margin-top: 0;
+}
+
+.user-message {
+  justify-content: flex-end;
+}
+
+.user-message .message-body {
+  max-width: min(680px, 88%); /* 사용자 말풍선은 조금 더 좁게 */
+  border-color: var(--brand);
+  border-radius: 22px 7px 22px 22px;
+  background: var(--brand);
+  color: white;
+}
+
+.user-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-size: 13px;
+}
+
+.user-message details {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, .18);
+  padding-top: 9px;
+}
+
+.user-message summary {
+  color: rgba(255, 255, 255, .78);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.user-message details p {
+  max-height: 260px; /* 원문 펼침 영역 최대 높이 → 넘으면 스크롤 */
+  margin-top: 9px;
+  overflow: auto;
+  color: rgba(255, 255, 255, .84);
+  font-size: 11px;
+}
+
+.user-meta {
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, .68);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+
+/* =========================================================================
+   6. 가이드 패널 (우측 "검증 진행 상황" 4단계 목록)
+   ========================================================================= */
+.guide-panel {
+  position: sticky;
+  top: 28px;
+  align-self: start;
+  overflow: hidden;
+  border: 1px solid rgba(210, 224, 216, .9);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .76);
+  backdrop-filter: blur(14px);
+  /* 실제 너비는 부모(.conversation-stage)의 grid-template-columns 두 번째 값(270px)이 결정 */
+}
+
+.guide-head {
+  padding: 21px 21px 15px;
+}
+
+.guide-head p {
+  margin: 0 0 7px;
+  color: var(--brand);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .15em;
+}
+
+.guide-head h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -.03em;
+}
+
+.flow-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0 20px 8px;
+  list-style: none;
+}
+
+.flow-list li {
+  position: relative;
+  min-height: 62px;
+  /* 단계 번호(원형 30px) + 텍스트, 2열 구성 */
+  grid-template-columns: 30px 1fr;
+  display: grid;
+  gap: 10px;
+  opacity: .48;
+  transition: opacity 180ms ease;
+}
+
+.flow-list li:not(:last-child)::after {
+  /* 단계 사이를 잇는 세로선 */
+  content: "";
+  position: absolute;
+  top: 29px;
+  bottom: 3px;
+  left: 14px;
+  width: 1px;
+  background: var(--line);
+}
+
+.flow-list li > span {
+  /* 단계 번호 원형 배지 크기 */
+  z-index: 1;
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.flow-list strong,
+.flow-list small {
+  display: block;
+}
+
+.flow-list strong {
+  padding-top: 1px;
+  font-size: 11px;
+}
+
+.flow-list small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.flow-list li.active,
+.flow-list li.done {
+  opacity: 1;
+}
+
+.flow-list li.active > span {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+  box-shadow: 0 6px 16px rgba(22, 111, 74, .2);
+}
+
+.flow-list li.done > span {
+  border-color: #acd5be;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.guide-note {
+  padding: 15px 20px 18px;
+  border-top: 1px solid #edf1ee;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+
+/* =========================================================================
+   7. 입력창(Composer) — 화면 하단에 고정된 기사 입력 폼
+   ========================================================================= */
+.composer {
+  /* 사이드바 너비를 뺀 나머지 영역 안에서 가운데 정렬, 최대 1120px */
+  position: fixed;
+  right: 32px;
+  bottom: 20px;
+  left: calc(var(--sidebar-width) + 32px);
+  z-index: 15;
+  width: min(1120px, calc(100vw - var(--sidebar-width) - 64px));
+  max-height: calc(100vh - 50px);
+  margin: 0 auto;
+  overflow-y: auto;
+  padding: 16px 18px 14px;
+  border: 1px solid rgba(118, 151, 121, 0.96);
+  border-radius: 23px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  transition: box-shadow 180ms ease;
+}
+
+.composer:focus-within {
+  box-shadow: 0 26px 74px rgba(22, 74, 47, .17);
+}
+
+.input-method {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.input-method legend {
+  /* 시각적으로는 숨기지만 스크린리더에는 노출 (접근성용) */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- 입력 방식 탭 ("본문 직접 입력" / "기사 URL 입력") ------------------- */
+.input-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 탭 2개를 정확히 절반씩 균등 배치 */
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f3f7f4;
+}
+
+.input-tab {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 12px; /* 탭 버튼 내부 여백 → 탭 높이를 결정하는 값 */
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.input-tab.active {
+  border-color: #d6e3da;
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 4px 14px rgba(31, 65, 47, .06);
+}
+
+.input-tab strong,
+.input-tab small {
+  display: block;
+}
+
+.input-tab strong {
+  font-size: 11px;
+}
+
+.input-tab small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.tab-icon {
+  /* 탭 아이콘 배지 크기 */
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #e7eeea;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.input-tab.active .tab-icon {
+  background: var(--brand-soft);
+}
+
+.input-pane[hidden] {
+  display: none;
+}
+
+.composer-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.composer-head span {
+  font-weight: 500;
+}
+
+textarea,
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  outline: none;
+  background: #fbfdfb;
+  color: var(--ink);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: rgba(22, 111, 74, .62);
+  box-shadow: 0 0 0 4px rgba(22, 111, 74, .08);
+}
+
+textarea {
+  /* 기사 본문 입력창 높이 범위 */
+  min-height: 14px;
+  max-height: 44px;
+  padding: 12px 14px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+textarea::placeholder,
+input::placeholder {
+  color: #9aa49f;
+}
+
+/* --- 기사 날짜 / 제목 입력 영역 ------------------------------------------ */
+.direct-meta-grid {
+  display: grid;
+  grid-template-columns: .58fr 1.42fr; /* 날짜 필드: 제목 필드 = 약 29:71 비율 */
+  gap: 9px;
+  margin-top: 9px;
+}
+
+.direct-meta-grid label > span,
+.url-input-pane > label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.direct-meta-grid em {
+  color: var(--danger);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.direct-meta-grid small {
+  color: #9aa49f;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.direct-meta-grid input {
+  height: 37px; /* 날짜/제목 입력창 높이 */
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+/* --- URL 입력 영역 -------------------------------------------------------- */
+.url-input-pane {
+  padding: 12px;
+  border: 1px solid #dce7df;
+  border-radius: 13px;
+  background: #f8fbf9;
+}
+
+.url-input-row {
+  position: relative;
+}
+
+.url-input-row input {
+  height: 44px; /* URL 입력창 높이 */
+  padding: 0 12px 0 39px; /* 좌측 아이콘(↗) 공간 확보 */
+  background: white;
+  font-size: 12px;
+}
+
+.url-prefix {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 13px;
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 750;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.input-help {
+  margin: 7px 2px 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+/* --- 하단 액션 바 (검증 범위 / 검색 방식 / 분석하기 버튼) ------------------ */
+.composer-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 13px;
+  margin-top: 10px;
+}
+
+.mode-control {
+  width: 180px; /* 드롭다운(검증 범위, 검색 방식) 고정 너비 */
+}
+
+.mode-control span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.mode-control select {
+  height: 38px; /* 드롭다운 높이 */
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.keyboard-hint {
+  align-self: center;
+  margin: 15px auto 0 0;
+  color: #a0a8a3;
+  font-size: 9px;
+}
+
+.analyze-button {
+  /* "기사 분석하기" 버튼 크기 */
+  min-width: 158px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--brand);
+  color: white;
+  font-size: 12px;
+  font-weight: 780;
+  box-shadow: 0 10px 22px rgba(22, 111, 74, .23);
+  transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.analyze-button:hover {
+  background: var(--brand-dark);
+  transform: translateY(-1px);
+}
+
+.analyze-button:disabled {
+  cursor: wait;
+  opacity: .58;
+  transform: none;
+}
+
+.analyze-button svg {
+  width: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+}
+
+.form-error {
+  min-height: 14px;
+  margin: 6px 0 -5px;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.service-note {
+  /* 하단 고지문 위치 — 사이드바 너비만큼 좌측 오프셋 */
+  position: fixed;
+  right: 32px;
+  bottom: 5px;
+  left: calc(var(--sidebar-width) + 32px);
+  margin: 0;
+  color: #a1a9a4;
+  text-align: center;
+  font-size: 8px;
+  pointer-events: none;
+}
+
+
+/* =========================================================================
+   8. 로딩 메시지
+   ========================================================================= */
+.loading-message .message-body {
+  width: min(570px, 90%);
+}
+
+.loading-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.loading-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--brand);
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+.loading-dots i:nth-child(2) { animation-delay: .15s; }
+.loading-dots i:nth-child(3) { animation-delay: .3s; }
+
+@keyframes pulse {
+  0%, 70%, 100% { transform: translateY(0); opacity: .3; }
+  35%           { transform: translateY(-4px); opacity: 1; }
+}
+
+.loading-copy strong,
+.loading-copy small {
+  display: block;
+}
+
+.loading-copy strong {
+  font-size: 13px;
+}
+
+.loading-copy small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+
+/* =========================================================================
+   9. 검증 결과 카드 (요약 / 측정값 / 판정 / 후보 통계표)
+   ========================================================================= */
+.eyebrow {
+  margin: 0 0 9px;
+  color: var(--brand);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .13em;
+}
+
+.result-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 17px;
+}
+
+.result-heading h2 {
+  margin-bottom: 5px;
+  font-size: 21px;
+  letter-spacing: -.04em;
+}
+
+.result-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* --- 상단 요약 카드 4개 (일치/근접/불일치/확인불가 등) -------------------- */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); /* 4개 카드 균등 분할 */
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.summary-item {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fbfdfb;
+}
+
+.summary-item strong,
+.summary-item span {
+  display: block;
+}
+
+.summary-item strong {
+  font-size: 20px;
+  letter-spacing: -.04em;
+}
+
+.summary-item span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+/* --- 개별 측정값(주장) 카드 ------------------------------------------------ */
+.measurement-list {
+  display: grid;
+  gap: 11px;
+}
+
+.measurement-card {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.measurement-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.measurement-label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.verdict {
+  /* 판정 배지 (기본값: warning 색상, 아래에서 상태별로 덮어씀) */
+  padding: 6px 9px;
+  border-radius: 99px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.verdict.match {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.verdict.mismatch {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.verdict.enrich {
+  background: #fff4d8;
+  color: #9a6100;
+}
+
+.verdict.not-kosis {
+  background: #eef1f3;
+  color: #59636b;
+}
+
+.action-copy {
+  margin-top: 8px;
+  color: #9a6100;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.claim-quote {
+  margin-bottom: 12px;
+  padding-left: 11px;
+  border-left: 3px solid #c6ddd0;
+  color: #33423b;
+  font-size: 11px;
+  line-height: 1.62;
+}
+
+.value-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 11px;
+}
+
+.value-chip {
+  padding: 6px 9px;
+  border-radius: 9px;
+  background: #f1f6f2;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.reason-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+/* --- 후보 통계표 목록 (details/summary 펼침) ------------------------------ */
+.candidate-details {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #edf1ee;
+}
+
+.candidate-details summary {
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.candidate-item {
+  display: grid;
+  grid-template-columns: 23px 1fr auto; /* 순위 배지 + 이름 + 부가정보, 3열 */
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 9px;
+  background: #f8faf8;
+  font-size: 10px;
+}
+
+.candidate-rank {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-weight: 850;
+}
+
+.candidate-id {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+}
+
+.empty-result {
+  padding: 19px;
+  border: 1px dashed #cbd8d0;
+  border-radius: 14px;
+  color: var(--muted);
+  text-align: center;
+  white-space: pre-line;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.error-message .message-body {
+  border-color: #efc7c3;
+  background: #fff9f8;
+}
+
+.error-message h2 {
+  margin-bottom: 7px;
+  color: var(--danger);
+  font-size: 15px;
+}
+
+.error-message p {
+  margin: 0;
+  color: #73504d;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+
+/* =========================================================================
+   10. 상태 유틸리티 클래스
+   ========================================================================= */
+.guide-focus .home-hero {
+  display: none;
+}
+
+.guide-focus .conversation-stage {
+  display: grid;
+}
+
+.guide-focus .chat-stream::before {
+  content: "기사 입력부터 KOSIS 대조까지 네 단계로 진행됩니다. 아래 입력창에서 검증을 시작해 보세요.";
+  display: block;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .9);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+
+/* =========================================================================
+   11. 반응형 브레이크포인트
+   ========================================================================= */
+
+/* --- 1080px 이하: 사이드바를 줍히고, 가이드 패널을 상단 가로 배치로 전환 --- */
+@media (max-width: 1080px) {
+  :root {
+    --sidebar-width: 240px; /* 사이드바 너비 축소 → main-content/composer가 자동으로 따라옴 */
+  }
+
+  .sidebar {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .conversation-stage {
+    grid-template-columns: 1fr; /* 2단 → 1단으로 전환 (본문과 가이드 패널을 세로로 쌓음) */
+  }
+
+  .guide-panel {
+    position: static;
+    order: -1; /* 가이드 패널을 본문보다 위로 이동 */
+  }
+
+  .flow-list {
+    grid-template-columns: repeat(4, 1fr); /* 4단계를 세로 목록 대신 가로 4칸으로 배치 */
+    gap: 6px;
+  }
+
+  .flow-list li {
+    display: block;
+    min-height: 0;
+  }
+
+  .flow-list li::after {
+    display: none; /* 세로 연결선 제거 (가로 배치라 불필요) */
+  }
+
+  .flow-list li > span {
+    margin-bottom: 7px;
+  }
+
+  .guide-note {
+    display: none;
+  }
+}
+
+/* --- 760px 이하: 모바일 레이아웃 (사이드바 숨김, 하단 입력창 전체 폭) ----- */
+@media (max-width: 760px) {
+  :root {
+    --sidebar-width: 0px; /* 사이드바 제거 → main-content 좌측 여백도 0으로 */
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding-bottom: 390px; /* 모바일 입력창이 더 커지는 만큼 여백도 확대 */
+  }
+
+  .mobile-header {
+    height: 62px; /* 모바일 상단 헤더 높이 */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(248, 250, 247, .9);
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-brand {
+    gap: 9px;
+    font-size: 15px;
+    letter-spacing: -.03em;
+  }
+
+  .mobile-header .brand-mark {
+    width: 31px;
+    height: 31px;
+    border-radius: 10px;
+  }
+
+  .mobile-header .brand-mark svg {
+    width: 21px;
+  }
+
+  .mobile-header > button {
+    width: 34px; /* 모바일 "새 검증" 버튼 크기 */
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: white;
+    color: var(--brand);
+    font-size: 21px;
+  }
+
+  .home-hero {
+    min-height: calc(100vh - 410px);
+    padding: 34px 20px 16px;
+  }
+
+  .hero-symbol {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 17px;
+    border-radius: 18px;
+  }
+
+  .hero-symbol svg {
+    width: 29px;
+  }
+
+  .hero-eyebrow {
+    margin-bottom: 15px;
+    font-size: 9px;
+  }
+
+  .hero-inner h1 {
+    font-size: clamp(36px, 11vw, 52px); /* 모바일용 축소된 반응형 제목 크기 */
+  }
+
+  .hero-copy {
+    margin-top: 20px;
+    font-size: 12px;
+  }
+
+  .desktop-break {
+    display: none;
+  }
+
+  .feature-row {
+    gap: 10px 15px;
+    margin-top: 18px;
+    font-size: 9px;
+  }
+
+  .composer {
+    /* 모바일에서는 고정폭 대신 화면 좌우 여백만 10px씩 남기고 전체 폭 사용 */
+    right: 10px;
+    bottom: 12px;
+    left: 10px;
+    width: auto;
+    max-height: 62vh;
+    padding: 13px;
+    border-radius: 19px;
+  }
+
+  .service-note {
+    display: none;
+  }
+
+  .input-tabs {
+    grid-template-columns: 1fr 1fr; /* 모바일에서도 탭 2개 균등 배치 유지 */
+  }
+
+  .input-tab {
+    justify-content: center;
+    padding: 8px 7px; /* 모바일 탭 내부 여백(=탭 크기) 축소 */
+  }
+
+  .input-tab small {
+    display: none; /* 좁은 화면에서는 탭 설명 문구 숨김 */
+  }
+
+  .direct-meta-grid {
+    grid-template-columns: 1fr; /* 날짜/제목 필드를 가로 2열 → 세로 1열로 전환 */
+  }
+
+  .composer-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .mode-control {
+    flex: 1 1 150px; /* 고정 180px 대신 유동적으로 줄어들도록 전환 (최소 150px) */
+  }
+
+  .keyboard-hint {
+    display: none;
+  }
+
+  .analyze-button {
+    flex: 1 1 150px; /* 분석 버튼도 유동 폭으로 전환 */
+    align-self: flex-end;
+  }
+
+  .conversation-stage {
+    width: calc(100% - 24px);
+    padding: 22px 0;
+  }
+
+  .conversation-active .main-content {
+    padding-bottom: 390px;
+  }
+
+  .guide-panel {
+    display: none; /* 모바일에서는 가이드 패널 자체를 숨김 */
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .message-body {
+    padding: 17px;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr); /* 요약 카드 4열 → 2열로 전환 */
+  }
+
+  .candidate-item {
+    grid-template-columns: 22px 1fr; /* 후보 통계표 3열 → 2열로 축소 */
+  }
+
+  .candidate-id {
+    grid-column: 2;
+  }
+}
+
+/* --- 420px 이하: 초소형 화면 미세 조정 ------------------------------------ */
+@media (max-width: 420px) {
+  .feature-row span:last-child {
+    display: none; /* 기능 소개 3개 중 마지막 항목 숨김 (공간 부족) */
+  }
+
+  .input-tab {
+    gap: 6px;
+  }
+
+  .tab-icon {
+    width: 24px; /* 탭 아이콘을 27px → 24px로 축소 */
+    height: 24px;
+  }
+
+  .user-message .message-body {
+    max-width: 92%;
+  }
+}
+
+/* --- 모션 최소화 환경 지원 (접근성) --------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

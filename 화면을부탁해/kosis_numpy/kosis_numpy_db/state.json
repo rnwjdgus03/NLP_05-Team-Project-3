@@ -1,0 +1,10 @@
+{
+  "format": "kosis-numpy-exact-v1",
+  "input": "C:\\Users\\ogy87\\바탕 화면\\NLP_05-Team-Project-3 - 복사본\\NLP_05-Team-Project-3\\kosis_numpy\\kosis_table_summary.csv",
+  "source_sha256": "6c0f476df7326d48d3a56979c7f4d6361ff27b922be5840396a25f8c04f893e5",
+  "model": "intfloat/multilingual-e5-small",
+  "source_rows": 107138,
+  "embedding_dim": 384,
+  "next_offset": 107138,
+  "complete": true
+}

@@ -1,0 +1,11 @@
+﻿claim_measurement_id,measurement_usage,measurement_role,measurement_indicator,value,unit,old_gold_verifiable,new_gold_verifiable,change_rule
+A0006-C002-m2,CONTEXT,참고값,기간,2,년,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C005-m2,CONDITION,참고값,수출액,2022,년,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C009-m4,CONTEXT,참고값,반도체 수출 증가 기간,14,개월,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C009-m5,CONTEXT,참고값,경신 주기,2,년,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C011-m3,CONDITION,참고값,자동차 수출 목표치,70000000000,달러,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C011-m4,CONTEXT,참고값,자동차 수출,2,년,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C014-m7,CONTEXT,참고값,화장품 수출액 돌파 기준,10000000000,달러,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C015-m3,CONTEXT,참고값,수출 증가율 반등 기간,5,개월,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C016-m1,CONTEXT,참고값,수출 지속 기간,15,개월,Y,N,NON_KOSIS_USAGE_TO_N
+A0006-C017-m1,CONTEXT,참고값,반등 기간,5,개월,Y,N,NON_KOSIS_USAGE_TO_N

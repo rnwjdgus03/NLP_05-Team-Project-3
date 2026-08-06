@@ -1,0 +1,1 @@
+﻿claim_id,article_id,title,date,url,claim_text,prev_sentence,next_sentence,is_claim,is_claim_reason,is_claim_confidence,is_claim_method,extraction_model,prompt_version,extracted_at
