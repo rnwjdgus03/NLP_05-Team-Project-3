@@ -36,7 +36,7 @@ DEFAULT_MAX_COORDINATES_PER_TABLE = 4000
 # 좌표 생성 시 축 상한(DEFAULT_AXIS_VALUE_LIMIT)을 적용해도 집계값이 살아남게 하는 목록.
 # 여기를 바꾸면 어떤 좌표가 인덱스에 들어가는지가 바뀌므로 Chroma 인덱스를 재빌드해야 한다.
 # 그래서 아래 AGGREGATE_OBJ_NAMES(순위·판정용)와 일부러 분리해 둔다.
-AGGREGATE_NAMES = ("계", "전체", "총계", "총액", "전국", "합계")
+AGGREGATE_NAMES = ("계", "전체", "총계", "총액", "전국", "합계", "총지수")
 
 # 순위·판정에서 '이 좌표가 집계값인가'를 볼 때 쓰는 정식 목록.
 # 2026-08-02 이전에는 kosis_meta_coordinates 와 kosis_validate_mapping_candidates 에
@@ -71,7 +71,7 @@ FOREIGN_COUNTRY_ALIASES = {
 }
 
 TARGET_FIELDS = (
-    "industry_or_item", "measurement_item", "region",
+    "industry_or_item", "measurement_item", "region", "age_group", "gender",
     "origin_country", "destination_country",
 )
 

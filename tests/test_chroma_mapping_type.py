@@ -7,10 +7,18 @@ validate 가 빈 값을 'direct' 로 메우면서 증감률 주장이 수준값 
 '단위 불일치'로 막혔다 — 잠근 125건에서 UNIT_MISMATCH 46건 전부 mapping_type 이 비었고
 그중 30건이 증감률 주장이었다(실측).
 """
-from kosis_chroma_hybrid_search import resolve_mapping_type
+from kosis_chroma_hybrid_search import mapping_compatibility_priority, resolve_mapping_type
 
 RATE_CLAIM = {"semantic_type": "rate_change", "unit_dimension": "rate",
               "unit": "%", "indicator": "수출 증가율"}
+
+STRUCTURAL_MONTHLY_RATE_CLAIM = {
+    "semantic_type": "",
+    "value_type": "증감률",
+    "change_base": "전월",
+    "unit": "%",
+    "indicator": "수입물가 증감률",
+}
 
 
 # --------------------------------------------------------------------------
@@ -27,6 +35,50 @@ def test_absolute_change_on_a_matching_level_item():
     claim = {"semantic_type": "absolute_change", "unit_dimension": "currency", "unit": "원"}
     mapping_type, _ = resolve_mapping_type(claim, {"unit": "억원", "itm_name": "수출액"})
     assert mapping_type == "difference_from_level"
+
+
+def test_structural_monthly_rate_recovers_direct_mapping_type():
+    mapping_type, reason = resolve_mapping_type(
+        STRUCTURAL_MONTHLY_RATE_CLAIM,
+        {"unit": "%", "itm_name": "전월비"},
+    )
+    assert mapping_type == "direct"
+    assert reason == ""
+
+
+def test_structural_monthly_rate_recovers_level_derivation():
+    mapping_type, reason = resolve_mapping_type(
+        STRUCTURAL_MONTHLY_RATE_CLAIM,
+        {"unit": "2020=100", "itm_name": "수입물가지수"},
+    )
+    assert mapping_type == "rate_from_level"
+    assert "증감률" in reason
+
+
+def test_structural_monthly_rate_rejects_wrong_direct_base():
+    mapping_type, reason = resolve_mapping_type(
+        STRUCTURAL_MONTHLY_RATE_CLAIM,
+        {"unit": "%", "itm_name": "전년동월비"},
+    )
+    assert mapping_type == ""
+    assert "비교 기준" in reason
+
+
+def test_mapping_priority_prefers_matching_change_base_before_reranking():
+    claim = {
+        "semantic_type": "rate_change",
+        "value_type": "증감률",
+        "change_base": "전년동월",
+        "unit": "%",
+        "unit_dimension": "rate",
+    }
+    direct = {"metadata": {"unit": "%", "itm_name": "전년동월비(%)"}}
+    derived = {"metadata": {"unit": "천달러", "itm_name": "수출액"}}
+    mismatch = {"metadata": {"unit": "%", "itm_name": "전월비"}}
+
+    assert mapping_compatibility_priority(claim, direct)[:2] == (0, "direct")
+    assert mapping_compatibility_priority(claim, derived)[:2] == (1, "rate_from_level")
+    assert mapping_compatibility_priority(claim, mismatch)[0] == 2
 
 
 # --------------------------------------------------------------------------

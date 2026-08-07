@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-08-07T02:47:38.879Z",
+  "source": "KOSIS_MCP_TABLE_INFO",
+  "tables": [
+    {
+      "org_id": "101",
+      "tbl_id": "DT_1DA7001S",
+      "tbl_name": "성별 경제활동인구 총괄",
+      "prd_se": [
+        "M",
+        "Q",
+        "Y"
+      ],
+      "metadata_rows": 17
+    },
+    {
+      "org_id": "101",
+      "tbl_id": "DT_1DA7002S",
+      "tbl_name": "연령별 경제활동인구 총괄",
+      "prd_se": [
+        "M",
+        "Q",
+        "Y"
+      ],
+      "metadata_rows": 33
+    },
+    {
+      "org_id": "101",
+      "tbl_id": "DT_1EA1011",
+      "tbl_name": "행정구역(시군구)별 농가, 농가인구",
+      "prd_se": [
+        "Y"
+      ],
+      "metadata_rows": 186
+    },
+    {
+      "org_id": "101",
+      "tbl_id": "DT_1K41012",
+      "tbl_name": "재별 및 상품군별 소매판매액지수(2020=100.0)",
+      "prd_se": [
+        "M",
+        "Q",
+        "Y"
+      ],
+      "metadata_rows": 29
+    },
+    {
+      "org_id": "101",
+      "tbl_id": "DT_1KC2020",
+      "tbl_name": "산업별 서비스업생산지수(2020=100.0)",
+      "prd_se": [
+        "M",
+        "Q",
+        "Y"
+      ],
+      "metadata_rows": 167
+    },
+    {
+      "org_id": "101",
+      "tbl_id": "INH_1B8000F_01",
+      "tbl_name": "출생아수, 합계출산율, 자연증가 등",
+      "prd_se": [
+        "Y"
+      ],
+      "metadata_rows": 7
+    }
+  ],
+  "total_rows": 439,
+  "note": "Large table_info payloads are salvaged through the last complete JSON object when the MCP display payload is truncated."
+}

@@ -58,6 +58,42 @@ def test_another_perception_table():
     assert reason and "인식" in reason
 
 
+def test_holdout5_import_price_cannot_use_consumer_price_table():
+    reason = indicator_table_mismatch(
+        "수입물가 증감률",
+        "월별 소비자물가 등락률",
+        itm_name="전월비",
+        obj_names="총지수",
+        category_path="소비자물가조사",
+        org_id="101",
+        org_name="통계청",
+    )
+    assert "IMPORT_PRICE_CONCEPT_MISMATCH" in reason
+
+
+def test_import_price_table_and_agency_are_kept():
+    assert indicator_table_mismatch(
+        "수입물가 증감률",
+        "수입물가지수(기본분류)",
+        itm_name="전월비",
+        category_path="수출입물가조사(2020=100) > 수입물가",
+        org_id="301",
+        org_name="한국은행",
+    ) == ""
+
+
+def test_price_agency_conflict_blocks_a_generic_table_name():
+    reason = indicator_table_mismatch(
+        "수입물가 증감률",
+        "월별 물가 등락률",
+        itm_name="전월비",
+        category_path="물가조사",
+        org_id="101",
+        org_name="통계청",
+    )
+    assert "IMPORT_PRICE_CONCEPT_MISMATCH" in reason
+
+
 @pytest.mark.parametrize("word", ["만족도", "애로", "의향", "인지도", "체감"])
 def test_perception_words(word):
     assert perception_table(f"중소기업 {word} 조사") == word

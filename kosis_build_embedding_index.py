@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from kosis_semantic_search import DEFAULT_EMBEDDING_MODEL, build_semantic_index
 
@@ -15,8 +16,20 @@ def main():
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--device", default=None, help="예: cuda, cpu. 기본은 모델 자동 선택")
+    parser.add_argument(
+        "--torch-threads",
+        type=int,
+        default=0,
+        help="CPU 추론 스레드 수. 0이면 PyTorch 기본값",
+    )
     parser.add_argument("--force", action="store_true", help="기존 완료·체크포인트를 무시하고 재생성")
     args = parser.parse_args()
+
+    if args.torch_threads > 0:
+        import torch
+
+        torch.set_num_threads(min(args.torch_threads, os.cpu_count() or args.torch_threads))
+        print(f"torch_threads={torch.get_num_threads()}", flush=True)
 
     manifest = build_semantic_index(
         args.table_index,

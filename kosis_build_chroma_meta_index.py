@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -106,12 +107,24 @@ def main() -> None:
     parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
     parser.add_argument("--device", default=None)
     parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument(
+        "--torch-threads",
+        type=int,
+        default=0,
+        help="CPU 추론 스레드 수. 0이면 PyTorch 기본값",
+    )
     parser.add_argument("--axis-value-limit", type=int, default=40)
     parser.add_argument("--max-coordinates-per-table", type=int, default=4000)
     parser.add_argument("--prd-se-source", default=None,
                         help="(org_id, tbl_id) → prd_se 힌트를 가진 CSV (예: table_candidates)")
     parser.add_argument("--reset", action="store_true", help="같은 이름의 collection 을 지우고 다시 만든다")
     args = parser.parse_args()
+
+    if args.torch_threads > 0:
+        import torch
+
+        torch.set_num_threads(min(args.torch_threads, os.cpu_count() or args.torch_threads))
+        print(f"torch_threads={torch.get_num_threads()}", flush=True)
 
     try:
         import chromadb

@@ -674,7 +674,8 @@ def score_structured_meta(row, norm_claim, weighted_tokens):
 # **순서가 중요하다.** '매출액 증가율'은 금액이 아니라 비율이므로 rate 를 먼저 본다.
 # 목록은 좁게 잡았다. 이름 추론은 틀릴 수 있고, 틀리면 잘못된 좌표가 확정된다.
 NAME_DIMENSION_HINTS = (
-    ("rate", ("비율", "증감률", "증가율", "감소율", "등락률", "구성비", "비중", "점유율")),
+    ("rate", ("비율", "증감률", "증가율", "감소율", "등락률", "구성비", "비중", "점유율",
+              "전월비", "전년동월비", "전년비", "전분기비", "전년동기비")),
     ("currency", ("매출액", "수출액", "수입액", "거래액", "생산액", "판매액", "교역액",
                   "금액", "자산", "부채", "예산", "소득", "지출", "수익", "차입금")),
     ("person_count", ("종사자", "취업자", "근로자", "재직자", "고용인원", "인력")),
@@ -707,11 +708,34 @@ def meta_unit_dimension(meta_unit, item_name=""):
     return name_unit_dimension(item_name)
 
 
+STRUCTURAL_RATE_BASE_ITEMS = {
+    "전월": ("전월비",),
+    "전년동월": ("전년동월비",),
+}
+
+
+def effective_semantic_type(norm_claim) -> str:
+    """명시 semantic_type이 없을 때 좁은 구조 필드 조합만 복구한다.
+
+    `value_type=증감률`만으로는 비교 기준이 없어 위험하다. 전월·전년동월처럼
+    계산식이 하나로 정해지는 경우에만 rate_change로 본다.
+    """
+    semantic = str(norm_claim.get("semantic_type", "") or "").strip()
+    if semantic:
+        return semantic
+    value_type = compact(norm_claim.get("value_type", ""))
+    change_base = compact(norm_claim.get("change_base", ""))
+    if value_type == "증감률" and change_base in STRUCTURAL_RATE_BASE_ITEMS:
+        return "rate_change"
+    return ""
+
+
 def item_mapping_type(norm_claim, meta_unit, item_name):
     """Return how an ITEM can produce the claim value, or an incompatibility reason."""
     claim_dimension = norm_claim.get("unit_dimension") or infer_unit_dimension(norm_claim.get("unit", ""))
     item_dimension = meta_unit_dimension(meta_unit, item_name)
-    semantic = norm_claim.get("semantic_type", "")
+    semantic = effective_semantic_type(norm_claim)
+    change_base = compact(norm_claim.get("change_base", ""))
     indicator = compact(norm_claim.get("indicator", ""))
     compact_item = compact(item_name)
 
@@ -728,8 +752,19 @@ def item_mapping_type(norm_claim, meta_unit, item_name):
             return "", f"기업 수 claim에 다른 ITEM={item_name}"
 
     if semantic == "rate_change":
+        direct_base_items = STRUCTURAL_RATE_BASE_ITEMS.get(change_base, ())
+        other_base_items = tuple(
+            token
+            for base, tokens in STRUCTURAL_RATE_BASE_ITEMS.items()
+            if base != change_base
+            for token in tokens
+        )
+        if direct_base_items and any(token in compact_item for token in other_base_items):
+            return "", f"비교 기준 {change_base}와 KOSIS ITEM={item_name} 불일치"
         if item_dimension == "rate" and any(
-            token in compact_item for token in ("증감률", "증가율", "감소율", "등락률")
+            token in compact_item for token in (
+                "증감률", "증가율", "감소율", "등락률", *direct_base_items,
+            )
         ):
             return "direct", ""
         if item_dimension == "rate":

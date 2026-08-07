@@ -1,0 +1,20 @@
+﻿{
+  "schema_version": 1,
+  "created_at": "2026-08-07T10:40:17.828100+09:00",
+  "source": "data/archive/검증대상_기사드랍후.csv",
+  "source_sha256": "56c025b52783f3cde215fbaa4dee1a0b634dc031fe9ac92cf52dd69db7554ffe",
+  "source_row_count": 2693,
+  "slice_start_1_based": 251,
+  "slice_end_1_based": 300,
+  "row_count": 50,
+  "columns": [
+    "기사제목",
+    "작성일",
+    "URL",
+    "기사 본문(정제)",
+    "검색 구분 레이블"
+  ],
+  "output": "data/holdout6_articles.csv",
+  "output_sha256": "ee33db5bbc17760f588c725127f46f86cc8393e00167fa9da6b15c5b2bab8bb7",
+  "article_content_printed": false
+}

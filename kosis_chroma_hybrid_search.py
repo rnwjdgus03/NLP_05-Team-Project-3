@@ -148,13 +148,15 @@ def fuse_candidates(dense: Sequence[Mapping[str, Any]],
 # --------------------------------------------------------------------------
 
 BASE_CLAIM_FIELDS = (
-    "claim_id", "claim_measurement_id", "claim_text", "date", "indicator",
+    "gold_id", "claim_id", "claim_measurement_id", "article_id", "title",
+    "claim_text", "date", "indicator",
     "measurement_indicator", "metric_domain", "industry_or_item", "measurement_item",
     "value", "unit", "raw_unit", "canonical_unit", "unit_dimension", "semantic_type",
     "entity_type", "value_type", "measurement_role", "measurement_usage",
-    "period", "measurement_period", "prd_se", "measurement_prd_se",
+    "period", "measurement_period", "prd_se", "measurement_prd_se", "previous_period",
     "change_base", "comparison_period", "mapping_type",
     "region", "age_group", "gender", "origin_country", "destination_country",
+    "input_quality_status", "input_quality_reason",
 )
 
 
@@ -181,13 +183,32 @@ def resolve_mapping_type(claim: Mapping[str, Any], meta: Mapping[str, Any]) -> t
         return "", f"MAPPING_TYPE_ERROR: {type(exc).__name__}"
 
 
+def mapping_compatibility_priority(
+    claim: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> tuple[int, str, str]:
+    """Rank structurally compatible ITEMs before neural similarity."""
+
+    meta = candidate.get("metadata") or candidate
+    mapping_type, reason = resolve_mapping_type(claim, meta)
+    if mapping_type == "direct":
+        priority = 0
+    elif mapping_type in {"rate_from_level", "difference_from_level"}:
+        priority = 1
+    else:
+        priority = 2
+    return priority, mapping_type, reason
+
+
 def build_output_row(claim: Mapping[str, Any], table: Mapping[str, Any],
                      candidate: Mapping[str, Any], rank: int) -> dict:
     meta = candidate["metadata"]
     row: dict[str, Any] = {field: _text(claim.get(field)) for field in BASE_CLAIM_FIELDS}
     row["period"] = row["period"] or row["measurement_period"]
     row["prd_se"] = row["prd_se"] or row["measurement_prd_se"]
-    mapping_type, unit_reason = resolve_mapping_type(claim, meta)
+    mapping_type = _text(candidate.get("resolved_mapping_type"))
+    unit_reason = _text(candidate.get("mapping_compatibility_reason"))
+    if not mapping_type and not unit_reason:
+        mapping_type, unit_reason = resolve_mapping_type(claim, meta)
     row["mapping_type"] = mapping_type
     row["unit_compatibility_reason"] = unit_reason
     row.update({
@@ -395,6 +416,57 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
             0 if target_match(candidate) else 1,
             -float(candidate.get("fusion_score") or 0.0),
         ))
+    # A wider table pool can flood the global Top-K with many OBJ coordinates
+    # and remove the one ITEM that matches the structured comparison base.
+    # Add one target/aggregate representative per compatible table/ITEM before
+    # the reranker cutoff so 전년동월비 cannot disappear behind 전월비 rows.
+    seen = {candidate["coordinate_id"] for candidate in fused}
+    structural: dict[tuple[str, str, bool, bool], dict] = {}
+    for entry in pool:
+        priority, mapping_type, reason = mapping_compatibility_priority(claim, entry)
+        if priority >= 2:
+            continue
+        metadata = entry.get("metadata") or {}
+        target_matched = target_match(entry)
+        aggregate = metadata_is_aggregate(metadata)
+        if target_terms and not target_matched:
+            continue
+        if not target_terms and not aggregate:
+            continue
+        key = (
+            _text(metadata.get("tbl_id")),
+            _text(metadata.get("itm_id")),
+            target_matched,
+            aggregate,
+        )
+        structural.setdefault(
+            key,
+            {
+                **entry,
+                "dense_rank": None,
+                "lexical_rank": None,
+                "fusion_score": 0.0,
+                "mapping_priority": priority,
+                "resolved_mapping_type": mapping_type,
+                "mapping_compatibility_reason": reason,
+            },
+        )
+    for entry in structural.values():
+        if entry["coordinate_id"] not in seen:
+            fused.append(entry)
+            seen.add(entry["coordinate_id"])
+
+    for candidate in fused:
+        priority, mapping_type, reason = mapping_compatibility_priority(claim, candidate)
+        candidate["mapping_priority"] = priority
+        candidate["resolved_mapping_type"] = mapping_type
+        candidate["mapping_compatibility_reason"] = reason
+    fused.sort(key=lambda candidate: (
+        candidate["mapping_priority"],
+        0 if (not target_terms or target_match(candidate)) else 1,
+        0 if (target_terms or metadata_is_aggregate(candidate.get("metadata") or {})) else 1,
+        -float(candidate.get("fusion_score") or 0.0),
+    ))
     fused = fused[:rerank_top_k]
     rerank_seconds = 0.0
     if reranker is not None and fused:
@@ -434,6 +506,7 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         candidate["claim_target_terms"] = "|".join(target_terms)
     fused.sort(key=lambda c: (
         0 if c["prd_se_match"] else 1,
+        c.get("mapping_priority", 2),
         0 if (not target_terms or c["obj_target_match"]) else 1,
         0 if (not prefer_aggregate or c["obj_aggregate"]) else 1,
         -c["final_rank_score"],
@@ -444,6 +517,10 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         "dense_count": len(dense),
         "lexical_count": len(lexical),
         "fused_count": len(fused),
+        "structural_shortlist_count": len(structural),
+        "mapping_incompatible_demoted": sum(
+            1 for candidate in fused if candidate.get("mapping_priority", 2) >= 2
+        ),
         "prd_se_demoted": sum(1 for c in fused if not c["prd_se_match"]),
         "prefer_aggregate": prefer_aggregate,
         "claim_target_terms": "|".join(target_terms),

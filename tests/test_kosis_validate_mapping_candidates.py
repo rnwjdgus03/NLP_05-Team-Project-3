@@ -20,6 +20,7 @@ from kosis_validate_mapping_candidates import (
     group_official_meta,
     low_priority_reason,
     rank_valid_combinations,
+    recover_mapping_type_from_row,
     resolve_table_ambiguity,
     required_periods_for_row,
     response_matches_request,
@@ -438,6 +439,32 @@ def test_table_ambiguity_can_keep_top_coordinate_as_provisional():
     assert resolved[1]["mapping_status"] == NEEDS_CONFIRMATION
 
 
+def test_validate_recovers_mapping_type_from_structural_fields():
+    mapping_type, reason = recover_mapping_type_from_row({
+        "indicator": "수입물가 증감률",
+        "value_type": "증감률",
+        "change_base": "전월",
+        "unit": "%",
+        "selected_itm_name": "전월비",
+        "selected_itm_unit": "%",
+    })
+    assert mapping_type == "direct"
+    assert reason == ""
+
+
+def test_required_periods_use_structural_monthly_base_for_level_derivation():
+    assert required_periods_for_row({
+        "period": "202501",
+        "mapping_type": "rate_from_level",
+        "change_base": "전월",
+    }) == ["202501", "202412"]
+    assert required_periods_for_row({
+        "period": "202501",
+        "mapping_type": "rate_from_level",
+        "change_base": "전년동월",
+    }) == ["202501", "202401"]
+
+
 def test_rank_three_alternate_is_not_evaluated():
     assert low_priority_reason({
         "candidate_rank": "3",
@@ -558,6 +585,27 @@ def test_semantic_ready_gate_keeps_grounded_mapping_ready():
     assert gated["mapping_status"] == READY
     assert gated["semantic_gate_valid"] is True
     assert gated["semantic_gate_reason"] == ""
+
+
+def test_semantic_ready_gate_defers_import_price_on_consumer_price_table():
+    gated = apply_semantic_ready_gate(
+        {
+            "claim_text": "수입물가는 전월보다 2.4% 올랐다.",
+            "indicator": "수입물가 증감률",
+            "tbl_name": "월별 소비자물가 등락률",
+            "category_path": "소비자물가조사",
+            "org_id": "101",
+            "org_name": "통계청",
+        },
+        {
+            "mapping_status": READY,
+            "selected_itm_name": "전월비",
+            "selected_combination": {"objL1_name": "총지수"},
+        },
+    )
+    assert gated["mapping_status"] == NEEDS_CONFIRMATION
+    assert gated["mapping_reason"] == "INDICATOR_TABLE_MISMATCH"
+    assert "INDICATOR_TABLE_MISMATCH" in gated["semantic_gate_details"]
 
 
 def test_vehicle_count_suffix_is_not_treated_as_age_scope():

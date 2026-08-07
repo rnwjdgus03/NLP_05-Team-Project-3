@@ -69,6 +69,47 @@ _STOP_BIGRAMS = frozenset({
 _TOKEN = re.compile(r"[가-힣]{2,}|[A-Za-z]{2,}|\d+")
 
 
+# '물가'라는 공통 어휘만으로 서로 다른 물가지표가 통과하면 안 된다.
+# 가격지표는 조사·작성기관까지 안정적으로 분리돼 있어 좁은 명시 규칙을 쓸 수 있다.
+# KOSIS 기관코드: 101=통계청, 301=한국은행.
+_PRICE_FAMILIES = (
+    (
+        "IMPORT_PRICE_CONCEPT_MISMATCH",
+        ("수입물가", "수입물가지수"),
+        ("수입물가", "수입물가지수", "수출입물가"),
+        "301",
+        ("한국은행",),
+    ),
+    (
+        "EXPORT_PRICE_CONCEPT_MISMATCH",
+        ("수출물가", "수출물가지수"),
+        ("수출물가", "수출물가지수", "수출입물가"),
+        "301",
+        ("한국은행",),
+    ),
+    (
+        "PRODUCER_PRICE_CONCEPT_MISMATCH",
+        ("생산자물가", "생산자물가지수"),
+        ("생산자물가", "생산자물가지수", "국내공급물가", "총산출물가"),
+        "301",
+        ("한국은행",),
+    ),
+    (
+        "CONSUMER_PRICE_CONCEPT_MISMATCH",
+        ("소비자물가", "소비자물가지수", "생활물가"),
+        ("소비자물가", "소비자물가지수", "생활물가"),
+        "101",
+        ("통계청",),
+    ),
+)
+
+_ALL_PRICE_FAMILY_TERMS = frozenset(
+    term
+    for _reason, claim_terms, mapped_terms, _org_id, _org_names in _PRICE_FAMILIES
+    for term in (*claim_terms, *mapped_terms)
+)
+
+
 def _t(value) -> str:
     return "" if value is None else str(value).strip()
 
@@ -96,7 +137,36 @@ def perception_table(tbl_name, itm_name="") -> str:
     return ""
 
 
-def indicator_table_mismatch(indicator, tbl_name, itm_name="", obj_names="") -> str:
+def _price_family_mismatch(
+    indicator, mapped_text, *, org_id="", org_name="",
+) -> str:
+    """명시된 물가지표 계열과 표·분야·기관이 충돌하면 사유를 돌려준다."""
+    claim = re.sub(r"\s+", "", _t(indicator))
+    mapped = re.sub(r"\s+", "", _t(mapped_text))
+    mapped_families = {
+        term for term in _ALL_PRICE_FAMILY_TERMS if term in mapped
+    }
+    for reason, claim_terms, allowed_terms, expected_org_id, expected_org_names in _PRICE_FAMILIES:
+        if not any(term in claim for term in claim_terms):
+            continue
+        if any(term in mapped for term in allowed_terms):
+            return ""
+        if mapped_families:
+            return f"{reason}: 주장 '{_t(indicator)[:24]}' 과 선택 통계 '{_t(mapped_text)[:48]}' 의 물가지표 계열이 다르다"
+        actual_org_id = _t(org_id)
+        actual_org_name = _t(org_name)
+        if actual_org_id and actual_org_id != expected_org_id:
+            return f"{reason}: 주장 물가지표의 작성기관과 KOSIS 기관코드 {actual_org_id}가 다르다"
+        if actual_org_name and not any(name in actual_org_name for name in expected_org_names):
+            return f"{reason}: 주장 물가지표의 작성기관과 '{actual_org_name[:24]}'가 다르다"
+        return ""
+    return ""
+
+
+def indicator_table_mismatch(
+    indicator, tbl_name, itm_name="", obj_names="", category_path="",
+    org_id="", org_name="",
+) -> str:
     """표·항목이 지표와 무관하면 사유. 아니면 ''.
 
     **모르면 막지 않는다.** 지표가 비었거나 표 이름이 없으면 판단 근거가 없다 —
@@ -112,12 +182,26 @@ def indicator_table_mismatch(indicator, tbl_name, itm_name="", obj_names="") -> 
     if word:
         return f"의견·경험 표('{word}')는 수준값 주장을 답할 수 없다: {table_text[:40]}"
 
+    mapped_context = " ".join(
+        value for value in (
+            table_text, _t(category_path), _t(itm_name), _t(obj_names), _t(org_name),
+        ) if value
+    )
+    price_reason = _price_family_mismatch(
+        indicator_text,
+        mapped_context,
+        org_id=org_id,
+        org_name=org_name,
+    )
+    if price_reason:
+        return price_reason
+
     # **표 이름만으로는 판단하지 않는다.** 지표어를 항목·분류축이 담는 경우가 많다 —
     #   취업자수   ↔  '성별 경제활동인구 총괄'  + 항목 '취업자'
     #   출생아 수  ↔  '월.분기.연간 인구동향'   + 분류2 '출생아수(명)'
     # 1차 구현이 표 이름만 봐서 이 넷을 전부 막았다. 테스트로 잡았다.
     # 항목·축 이름이 둘 다 없으면 정보가 모자란 것이므로 **막지 않는다.**
-    detail = f"{_t(itm_name)} {_t(obj_names)}".strip()
+    detail = f"{_t(category_path)} {_t(itm_name)} {_t(obj_names)} {_t(org_name)}".strip()
     if not detail:
         return ""
 

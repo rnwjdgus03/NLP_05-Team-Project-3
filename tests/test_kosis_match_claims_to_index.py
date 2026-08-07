@@ -67,6 +67,19 @@ def test_rate_claim_can_be_derived_from_level_item():
     assert "증감률" in reason
 
 
+def test_value_type_and_monthly_base_recover_rate_semantics():
+    claim = normalized_claim_row(
+        ready_claim(
+            semantic_type="",
+            value_type="증감률",
+            change_base="전월",
+            measurement_indicator="수입물가 증감률",
+        )
+    )
+    assert item_mapping_type(claim, "%", "전월비") == ("direct", "")
+    assert item_mapping_type(claim, "2020=100", "수입물가지수")[0] == "rate_from_level"
+
+
 @pytest.mark.parametrize("unit", ["2020=100", "2020＝100", "2020=100.0", ""])
 def test_rate_claim_can_be_derived_from_index_item(unit):
     claim = normalized_claim_row(ready_claim(measurement_indicator="서비스업 생산지수"))

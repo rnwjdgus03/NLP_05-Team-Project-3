@@ -772,6 +772,9 @@ def semantic_ready_gate(
         _first(result, "selected_itm_name") or row.get("selected_itm_name", ""),
         " ".join(_semantic_compact(result.get(f"selected_obj_l{level}_name", ""))
                  for level in range(1, 9)),
+        _first(result, "category_path") or row.get("category_path", ""),
+        _first(result, "org_id") or row.get("org_id", ""),
+        _first(result, "org_name") or row.get("org_name", ""),
     )
     if indicator_reason:
         reasons.append("INDICATOR_TABLE_MISMATCH")
@@ -866,6 +869,10 @@ from kosis_meta_coordinates import (  # noqa: E402
 # 가드가 두 벌이면 반드시 어긋난다 — 오늘 그 실수를 세 번 했다.
 from prepare_kosis_mapping_input import claim_item_grounded  # noqa: E402
 from kosis_indicator_table_match import indicator_table_mismatch  # noqa: E402
+from kosis_match_claims_to_index import (  # noqa: E402
+    item_mapping_type,
+    normalized_claim_row,
+)
 
 
 def _normalize(value: Any) -> str:
@@ -1026,17 +1033,51 @@ def _previous_year_period(period: str) -> str:
     return f"{int(value[:4]) - 1}{value[4:]}"
 
 
+def _previous_month_period(period: str) -> str:
+    value = str(period or "").strip()
+    if not re.fullmatch(r"\d{6}", value):
+        return ""
+    year, month = int(value[:4]), int(value[4:])
+    if not 1 <= month <= 12:
+        return ""
+    if month == 1:
+        return f"{year - 1}12"
+    return f"{year}{month - 1:02d}"
+
+
+def recover_mapping_type_from_row(row: Mapping[str, Any]) -> tuple[str, str]:
+    """구조 필드와 선택 ITEM으로 누락된 mapping_type을 보수적으로 복구한다."""
+    existing = str(row.get("mapping_type", "") or "").strip()
+    if existing:
+        return existing, ""
+    return item_mapping_type(
+        normalized_claim_row(row),
+        _first(row, "selected_itm_unit", "unit_name", "source_unit"),
+        _first(row, "selected_itm_name", "itm_name"),
+    )
+
+
 def required_periods_for_row(row: Mapping[str, Any]) -> list[str]:
     periods = [str(_first(row, "period", "measurement_period")).strip()]
     comparison = str(row.get("comparison_period", "")).strip()
     if comparison:
         periods.append(comparison)
     elif str(row.get("mapping_type", "")) in {"rate_from_level", "difference_from_level"}:
-        claim_text = str(row.get("claim_text", ""))
-        if re.search(r"전년(?:도|\s*동기|\s*동월)?", claim_text):
+        change_base = re.sub(r"\s+", "", str(row.get("change_base", "")))
+        if change_base == "전월":
+            previous = _previous_month_period(periods[0])
+            if previous:
+                periods.append(previous)
+        elif change_base == "전년동월":
             previous = _previous_year_period(periods[0])
             if previous:
                 periods.append(previous)
+        else:
+            claim_text = str(row.get("claim_text", ""))
+            if re.search(r"전년(?:도|\s*동기|\s*동월)?", claim_text):
+                previous = _previous_year_period(periods[0])
+                if previous:
+                    periods.append(previous)
     return [period for period in dict.fromkeys(periods) if period]
 
 
@@ -1199,6 +1240,13 @@ def main() -> None:
                 )
             if any(candidate["semantic_score"] > 0 for candidate in candidates):
                 obj_candidates[order] = candidates
+        recovered_mapping_type, recovery_reason = recover_mapping_type_from_row(row)
+        if recovered_mapping_type and not str(row.get("mapping_type", "")).strip():
+            row = {
+                **row,
+                "mapping_type": recovered_mapping_type,
+                "mapping_type_recovery_reason": recovery_reason,
+            }
         periods = required_periods_for_row(row)
 
         def fetch(params: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
