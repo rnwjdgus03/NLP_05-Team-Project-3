@@ -34,6 +34,55 @@ def test_axis_value_recovers_sentence_only_item():
     assert "반도체" in claim_target_terms(claim, ["계", "반도체", "자동차"])
 
 
+def test_only_target_typed_axes_can_supply_sentence_terms():
+    claim = {"claim_text": "고용은 줄고 실업률은 높아졌으며 GDP와 수출은 둔화했다"}
+    values = [
+        {"name": "고용", "axis_name": "특성별"},
+        {"name": "실업률", "axis_name": "경제활동별"},
+        {"name": "GDP", "axis_name": "세목별"},
+        {"name": "수출", "axis_name": "현황별"},
+    ]
+    assert claim_target_terms(claim, values) == ()
+
+
+def test_time_and_superlative_axis_values_are_not_targets():
+    claim = {"claim_text": "1월 수출은 9월 이후 가장 큰 폭으로 늘었다"}
+    values = [
+        {"name": "1월", "axis_name": "통계분류"},
+        {"name": "9월", "axis_name": "통계분류"},
+        {"name": "가장", "axis_name": "품목별"},
+    ]
+    assert claim_target_terms(claim, values) == ()
+
+
+def test_item_axis_can_still_recover_a_missing_structured_item():
+    claim = {"claim_text": "반도체 수출액은 10% 늘었다", "industry_or_item": ""}
+    values = [
+        {"name": "계", "axis_name": "품목별"},
+        {"name": "반도체", "axis_name": "품목별"},
+    ]
+    assert claim_target_terms(claim, values) == ("반도체",)
+
+
+def test_aggregate_region_is_not_a_target():
+    claim = {"claim_text": "서울의 주유소는 줄었다", "region": "전국"}
+    assert claim_target_terms(claim) == ("서울",)
+
+
+def test_multiple_structured_targets_are_split_instead_of_concatenated():
+    countries = claim_target_terms({
+        "claim_text": "폴란드와 말레이시아에 수출했다",
+        "destination_country": "폴란드, 말레이시아",
+    })
+    assert countries == ("말레이시아", "폴란드")
+
+    industries = claim_target_terms({
+        "claim_text": "제조업과 도소매업 취업자가 감소했다",
+        "industry_or_item": "제조업, 도소매업",
+    })
+    assert industries == ("도소매업", "제조업")
+
+
 def test_region_seed_file_has_all_six_code_systems_and_108_rows():
     path = Path(__file__).resolve().parents[1] / "data" / "seed_region_codes.csv"
     with path.open(encoding="utf-8-sig", newline="") as handle:

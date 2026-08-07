@@ -1,0 +1,28 @@
+{
+  "dataset": "mcp_auto_gold_v2",
+  "created_at": "2026-08-05T05:50:08.983421+00:00",
+  "row_count": 112,
+  "unique_measurement_count": 112,
+  "tier_counts": {
+    "FULL_KOSIS": 12,
+    "AUTO_POSITIVE": 43,
+    "AUTO_NEGATIVE": 57
+  },
+  "gold_verifiable_counts": {
+    "Y": 55,
+    "N": 57
+  },
+  "human_reviewed": false,
+  "sources": {
+    "outputs/gold/gold_measurement_in_ready_Y_top100_merged.csv": "654fdcaefb5daf519d7a116da9b37f9d200704d7496c7d89eeecbf98b33a2d5b",
+    "data/gold/mcp_auto_gold_v1.csv": "b84ce47613d65d0f1a6dabfe47154ff631720f8792243a807aa7ca04132e8914",
+    "data/shared_20260802/05_hcx_measurements_kosis_ready.csv": "4a0a79a939664b83895a44a46888cecb3e537b07250f9646a1c3cf6316db9543"
+  },
+  "output": "data/gold/mcp_auto_gold_v2.csv",
+  "output_sha256": "7ce848ea766b12cc6b0ae1101b5334e175a463fc37549b4f445fef9bdfa4a7da",
+  "tier_meaning": {
+    "FULL_KOSIS": "MCP table/meta/data checked; coordinate and actual value fixed",
+    "AUTO_POSITIVE": "automatically labeled verifiable; coordinate/value unresolved",
+    "AUTO_NEGATIVE": "automatically labeled outside KOSIS verification target"
+  }
+}

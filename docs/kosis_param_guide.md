@@ -94,7 +94,7 @@ GET https://kosis.kr/openapi/statisticsData.do?method=getMeta&type=ITM
 
 ## 실전 활용 순서 (추천)
 
-1. `통계목록` API로 카테고리를 타고 내려가며 후보 표(orgId, tblId) 찾기 — 또는 미리 크롤링해둔 `kosis_table_summary.csv`에서 키워드 검색
+1. `통계목록` API로 카테고리를 타고 내려가며 후보 표(orgId, tblId) 찾기 — 또는 미리 크롤링해둔 `data/reference/kosis_table_summary.csv`에서 키워드 검색
 2. `통계표설명(메타정보)` API로 그 표의 분류축/항목 코드 확인
 3. `통계자료(Param)` API로 실제 필요한 조합(objL1, itmId)의 수치 조회
 4. 결과의 `DT` 값과 뉴스 기사 속 수치를 비교

@@ -2,10 +2,10 @@
 
 ## 현재 기준 산출물
 
-- KOSIS 통계표 후보 베이스라인: `kosis_table_summary.csv`
+- KOSIS 통계표 후보 베이스라인: `data/reference/kosis_table_summary.csv`
   - 전체 통계표 인덱스 107,138건 확보(최신 병합본 기준)
   - 주요 분야 및 농림어업 관련 표 후보를 메타정보 조회 대상으로 사용
-- KOSIS 메타정보 베이스라인: `kosis_metadata_summary.csv`
+- KOSIS 메타정보 베이스라인: `data/reference/kosis_metadata_summary.csv`
   - 표별 ORG_ID, TBL_ID, 분류축, 항목 예시, 단위 확인 결과 정리
   - 일부 표는 실제 데이터 조회 파라미터가 아직 확정되지 않아 단위가 `확인 불가`로 남음
 - A팀 전달 데이터 베이스라인:

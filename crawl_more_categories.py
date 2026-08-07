@@ -1,5 +1,5 @@
 """
-이미 있는 kosis_table_summary.csv(농림=K1 크롤링 결과)에,
+이미 있는 data/reference/kosis_table_summary.csv(농림=K1 크롤링 결과)에,
 다른 카테고리(인구=A, 노동=D 등) 크롤링 결과를 이어붙임 (덮어쓰지 않고 병합).
 
 사용법:
@@ -9,7 +9,7 @@
 여러 명이 동시에 나눠서 크롤링할 때:
     python crawl_more_categories.py --out kosis_table_summary_철수.csv P2 B
     처럼 --out 뒤에 자기 이름 붙인 파일명을 주면, 그 사람 몫만 별도 파일로 저장됨
-    (같은 kosis_table_summary.csv를 동시에 건드리면 git push할 때 충돌나서
+    (같은 data/reference/kosis_table_summary.csv를 동시에 건드리면 git push할 때 충돌나서
     각자 다른 파일에 저장 -> 나중에 merge_table_summaries.py로 합치는 방식)
 
 카테고리 코드:
@@ -70,7 +70,7 @@ def main(category_codes, out_path):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    out_path = "kosis_table_summary.csv"
+    out_path = "data/reference/kosis_table_summary.csv"
     if args and args[0] == "--out":
         out_path = args[1]
         args = args[2:]

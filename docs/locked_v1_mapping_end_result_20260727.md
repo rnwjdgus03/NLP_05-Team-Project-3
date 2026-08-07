@@ -8,7 +8,7 @@
 - 기준 코드: `Poc@6ceb3ff` 위 재현 브랜치
 - 골드: `outputs/gold/gold_measurement_v1_locked.csv`
 - 검색 입력: READY 39건
-- 통계표 인덱스: `kosis_table_summary.csv`, 107,138개 표
+- 통계표 인덱스: `data/reference/kosis_table_summary.csv`, 107,138개 표
 - 검색 방식: lexical
 - 비교 K: 1, 2, 3, 5
 - Mapping-end 조합: ITEM Top-3, OBJ Top-2, 최대 20조합

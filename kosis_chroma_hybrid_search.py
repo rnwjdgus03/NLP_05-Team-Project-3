@@ -361,8 +361,14 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
     lexical = lexical_search(query, pool, lexical_top_k)
     search_seconds = time.perf_counter() - started
 
+    # 값만 넘기면 '실업률'(경제활동별), '1월'(통계분류)처럼 문장과 우연히
+    # 겹친 지표·시점도 target 으로 보인다. 축 의미를 함께 넘겨
+    # 국가·지역·산업·품목·인구집단 축만 대상 신호로 쓴다.
     axis_values = [
-        entry["metadata"].get(f"obj_l{level}_name", "")
+        {
+            "name": entry["metadata"].get(f"obj_l{level}_name", ""),
+            "axis_name": entry["metadata"].get(f"obj_l{level}_axis_name", ""),
+        }
         for entry in pool for level in range(1, MAX_AXIS + 1)
     ]
     target_terms = claim_target_terms(claim, axis_values)

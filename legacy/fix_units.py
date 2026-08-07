@@ -1,5 +1,5 @@
 """
-kosis_metadata_summary.csv에서 단위가 "확인 불가"로 남은 행들만 다시 조회해서 채움.
+data/reference/kosis_metadata_summary.csv에서 단위가 "확인 불가"로 남은 행들만 다시 조회해서 채움.
 (get_sample_unit()의 다중 분류축(objL2, objL3...) 버그를 고친 뒤 재실행용)
 
 사용법:
@@ -11,7 +11,7 @@ import csv
 from kosis_api_test import summarize_meta
 from kosis_metadata_summary import get_sample_unit, FIELDS
 
-PATH = "kosis_metadata_summary.csv"
+PATH = "data/reference/kosis_metadata_summary.csv"
 
 
 def main():

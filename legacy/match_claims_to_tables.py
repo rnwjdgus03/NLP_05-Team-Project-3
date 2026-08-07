@@ -23,7 +23,7 @@ STOPWORDS = {
 }
 
 
-def load_table_index(path="kosis_table_summary.csv"):
+def load_table_index(path="data/reference/kosis_table_summary.csv"):
     with open(path, encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 

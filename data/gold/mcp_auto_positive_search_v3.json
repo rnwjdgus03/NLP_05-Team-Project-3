@@ -1,0 +1,930 @@
+{
+  "generated_at": "2026-08-05",
+  "count": 43,
+  "results": [
+    {
+      "claim_measurement_id": "A0012-C009-m2",
+      "keyword": "조선 산업기술인력 중 외국인 수 조선업",
+      "indicator": "조선 산업기술인력 중 외국인 수",
+      "item": "조선업",
+      "claim_text": "조선 산업기술인력 중 외국인은 2022년 877명에서 2023년 2563명으로 3배 가까이 늘었다.",
+      "candidates": [
+        {
+          "org_id": "111",
+          "tbl_id": "DT_1B040A10",
+          "tbl_name": "시군구별 및 연령별 등록외국인 현황",
+          "stat_name": "출입국자및체류외국인통계"
+        },
+        {
+          "org_id": "115",
+          "tbl_id": "DT_115_2012_AA025",
+          "tbl_name": "지역별 현재인원(성별, 고용형태별 등)",
+          "stat_name": "산업기술인력수급실태조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0023-C026-m1",
+      "keyword": "소매판매",
+      "indicator": "소매판매",
+      "item": "-",
+      "claim_text": "다만 11월 소매판매는 전년 동월과 비교하면 1.9% 줄어 부진한 흐름을 이어갔다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1K41012",
+          "tbl_name": "재별 및 상품군별 소매판매액지수(2020=100.0)",
+          "stat_name": "서비스업동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1K41002",
+          "tbl_name": "재별 및 상품군별 판매액",
+          "stat_name": "서비스업동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1K41013",
+          "tbl_name": "소매업태별 판매액지수(2020=100.0)",
+          "stat_name": "서비스업동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1K41003",
+          "tbl_name": "소매업태별 판매액",
+          "stat_name": "서비스업동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1KE10041",
+          "tbl_name": "온라인쇼핑몰 취급상품범위별/상품군별거래액",
+          "stat_name": "온라인쇼핑동향조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0067-C010-m1",
+      "keyword": "연료별 자동차 판매 대수 하이브리드",
+      "indicator": "연료별 자동차 판매 대수",
+      "item": "하이브리드",
+      "claim_text": "연료별로는 하이브리드가 절반이 넘는 13만4426대(51.1%)를 기록한 가운데 가솔린(23.8%)과 전기(18.8%)가 다음 자리를 차지했다.",
+      "candidates": [
+        {
+          "org_id": "116",
+          "tbl_id": "DT_MLTM_1244",
+          "tbl_name": "자동차등록대수현황_연도별",
+          "stat_name": "자동차등록현황보고"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0067-C010-m2",
+      "keyword": "연료별 자동차 판매 비중 하이브리드",
+      "indicator": "연료별 자동차 판매 비중",
+      "item": "하이브리드",
+      "claim_text": "연료별로는 하이브리드가 절반이 넘는 13만4426대(51.1%)를 기록한 가운데 가솔린(23.8%)과 전기(18.8%)가 다음 자리를 차지했다.",
+      "candidates": [
+        {
+          "org_id": "116",
+          "tbl_id": "DT_MLTM_1244",
+          "tbl_name": "자동차등록대수현황_연도별",
+          "stat_name": "자동차등록현황보고"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0067-C010-m3",
+      "keyword": "연료별 자동차 판매 비중 가솔린",
+      "indicator": "연료별 자동차 판매 비중",
+      "item": "가솔린",
+      "claim_text": "연료별로는 하이브리드가 절반이 넘는 13만4426대(51.1%)를 기록한 가운데 가솔린(23.8%)과 전기(18.8%)가 다음 자리를 차지했다.",
+      "candidates": [
+        {
+          "org_id": "116",
+          "tbl_id": "DT_MLTM_1244",
+          "tbl_name": "자동차등록대수현황_연도별",
+          "stat_name": "자동차등록현황보고"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0067-C010-m4",
+      "keyword": "연료별 자동차 판매 비중 전기",
+      "indicator": "연료별 자동차 판매 비중",
+      "item": "전기",
+      "claim_text": "연료별로는 하이브리드가 절반이 넘는 13만4426대(51.1%)를 기록한 가운데 가솔린(23.8%)과 전기(18.8%)가 다음 자리를 차지했다.",
+      "candidates": [
+        {
+          "org_id": "116",
+          "tbl_id": "DT_MLTM_1244",
+          "tbl_name": "자동차등록대수현황_연도별",
+          "stat_name": "자동차등록현황보고"
+        },
+        {
+          "org_id": "388",
+          "tbl_id": "TX_38803_A026",
+          "tbl_name": "연도별 전력수급 실적",
+          "stat_name": "발전설비현황"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0070-C004-m1",
+      "keyword": "대중 수출액",
+      "indicator": "대중 수출액",
+      "item": "-",
+      "claim_text": "6일 한국무역협회에 따르면, 지난해 대중 수출액은 1330억2600만달러로 전년 대비 6.6% 늘었다.",
+      "candidates": [
+        {
+          "org_id": "360",
+          "tbl_id": "DT_1R11001_FRM101",
+          "tbl_name": "품목별 수출액, 수입액",
+          "stat_name": "SITC에의한무역통계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0070-C004-m2",
+      "keyword": "대중 수출액 증감률",
+      "indicator": "대중 수출액 증감률",
+      "item": "-",
+      "claim_text": "6일 한국무역협회에 따르면, 지난해 대중 수출액은 1330억2600만달러로 전년 대비 6.6% 늘었다.",
+      "candidates": [
+        {
+          "org_id": "360",
+          "tbl_id": "DT_1R11001_FRM101",
+          "tbl_name": "품목별 수출액, 수입액",
+          "stat_name": "SITC에의한무역통계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0096-C003-m2",
+      "keyword": "순자금 운용액 감소폭",
+      "indicator": "순자금 운용액 감소폭",
+      "item": "-",
+      "claim_text": "이는 직전 분기의 41조2000억원보다 3조5000억원가량 줄어든 것이다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0307-C011-m1",
+      "keyword": "쌀과 기타양곡을 합친 전체 양곡의 1인당 소비량",
+      "indicator": "쌀과 기타양곡을 합친 전체 양곡의 1인당 소비량",
+      "item": "-",
+      "claim_text": "쌀과 기타양곡을 합친 전체 양곡의 1인당 소비량은 작년 0.3%(0.2kg) 감소했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1ED0001",
+          "tbl_name": "1인당 연간 양곡소비량",
+          "stat_name": "양곡소비량조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1L9V053",
+          "tbl_name": "가구원수별 가구당 월평균 가계수지 (전국,1인이상)",
+          "stat_name": "가계동향조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0739-C010-m1",
+      "keyword": "혼인 건수",
+      "indicator": "혼인 건수",
+      "item": "-",
+      "claim_text": "2019년 12월(2만4945건) 이후 모든 월을 기준으로 5년 만에 혼인 건수가 가장 많았다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000H",
+          "tbl_name": "시도/인구동태건수 및 동태율(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B83A11",
+          "tbl_name": "시도/부부의 혼인종류별 혼인",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B83A24",
+          "tbl_name": "시도/시군구별 외국인과의 혼인",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000I",
+          "tbl_name": "시군구/인구동태건수 및 동태율(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000K",
+          "tbl_name": "읍면동/성별/인구동태건수(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0748-C007-m1",
+      "keyword": "합계 출산율",
+      "indicator": "합계 출산율",
+      "item": "-",
+      "claim_text": "합계 출산율이 1.24명이었던 2015년 이후 처음으로 출산율이 올랐다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B81A17",
+          "tbl_name": "시군구/합계출산율, 모의 연령별 출산율",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2KAA207",
+          "tbl_name": "합계출산율",
+          "stat_name": "국제통계연감"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPA101",
+          "tbl_name": "장래 합계출산율 / 전국",
+          "stat_name": "장래인구추계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000H",
+          "tbl_name": "시도/인구동태건수 및 동태율(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPB101",
+          "tbl_name": "장래 연령별 출산율/시도",
+          "stat_name": "장래인구추계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0766-C010-m1",
+      "keyword": "서학 개미 투자 증가율 서학 개미",
+      "indicator": "서학 개미 투자 증가율",
+      "item": "서학 개미",
+      "claim_text": "◇서학 개미 투자 작년 50% 급증 한국의 순대외금융자산이 1조달러를 돌파한 데는 서학 개미(해외 주식 투자자)의 약진이 큰 역할을 했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0837-C010-m1",
+      "keyword": "PGDI",
+      "indicator": "PGDI",
+      "item": "-",
+      "claim_text": "우리나라 1인당 PGDI는 1975년 482달러였는데, 지난 2023년에는 1만9498달러(약 2840만원)로 상승했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0837-C010-m2",
+      "keyword": "PGDI",
+      "indicator": "PGDI",
+      "item": "-",
+      "claim_text": "우리나라 1인당 PGDI는 1975년 482달러였는데, 지난 2023년에는 1만9498달러(약 2840만원)로 상승했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0837-C010-m3",
+      "keyword": "PGDI",
+      "indicator": "PGDI",
+      "item": "-",
+      "claim_text": "우리나라 1인당 PGDI는 1975년 482달러였는데, 지난 2023년에는 1만9498달러(약 2840만원)로 상승했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0837-C012-m1",
+      "keyword": "GNI 대비 PGDI 비율",
+      "indicator": "GNI 대비 PGDI 비율",
+      "item": "-",
+      "claim_text": "한은에 따르면 GNI 대비 PGDI 비율은 한은이 해당 통계 작성을 시작한 1975년에는 77.5%였는데, 지난 2023년 53.9%로 역대 최저치로 떨어졌다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A0871-C010-m1",
+      "keyword": "순이동률",
+      "indicator": "순이동률",
+      "item": "-",
+      "claim_text": "인구 유입 척도 중 하나인 순이동률에서도 인천은 2021년 이후 단 한 차례도 마이너스를 기록하지 않았다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B28025",
+          "tbl_name": "내외국인/성/연령별 국제이동(월간, 연간)",
+          "stat_name": "국제인구이동통계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20642",
+          "tbl_name": "청년순이동률(시도/시/군/구)",
+          "stat_name": "인구동향조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A0882-C023-m1",
+      "keyword": "제조 중소기업 경영자의 60세 이상 비중",
+      "indicator": "제조 중소기업 경영자의 60세 이상 비중",
+      "item": "-",
+      "claim_text": "중소벤처기업연구원에 따르면 국내 제조 중소기업 경영자 중 ’60세 이상’ 비중은 2012년 14.1%에서 2022년 33.5%로 증가했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A1122-C024-m1",
+      "keyword": "관광 목적 단기 숙박객 비율",
+      "indicator": "관광 목적 단기 숙박객 비율",
+      "item": "-",
+      "claim_text": "예컨대 작년 8월 강원도 인구 감소 지역의 체류 인구 가운데 29%는 관광 목적으로 방문한 4일 이하 ‘단기 숙박객’이었지만, 수도권은 이 비율이 6.5%에 그쳤다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1KB9019",
+          "tbl_name": "시도/객실수 규모별 숙박업 현황",
+          "stat_name": "서비스업조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1122-C024-m2",
+      "keyword": "관광 목적 단기 숙박객 비율",
+      "indicator": "관광 목적 단기 숙박객 비율",
+      "item": "-",
+      "claim_text": "예컨대 작년 8월 강원도 인구 감소 지역의 체류 인구 가운데 29%는 관광 목적으로 방문한 4일 이하 ‘단기 숙박객’이었지만, 수도권은 이 비율이 6.5%에 그쳤다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1KB9019",
+          "tbl_name": "시도/객실수 규모별 숙박업 현황",
+          "stat_name": "서비스업조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1123-C005-m1",
+      "keyword": "남성 고학력자 비율 1975~1976년생",
+      "indicator": "남성 고학력자 비율",
+      "item": "1975~1976년생",
+      "claim_text": "1975~1976년생도 남성의 고학력 비율(62.9%)이 여성(60.2%)보다 높다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B04006",
+          "tbl_name": "행정구역(시군구)별/1세별 주민등록인구",
+          "stat_name": "주민등록인구현황"
+        },
+        {
+          "org_id": "331",
+          "tbl_id": "DT_33109_N355",
+          "tbl_name": "최종 학력",
+          "stat_name": "한국복지패널조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1183-C016-m1",
+      "keyword": "경제성장률",
+      "indicator": "경제성장률",
+      "item": "-",
+      "claim_text": "과거 30년간 우리나라 경제성장률이 올해 전망치인 1.5%보다 낮았던 때는 1998년 외환 위기, 2009년 글로벌 금융 위기, 2020년 코로나 팬데믹 위기 등이다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_200Y101",
+          "tbl_name": "주요지표(연간지표)",
+          "stat_name": "국민계정"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2KAA905",
+          "tbl_name": "경제성장률(불변가격)",
+          "stat_name": "국제통계연감"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1ZGA31",
+          "tbl_name": "경제성장률",
+          "stat_name": "북한통계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2AQ4510",
+          "tbl_name": "국민소득",
+          "stat_name": "World Bank"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20571",
+          "tbl_name": "경제성장률(시도)",
+          "stat_name": "e-지방지표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1191-C011-m1",
+      "keyword": "외국인과 노인 일자리 참여자 증가 규모",
+      "indicator": "외국인과 노인 일자리 참여자 증가 규모",
+      "item": "-",
+      "claim_text": "같은 방식으로 비교했을 때 2023년까지만 해도 외국인과 노인 일자리 참여자 증가 규모는 11만8000명으로, 전체 취업자 증가 폭(32만7000명)보다 적었다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20631",
+          "tbl_name": "고령인구비율(시도/시/군/구)",
+          "stat_name": "e-지방지표"
+        },
+        {
+          "org_id": "111",
+          "tbl_id": "DT_1B040A10",
+          "tbl_name": "시군구별 및 연령별 등록외국인 현황",
+          "stat_name": "출입국자및체류외국인통계"
+        },
+        {
+          "org_id": "118",
+          "tbl_id": "DT_118N_MOND56",
+          "tbl_name": "행정구역(시도)/산업별(대분류) 고용",
+          "stat_name": "사업체노동력조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1191-C011-m2",
+      "keyword": "전체 취업자 증가 폭",
+      "indicator": "전체 취업자 증가 폭",
+      "item": "-",
+      "claim_text": "같은 방식으로 비교했을 때 2023년까지만 해도 외국인과 노인 일자리 참여자 증가 규모는 11만8000명으로, 전체 취업자 증가 폭(32만7000명)보다 적었다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7031S",
+          "tbl_name": "행정구역(시도)/연령별 취업자",
+          "stat_name": "경제활동인구조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1218-C001-m1",
+      "keyword": "외국인직접투자액",
+      "indicator": "외국인직접투자액",
+      "item": "-",
+      "claim_text": "올해 1분기(1~3월) 우리나라로 들어온 외국인 직접투자(FDI)가 작년 같은 기간 대비 9.2% 줄었다.",
+      "candidates": [
+        {
+          "org_id": "111",
+          "tbl_id": "DT_1B040A10",
+          "tbl_name": "시군구별 및 연령별 등록외국인 현황",
+          "stat_name": "출입국자및체류외국인통계"
+        },
+        {
+          "org_id": "301",
+          "tbl_id": "DT_085Y013",
+          "tbl_name": "해외직접투자(신고기준)",
+          "stat_name": "국제수지통계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1246-C009-m2",
+      "keyword": "적자",
+      "indicator": "적자",
+      "item": "-",
+      "claim_text": "지난해 자동차부문 보험손익 합산비율(손해율+사업비율)은 손익분기점인 100%를 초과해 97억원 적자를 기록했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1G150101",
+          "tbl_name": "공사종류/발주자별 계약액,기성액,원도급 및 하도급공사 기성액,미기성액",
+          "stat_name": "건설업조사"
+        },
+        {
+          "org_id": "331",
+          "tbl_id": "TX_33101_A023",
+          "tbl_name": "가구 및 가구주 특성별 경제적 자립정도",
+          "stat_name": "가족과출산조사"
+        },
+        {
+          "org_id": "389",
+          "tbl_id": "DT_389003_A055",
+          "tbl_name": "기본급(월급여) 대비 성과급 비율",
+          "stat_name": "인적자본기업패널조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1383-C003-m1",
+      "keyword": "농가에서 65세 이상 고령 인구가 차지하는 비율",
+      "indicator": "농가에서 65세 이상 고령 인구가 차지하는 비율",
+      "item": "-",
+      "claim_text": "농가에서 65세 이상 고령 인구가 차지하는 비율도 지난해 기준 55.8%로 해마다 계속 상승하면서 농촌 소멸 우려가 현실화되고 있다는 분석이 나온다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1EA1011",
+          "tbl_name": "행정구역(시군구)별 농가, 농가인구",
+          "stat_name": "농림어업조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B04006",
+          "tbl_name": "행정구역(시군구)별/1세별 주민등록인구",
+          "stat_name": "주민등록인구현황"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20631",
+          "tbl_name": "고령인구비율(시도/시/군/구)",
+          "stat_name": "e-지방지표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1436-C005-m1",
+      "keyword": "분기 연속 성장",
+      "indicator": "분기 연속 성장",
+      "item": "-",
+      "claim_text": "◇‘4개 분기 연속 제로 성장’ 쇼크 한국은행은 지난 17일 ‘올해 1분기(1~3월) 및 향후 성장 흐름 평가’ 보고서에서 “1분기 우리나라 성장률이 지난 2월에 내놓은 전망치인 0.2%보다 더 낮으며, 마이너스(-) 성장 가능성도 배제할 수 없는 상황”이라고 했다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A1436-C005-m2",
+      "keyword": "경제성장률",
+      "indicator": "경제성장률",
+      "item": "-",
+      "claim_text": "◇‘4개 분기 연속 제로 성장’ 쇼크 한국은행은 지난 17일 ‘올해 1분기(1~3월) 및 향후 성장 흐름 평가’ 보고서에서 “1분기 우리나라 성장률이 지난 2월에 내놓은 전망치인 0.2%보다 더 낮으며, 마이너스(-) 성장 가능성도 배제할 수 없는 상황”이라고 했다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_200Y101",
+          "tbl_name": "주요지표(연간지표)",
+          "stat_name": "국민계정"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2KAA905",
+          "tbl_name": "경제성장률(불변가격)",
+          "stat_name": "국제통계연감"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1ZGA31",
+          "tbl_name": "경제성장률",
+          "stat_name": "북한통계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2AQ4510",
+          "tbl_name": "국민소득",
+          "stat_name": "World Bank"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20571",
+          "tbl_name": "경제성장률(시도)",
+          "stat_name": "e-지방지표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1478-C003-m2",
+      "keyword": "분기 수",
+      "indicator": "분기 수",
+      "item": "-",
+      "claim_text": "성장률이 4개 분기 연속으로 0.1% 이하를 기록한 것은 과거 대형 경제 위기 때도 없었다.",
+      "candidates": []
+    },
+    {
+      "claim_measurement_id": "A1798-C006-m1",
+      "keyword": "닭고기 수입량 비중 닭고기",
+      "indicator": "닭고기 수입량 비중",
+      "item": "닭고기",
+      "claim_text": "한국농수산식품유통공사(aT) 농식품수출정보에 따르면, 지난해 한국은 전체 닭고기 수입량 24만9751t 중 71.6%가량인 17만8956t을 브라질에서 들여왔다.",
+      "candidates": [
+        {
+          "org_id": "360",
+          "tbl_id": "DT_1R11001_FRM101",
+          "tbl_name": "품목별 수출액, 수입액",
+          "stat_name": "SITC에의한무역통계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1922-C001-m1",
+      "keyword": "합계출산율",
+      "indicator": "합계출산율",
+      "item": "-",
+      "claim_text": "올해 1분기 합계출산율(여성 1명이 평생 낳을 것으로 예상되는 아이 수)이 2년 만에 0.8명대를 기록했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B81A17",
+          "tbl_name": "시군구/합계출산율, 모의 연령별 출산율",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2KAA207",
+          "tbl_name": "합계출산율",
+          "stat_name": "국제통계연감"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPA101",
+          "tbl_name": "장래 합계출산율 / 전국",
+          "stat_name": "장래인구추계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000H",
+          "tbl_name": "시도/인구동태건수 및 동태율(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPB101",
+          "tbl_name": "장래 연령별 출산율/시도",
+          "stat_name": "장래인구추계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A1922-C001-m2",
+      "keyword": "합계출산율",
+      "indicator": "합계출산율",
+      "item": "-",
+      "claim_text": "올해 1분기 합계출산율(여성 1명이 평생 낳을 것으로 예상되는 아이 수)이 2년 만에 0.8명대를 기록했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B81A17",
+          "tbl_name": "시군구/합계출산율, 모의 연령별 출산율",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_2KAA207",
+          "tbl_name": "합계출산율",
+          "stat_name": "국제통계연감"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPA101",
+          "tbl_name": "장래 합계출산율 / 전국",
+          "stat_name": "장래인구추계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B8000H",
+          "tbl_name": "시도/인구동태건수 및 동태율(출생,사망,혼인,이혼)",
+          "stat_name": "인구동향조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1BPB101",
+          "tbl_name": "장래 연령별 출산율/시도",
+          "stat_name": "장래인구추계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2109-C017-m2",
+      "keyword": "노인 취업자 비정규직 비율",
+      "indicator": "노인 취업자 비정규직 비율",
+      "item": "-",
+      "claim_text": "국회 예산정책처에 따르면, 작년 8월 기준 65세 임금 근로자 61.2%는 비정규직이었고, 70세는 이 비율이 85.1%에 달했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7024S",
+          "tbl_name": "성/연령별 취업자",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DE7106S",
+          "tbl_name": "성/근로형태별 임금근로자 규모 및 비중(총괄)",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20631",
+          "tbl_name": "고령인구비율(시도/시/군/구)",
+          "stat_name": "e-지방지표"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7031S",
+          "tbl_name": "행정구역(시도)/연령별 취업자",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DE7006S",
+          "tbl_name": "성/연령별 근로형태(비정규직)별 취업자",
+          "stat_name": "경제활동인구조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2109-C017-m4",
+      "keyword": "노인 취업자 비정규직 비율",
+      "indicator": "노인 취업자 비정규직 비율",
+      "item": "-",
+      "claim_text": "국회 예산정책처에 따르면, 작년 8월 기준 65세 임금 근로자 61.2%는 비정규직이었고, 70세는 이 비율이 85.1%에 달했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7024S",
+          "tbl_name": "성/연령별 취업자",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DE7106S",
+          "tbl_name": "성/근로형태별 임금근로자 규모 및 비중(총괄)",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YL20631",
+          "tbl_name": "고령인구비율(시도/시/군/구)",
+          "stat_name": "e-지방지표"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7031S",
+          "tbl_name": "행정구역(시도)/연령별 취업자",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DE7006S",
+          "tbl_name": "성/연령별 근로형태(비정규직)별 취업자",
+          "stat_name": "경제활동인구조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m1",
+      "keyword": "가구 수",
+      "indicator": "가구 수",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1JC1517",
+          "tbl_name": "가구주의 성, 연령 및 세대구성별 가구(일반가구) - 시군구",
+          "stat_name": "인구총조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1IN1502",
+          "tbl_name": "인구, 가구 및 주택 – 읍면동(연도 끝자리 0, 5), 시군구(그 외 연도)",
+          "stat_name": "인구총조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1OH0403",
+          "tbl_name": "거주지역/가구주의 성/연령대별 주택소유 가구수",
+          "stat_name": "주택소유통계"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1YC1601",
+          "tbl_name": "영유아가 있는 가구의 자녀수별 가구 및 연령별 영유아 - 시도",
+          "stat_name": "인구총조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B26008",
+          "tbl_name": "전출지/전입지(시도)/이동규모별 이동건수",
+          "stat_name": "국내인구이동통계"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m2",
+      "keyword": "가구당 가계순자산 증감률",
+      "indicator": "가구당 가계순자산 증감률",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_291Y407",
+          "tbl_name": "순자산 증감(명목)",
+          "stat_name": "국민대차대조표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m3",
+      "keyword": "가구당 가계순자산",
+      "indicator": "가구당 가계순자산",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_291Y407",
+          "tbl_name": "순자산 증감(명목)",
+          "stat_name": "국민대차대조표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m4",
+      "keyword": "인구",
+      "indicator": "인구",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1B04006",
+          "tbl_name": "행정구역(시군구)별/1세별 주민등록인구",
+          "stat_name": "주민등록인구현황"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7001S",
+          "tbl_name": "성별 경제활동인구 총괄",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7002S",
+          "tbl_name": "연령별 경제활동인구 총괄",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7014S",
+          "tbl_name": "행정구역(시도)/성별 경제활동인구",
+          "stat_name": "경제활동인구조사"
+        },
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1DA7015S",
+          "tbl_name": "행정구역(시도)/연령별 경제활동인구",
+          "stat_name": "경제활동인구조사"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m5",
+      "keyword": "1인당 가계순자산 증감률",
+      "indicator": "1인당 가계순자산 증감률",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_291Y407",
+          "tbl_name": "순자산 증감(명목)",
+          "stat_name": "국민대차대조표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2568-C004-m6",
+      "keyword": "1인당 가계순자산",
+      "indicator": "1인당 가계순자산",
+      "item": "-",
+      "claim_text": "이를 가구 수(2218만 가구)로 나눈 가구당 가계순자산은 전년보다 2.4% 증가한 5억8916만원, 인구(5175만명)로 나눈 1인당 가계순자산은 3.3% 늘어난 2억5251만원으로 집계됐다.",
+      "candidates": [
+        {
+          "org_id": "301",
+          "tbl_id": "DT_291Y407",
+          "tbl_name": "순자산 증감(명목)",
+          "stat_name": "국민대차대조표"
+        }
+      ]
+    },
+    {
+      "claim_measurement_id": "A2696-C058-m1",
+      "keyword": "추가 자녀 계획 없음 비율",
+      "indicator": "추가 자녀 계획 없음 비율",
+      "item": "-",
+      "claim_text": "2005년 조사에서 15세 이상 기혼 여성 중 93%가 ‘추가 자녀 계획이 없다’고 답했다.",
+      "candidates": [
+        {
+          "org_id": "101",
+          "tbl_id": "DT_1PF2001",
+          "tbl_name": "연령별/출생자녀수별 기혼여성인구(15세이상)-시도",
+          "stat_name": "인구총조사"
+        },
+        {
+          "org_id": "154",
+          "tbl_id": "DT_154001_24AA001400",
+          "tbl_name": "자녀 계획 여부",
+          "stat_name": "가족실태조사"
+        }
+      ]
+    }
+  ]
+}

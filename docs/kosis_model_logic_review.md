@@ -108,7 +108,7 @@ verdict_stage
 ```powershell
 python run_kosis_measurement_pipeline.py `
   --input "outputs\runs\hcx_extracted_handoff_100_v15.csv" `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --out-dir "outputs\runs\kosis_v2" `
   --top-tables 5 `
   --top-rank-for-meta 2 `
@@ -120,7 +120,7 @@ python run_kosis_measurement_pipeline.py `
 ```powershell
 python run_kosis_measurement_pipeline.py `
   --input "outputs\runs\hcx_extracted_handoff_100_v15.csv" `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --out-dir "outputs\runs\kosis_v2" `
   --verify
 ```

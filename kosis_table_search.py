@@ -7,7 +7,7 @@
 
 그래서 "검색"은 2단계로 나눠서 함:
   1) 트리를 미리 재귀적으로 다 돌면서(=크롤링) 로컬 인덱스(csv)로 만들어둔다
-     -> 이게 B팀 산출물 kosis_table_summary.csv
+     -> 이게 B팀 산출물 data/reference/kosis_table_summary.csv
   2) A팀이 뽑아온 주장 키워드로, 그 로컬 인덱스에서 문자열 매칭 검색을 한다
      (KOSIS 서버에 매번 검색 요청을 보내는 게 아니라 우리가 만든 캐시에서 찾는 것)
 
@@ -90,7 +90,7 @@ def crawl_all_tables(start_parent="", vw_cd="MT_ZTITLE", delay=0.3, max_calls=No
     return results
 
 
-def save_table_summary(rows, path="kosis_table_summary.csv"):
+def save_table_summary(rows, path="data/reference/kosis_table_summary.csv"):
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=["ORG_ID", "TBL_ID", "TBL_NM", "STAT_ID", "path"])
         writer.writeheader()
@@ -100,7 +100,7 @@ def save_table_summary(rows, path="kosis_table_summary.csv"):
 def search_candidate_tables(keywords, table_index, top_n=10):
     """
     keywords: claim에서 뽑은 단어들 (예: ["농가", "연령", "고령"])
-    table_index: crawl_all_tables() 결과 (또는 kosis_table_summary.csv 읽은 것)
+    table_index: crawl_all_tables() 결과 (또는 data/reference/kosis_table_summary.csv 읽은 것)
     TBL_NM + 카테고리 경로(path)에 키워드가 몇 개 매칭되는지로 점수 매겨 상위 N개 반환
     """
     scored = []
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     print("K1(농림) 하위 통계표 크롤링 중...")
     table_index = crawl_all_tables(start_parent="K1_9")
     save_table_summary(table_index)
-    print(f"{len(table_index)}개 통계표 저장 완료 -> kosis_table_summary.csv")
+    print(f"{len(table_index)}개 통계표 저장 완료 -> data/reference/kosis_table_summary.csv")
 
     # 2) 로컬 인덱스에서 키워드로 후보 검색 (KOSIS에 다시 요청 안 보냄)
     candidates = search_candidate_tables(["농가", "연령"], table_index)

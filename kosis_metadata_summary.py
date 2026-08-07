@@ -1,5 +1,5 @@
 """
-후보 통계표들의 분류축/항목/단위를 실제로 조회해서 kosis_metadata_summary.csv 로 정리.
+후보 통계표들의 분류축/항목/단위를 실제로 조회해서 data/reference/kosis_metadata_summary.csv 로 정리.
 
 방법: "통계표설명"(메타정보) API 사용 - method=getMeta&type=ITM
   https://kosis.kr/openapi/statisticsData.do?method=getMeta&type=ITM&apiKey=...&orgId=..&tblId=..&format=json
@@ -156,7 +156,7 @@ def main(out_path):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    out_path = "kosis_metadata_summary.csv"
+    out_path = "data/reference/kosis_metadata_summary.csv"
     if args and args[0] == "--out":
         out_path = args[1]
     main(out_path)

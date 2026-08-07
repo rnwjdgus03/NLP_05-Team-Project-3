@@ -1,0 +1,56 @@
+{
+  "version": "context-top50-common-gold-v1",
+  "created_at": "2026-07-30",
+  "adjudicator": "Codex",
+  "status": "locked_for_context_window_ablation",
+  "file": "data/gold/context_top50_common_gold_v1.csv",
+  "sha256": "7FB859E093B71ADD6A40239015BA9C567A2201B7ACDE43061FABA4F461EB2F96",
+  "candidate_count": 797,
+  "gold_ready_y": 92,
+  "gold_ready_n": 705,
+  "label_definition": {
+    "gold_measurement_correct": "indicator, value, unit, period, periodicity, and role are grounded in the article context",
+    "gold_verifiable": "the measurement directly corresponds to an identified KOSIS official-statistics series",
+    "gold_ready": "gold_measurement_correct=Y and gold_verifiable=Y"
+  },
+  "candidate_key": [
+    "article_id",
+    "indicator_family",
+    "normalized_value",
+    "canonical_unit",
+    "measurement_period",
+    "measurement_prd_se",
+    "measurement_role"
+  ],
+  "source_files": [
+    {
+      "method": "all_previous_context",
+      "file": "news_top50_measurements_in_ready (1).csv",
+      "rows": 287,
+      "sha256": "C43A902139AEC6BF3C1DF9104AD96A076B6280BAAC75F6F00C89D605EEDE1D61"
+    },
+    {
+      "method": "all_previous_context",
+      "file": "news_top50_measurements_in_rejected (1).csv",
+      "rows": 175,
+      "sha256": "809E8EBD5512515BC1BB9554C674FDCB4F0382AD60D6EF7F82364A53F1E5D802"
+    },
+    {
+      "method": "previous_2_ready_only",
+      "file": "kosis_mapping_ready_500_real.csv",
+      "rows": 135,
+      "sha256": "394B0E228CCE65A3EAE42E7EC93E9E1EB06E90312CF5D164B65770932ECABDBA"
+    },
+    {
+      "method": "shared_context_overlap",
+      "file": "06_in_ready_all.csv",
+      "rows": 443,
+      "sha256": "41E2A41D5DE5A60BACC1533B2D8B5D1C4AC03952FFB1F8A7339313AA1215F689"
+    }
+  ],
+  "limitations": [
+    "This is a Codex-adjudicated project gold, not an independently double-labeled benchmark.",
+    "The previous-2 source preserved READY rows only, so it is not used as a complete candidate universe.",
+    "New READY candidate keys produced by later ablations must be reviewed and appended before final publication."
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "dataset": "mcp_auto_gold_v1",
+  "created_at": "2026-08-05T05:41:03.294404+00:00",
+  "kosis_retrieved_at": "2026-08-05T00:00:00+09:00",
+  "row_count": 12,
+  "match_count": 12,
+  "human_reviewed": false,
+  "label_source": "KOSIS_MCP_AUTO_V1",
+  "source": "data/shared_20260802/gold_confirmed_v3.csv",
+  "source_sha256": "d66537658410aa4d648c5b79524d1199205197df9317dea97bceb212c553b5e5",
+  "output": "data/gold/mcp_auto_gold_v1.csv",
+  "output_sha256": "b84ce47613d65d0f1a6dabfe47154ff631720f8792243a807aa7ca04132e8914",
+  "acceptance_rules": {
+    "direct": "relative_error <= 0.5%",
+    "derived_rate": "absolute_error <= 0.5 percentage point",
+    "coordinate": "KOSIS MCP search + validate + exact item/obj/period data retrieval"
+  },
+  "known_limitation": "Labels are automatically generated from current KOSIS values and were not human-reviewed."
+}

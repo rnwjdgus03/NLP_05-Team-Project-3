@@ -1,33 +1,36 @@
 # 환경변수 / 비밀키
 .env
 
-# Python
+# Python / Node
 __pycache__/
 *.pyc
 .venv/
 venv/
+node_modules/
 *_api_cache.json
 
-# Jupyter
+# Jupyter / tests
 .ipynb_checkpoints/
+.pytest_cache/
 .test-tmp*/
 
 # OS
 .DS_Store
 ~$*.xlsx
 
-# 대용량 원본 데이터 (노션에만 보관, 깃허브 용량 제한 때문에 제외)
+# 대용량 원본·파생 데이터
 chosun_full.csv
-kosis_table_summary_*.csv
+data/raw/chosun_full.csv
+data/reference/kosis_table_summary_*.csv
 
-# 로컬 파이프라인 입력/실행 결과
+# 로컬 파이프라인 입력과 인덱스
 data/inputs/*.csv
 data/indexes/
-outputs/runs/*.csv
-outputs/runs/*.json
-outputs/runs/**
 
-# ���� �м� ĳ�� / ��뷮 ���� ���⹰
+# 로컬 분석 캐시와 재생성 가능한 실행 산출물
+.codex_spreadsheet_review_*/
 .codex_analysis/
 outputs/*/
 !outputs/gold/
+outputs/gold/*.inspect.ndjson
+outputs/gold/*_preview.png

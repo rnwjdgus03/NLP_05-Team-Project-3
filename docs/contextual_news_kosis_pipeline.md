@@ -57,7 +57,7 @@ smoke test가 통과한 뒤 기사 100건으로 확대 평가할 때는
 ```powershell
 python run_contextual_news_kosis_pipeline.py `
   --articles "data\raw\news_articles.csv" `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --semantic-index "data\indexes\kosis_bge_m3" `
   --early-meta-index "outputs\runs\kosis_meta_full.csv" `
   --out-dir "outputs\runs\contextual_v1" `
@@ -75,7 +75,7 @@ python run_contextual_news_kosis_pipeline.py `
 ```powershell
 python run_contextual_news_kosis_pipeline.py `
   --articles "data\raw\news_articles.csv" `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --semantic-index "data\indexes\kosis_bge_m3" `
   --out-dir "outputs\runs\contextual_smoke" `
   --article-limit 10 `

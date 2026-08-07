@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Python = "python",
-    [string]$TableIndex = "kosis_table_summary.csv",
+    [string]$TableIndex = "data/reference/kosis_table_summary.csv",
     [string]$OutputDir = "outputs\runs\locked_v1_lexical_topk"
 )
 

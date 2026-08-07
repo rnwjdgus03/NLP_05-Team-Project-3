@@ -568,8 +568,8 @@ BGE-M3 58.3%, 임베딩 단독 히트 0건)과 방향이 일치한다.
 4. C 를 `--trust-downstream-validation` 으로 재실행해 회수판 13건과 like-for-like 비교
 5. PROVISIONAL 승격 규칙 구현 및 수동 검수 Precision 측정
 
-진단 재현 스크립트: `colab_cell11_why_chroma_missed.py`(원인 분류),
-`colab_cell12_index_coverage.py`(인덱스 커버리지), `colab_cell13_which_filter.py`(술어 특정).
+진단 재현 셀: `notebooks/archive/cells/colab_cell11_why_chroma_missed.txt`(원인 분류),
+`notebooks/archive/cells/colab_cell12_index_coverage.txt`(인덱스 커버리지), `notebooks/archive/cells/colab_cell13_which_filter.txt`(술어 특정).
 셋 다 KOSIS API 호출 없이 기존 CSV 만 읽는다.
 
 ---

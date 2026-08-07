@@ -81,6 +81,38 @@ GENERIC_AXIS_TARGET_NAMES = frozenset({
     "지수", "금액", "수치", "값", "전년", "전월", "월", "연간", "분기",
 })
 
+# OBJ 값이 문장에 우연히 등장했다는 이유만으로 target 으로 쓰면 안 되는
+# 지표·시점·비교 표현. 홀드아웃5에서 '고용', '실업률', 'GDP', '수출',
+# '가장', '1월', '9월'이 실제 분류 대상처럼 잡혀 집계 우선을 껐다.
+# 이 목록은 좌표 후보의 점수를 조정하는 것이 아니라, 대상의 종류가 아닌 말을
+# target 신호에서 제외하는 보수적 타입 가드다.
+NON_TARGET_TERM_NAMES = frozenset({
+    *GENERIC_AXIS_TARGET_NAMES,
+    "gdp", "국내총생산",
+    "고용", "고용률", "실업", "실업률", "취업", "취업자", "취업자수",
+    "수출", "수입", "수출액", "수입액", "무역", "무역수지",
+    "생산", "생산량", "생산액", "판매", "판매량", "판매액",
+    "거래", "거래량", "거래액", "거래대금", "매출", "매출액",
+    "가격", "물가", "소득", "성장", "성장률", "규모",
+    "가장", "최고", "최저", "최대", "최소", "역대", "상위", "하위",
+})
+
+# 문장과 우연히 겹친 OBJ 값을 target 으로 승격할 수 있는 분류축만 허용한다.
+# 국가·지역·산업·품목·인구집단이라는 사전등록 범위에 대응한다.
+TARGET_AXIS_NAME_MARKERS = (
+    "국가", "국적", "지역", "권역", "시도", "시군구", "도시", "소재지",
+    "산업", "업종", "품목", "상품", "재화", "서비스", "직업",
+    "연령", "성별", "인구", "가구", "계층", "세대", "대상",
+)
+
+_TARGET_FIELD_SPLIT_RE = re.compile(
+    r"\s*(?:,|·|/|\|)\s*|\s+(?:및|와|과)\s+"
+)
+_TEMPORAL_TARGET_RE = re.compile(
+    r"^(?:\d{1,4}(?:년|월|일|분기|주|주차)|[1-4]분기|"
+    r"올해|작년|지난해|금년|전년|전월|당월|이번달|지난달)$"
+)
+
 _DEFAULT_REGION_TERMS = frozenset({
     "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
     "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
@@ -96,6 +128,10 @@ def normalize_obj_name(value: Any) -> str:
 
 
 _AGGREGATE_NORMALIZED = frozenset(normalize_obj_name(n) for n in AGGREGATE_OBJ_NAMES)
+_NON_TARGET_NORMALIZED = frozenset(normalize_obj_name(n) for n in NON_TARGET_TERM_NAMES)
+_TARGET_AXIS_MARKERS_NORMALIZED = tuple(
+    normalize_obj_name(marker) for marker in TARGET_AXIS_NAME_MARKERS
+)
 
 
 def is_aggregate_name(value: Any) -> bool:
@@ -153,6 +189,51 @@ def _canonical_target(value: Any) -> str:
     return normalized
 
 
+def _target_term_allowed(value: Any) -> bool:
+    """국가·지역·산업·품목·인구집단이 아닌 명백한 말을 제외한다."""
+    raw = _text(value)
+    normalized = normalize_obj_name(raw)
+    if (not normalized or len(normalized) < 2 or normalized.isdigit()
+            or is_aggregate_name(raw)):
+        return False
+    if normalized in _NON_TARGET_NORMALIZED:
+        return False
+    return not _TEMPORAL_TARGET_RE.fullmatch(normalized)
+
+
+def _structured_target_parts(value: Any) -> tuple[str, ...]:
+    """쉼표 등으로 묶인 복수 대상을 각각 분리한다.
+
+    '제조업, 도소매업'과 '폴란드, 말레이시아'를 하나의 존재하지 않는
+    결합 축 값으로 만들지 않는다.
+    """
+    raw = _text(value)
+    if not raw:
+        return ()
+    parts = tuple(part for part in _TARGET_FIELD_SPLIT_RE.split(raw) if part)
+    return parts or (raw,)
+
+
+def _axis_value_and_name(value: Any) -> tuple[str, str]:
+    if isinstance(value, Mapping):
+        raw = _text(value.get("name") or value.get("value") or value.get("code_name"))
+        axis_name = _text(value.get("axis_name") or value.get("obj_axis_name"))
+        return raw, axis_name
+    return _text(value), ""
+
+
+def _axis_can_define_target(axis_name: Any) -> bool:
+    """분류축의 의미가 target 허용 범위에 드는가.
+
+    축 이름이 없는 직접 호출은 기존 API 호환을 위해 값 자체의 가드에 맡긴다.
+    실제 검색 경로는 항상 축 이름을 함께 넘긴다.
+    """
+    normalized = normalize_obj_name(axis_name)
+    if not normalized:
+        return True
+    return any(marker in normalized for marker in _TARGET_AXIS_MARKERS_NORMALIZED)
+
+
 def _region_is_mentioned(text: str, region: str) -> bool:
     normalized_text = normalize_obj_name(text)
     normalized_region = normalize_obj_name(region)
@@ -192,12 +273,12 @@ def claim_target_terms(
     terms: set[str] = set()
 
     for field in TARGET_FIELDS:
-        raw = _text(row.get(field))
-        if not raw or raw in AGGREGATE_ITEM_TOKENS:
-            continue
-        canonical = _canonical_target(raw)
-        if canonical:
-            terms.add(canonical)
+        for raw in _structured_target_parts(row.get(field)):
+            if raw in AGGREGATE_ITEM_TOKENS or not _target_term_allowed(raw):
+                continue
+            canonical = _canonical_target(raw)
+            if canonical:
+                terms.add(canonical)
 
     for alias, canonical in FOREIGN_COUNTRY_ALIASES.items():
         if _country_alias_is_mentioned(normalized_text, alias):
@@ -207,12 +288,10 @@ def claim_target_terms(
         if _region_is_mentioned(text, region):
             terms.add(normalize_obj_name(region))
 
-    generic = {normalize_obj_name(value) for value in GENERIC_AXIS_TARGET_NAMES}
     for value in axis_values:
-        raw = _text(value)
+        raw, axis_name = _axis_value_and_name(value)
         normalized = normalize_obj_name(raw)
-        if (len(normalized) < 2 or normalized.isdigit() or is_aggregate_name(raw)
-                or normalized in generic):
+        if not _axis_can_define_target(axis_name) or not _target_term_allowed(raw):
             continue
         if normalized in normalized_text:
             terms.add(_canonical_target(raw))

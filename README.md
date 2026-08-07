@@ -6,7 +6,7 @@ AI 기반 뉴스 수치 주장 추출 및 KOSIS 사실검증 PoC입니다.
 
 ## 팀 구성
 
-- A팀: 조선일보 뉴스 데이터 기반 주장 추출
+- A팀(오가연, 김은결): 조선일보 뉴스 데이터 기반 주장 추출
 - B팀(김진성, 구정현): KOSIS 통계표 탐색, 메타 분석, claim 매핑 및 검증
 
 두 영역은 `claim_id`와 측정값별 `claim_measurement_id`로 연결됩니다.
@@ -80,16 +80,18 @@ KOSIS_API_KEY=발급받은_실제_키
 data/raw/           원본 기사 CSV
 data/inputs/        전처리·HCX 입력 CSV(로컬 생성)
 data/claims/        코드북과 기존 claim 기준 데이터
+data/reference/     KOSIS 표·메타 기준 인덱스
+data/gold/          잠긴 골드 CSV와 manifest
 data/archive/       실전1 입력 및 과거 데이터
-outputs/runs/       실전2 API 실행·감사 결과(로컬 생성)
-outputs/archive/    회귀 기준 및 중단·롤백 산출물
-outputs/bteam_*/    실전1 골드·홀드아웃·검증 결과
-docs/               KOSIS 파라미터 가이드와 보고서
+scripts/gold/       자동 골드 생성·Excel 변환 도구
+scripts/experiments/ 독립 실험 도구
+outputs/            로컬 실행 결과(Git 비추적, gold 검토본 제외)
+docs/               현행 가이드·보고서와 과거 Markdown 보관본
 legacy/             실전1 완료 스크립트
 tests/              현행 회귀 테스트
 ```
 
-`data/inputs/*.csv`, `outputs/runs/*.csv`, `outputs/runs/*.json`은 `.gitignore` 대상입니다. 실행 코드는 루트에 두고, 재현에 필요한 코드·테스트·작은 회귀 기준만 Git으로 관리합니다.
+재생성 가능한 `outputs/` 산출물은 `.gitignore` 대상입니다. 실행 코드·테스트·작은 회귀 기준과 골드 CSV·manifest만 Git으로 관리합니다. 자세한 현재 구조는 [`docs/file_structure.md`](docs/file_structure.md)를 참고하세요.
 
 ## 실행 방법
 
@@ -253,11 +255,11 @@ Colab GPU 재현은
 
 #### 통계표 임베딩 인덱스 최초 1회 생성
 
-`kosis_table_summary.csv`가 바뀌지 않는 동안 인덱스는 다시 만들 필요가 없습니다.
+`data/reference/kosis_table_summary.csv`가 바뀌지 않는 동안 인덱스는 다시 만들 필요가 없습니다.
 
 ```powershell
 python kosis_build_embedding_index.py `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --out-dir "data\indexes\kosis_bge_m3" `
   --embedding-model "BAAI/bge-m3" `
   --device cuda
@@ -279,7 +281,7 @@ manifest.json
 ```
 
 `manifest.json`에는 사용 모델, 행 수, 차원, 원본 통계표 SHA-256이 기록됩니다. 현재
-`kosis_table_summary.csv`와 해시나 행 수가 다르면 파이프라인은 오래된 인덱스를
+`data/reference/kosis_table_summary.csv`와 해시나 행 수가 다르면 파이프라인은 오래된 인덱스를
 사용하지 않고 재생성을 요구합니다.
 
 #### 하이브리드 검색과 검증
@@ -287,7 +289,7 @@ manifest.json
 ```powershell
 python run_kosis_measurement_pipeline.py `
   --input "outputs\runs\hcx_extracted_handoff_100_v15.csv" `
-  --table-index "kosis_table_summary.csv" `
+  --table-index "data/reference/kosis_table_summary.csv" `
   --out-dir "outputs\runs\kosis_v2" `
   --retrieval-mode hybrid `
   --semantic-index "data\indexes\kosis_bge_m3" `
@@ -516,7 +518,7 @@ v1.3에서 `value=-`였던 45개 claim을 고정 표본으로 다시 실행했�
 
 ### 정현님 전달 표본
 
-현재 전달 파일은 `outputs/runs/hcx_extracted_handoff_100_v15.csv`입니다.
+전달 파일의 기본 생성 경로는 `outputs/runs/hcx_extracted_handoff_100_v15.csv`입니다.
 
 | 항목 | 결과 |
 |---|---:|
@@ -712,9 +714,9 @@ ChromaDB 실험은 상류에서 얻은 통계표 Top-K 안에서 **ITEM/OBJ 좌�
 
 ## Legacy와 이력
 
-실전1의 TF-IDF 후보 매칭, 수동 obj/item 보완, 골드·홀드아웃 평가 스크립트는 `legacy/`와 `outputs/bteam_*`에 보존합니다. 과거 산출물은 방법론 비교와 회귀 참고용이며, 현행 실행 순서는 이 README의 실전2 파이프라인을 기준으로 합니다.
+실전1의 TF-IDF 후보 매칭과 수동 obj/item 보완 코드는 `legacy/`에 보존합니다. 과거 `outputs/bteam_*`의 Markdown 보고서는 `docs/archive/legacy_outputs/`로 옮겼고, 재생성 가능한 대용량 CSV·XLSX는 현재 브랜치에서 제거했습니다. 필요한 원본은 Git 과거 커밋에서 복구할 수 있습니다.
 
-상세 폴더 설명은 `docs/file_structure.md`, B팀 기존 파이프라인 기록은 `docs/docs_bteam_pipeline.md`, 선행 연구와 방법론은 `docs_참고문헌_방법론.md`를 참고합니다.
+상세 폴더 설명은 `docs/file_structure.md`, B팀 기존 파이프라인 기록은 `docs/archive/docs_bteam_pipeline.md`, 선행 연구와 방법론은 `docs/참고문헌_방법론.md`를 참고합니다.
 
 ## 문맥 보존형 파이프라인
 

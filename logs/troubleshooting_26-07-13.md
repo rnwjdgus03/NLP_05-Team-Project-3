@@ -25,7 +25,7 @@
 
 ## 4. KOSIS 메타정보 단위가 `확인 불가`로 많이 나온 문제
 
-- 상황: `kosis_metadata_summary.csv`, `kosis_metadata_summary_팀원이름.csv`에서 일부 표의 단위가 `확인 불가`로 표시됨.
+- 상황: `data/reference/kosis_metadata_summary.csv`, `kosis_metadata_summary_팀원이름.csv`에서 일부 표의 단위가 `확인 불가`로 표시됨.
 - 원인:
   - 메타 API는 분류축/항목 코드는 알려주지만, 단위는 실제 데이터 조회까지 해야 확인되는 경우가 있음.
   - 일부 표는 `obj_l1`, `itm_id`, 시점 파라미터가 정확히 맞지 않으면 실제 데이터가 안 나옴.
@@ -346,7 +346,7 @@
   - `outputs/bteam_review/bteam_kosis_review_summary.csv`
   - `outputs/bteam_review/bteam_kosis_tbl_meta_candidates.csv`
   - `outputs/bteam_review/bteam_kosis_codebook_needed.csv`
-  - `docs/docs_bteam_pipeline.md`
+  - `docs/archive/docs_bteam_pipeline.md`
   - `docs/kosis_param_guide.md`
   - `docs/templates/통계표_관찰_템플릿.xlsx`
   - `data/archive/claim_candidates_from_xlsx.csv`
@@ -356,8 +356,8 @@
   - `data/archive/kosis_metadata_summary_팀원이름.csv`
   - `data/archive/뉴스_노이즈_제거_파이프라인 (1).ipynb`
 - 루트에 남긴 핵심 파일:
-  - `kosis_table_summary.csv`: 107,138개 KOSIS 표 인덱스, 여러 스크립트 기본 입력
-  - `kosis_metadata_summary.csv`: 주요 후보표 메타 요약
+  - `data/reference/kosis_table_summary.csv`: 107,138개 KOSIS 표 인덱스, 여러 스크립트 기본 입력
+  - `data/reference/kosis_metadata_summary.csv`: 주요 후보표 메타 요약
   - `kosis_api_test.py`, `kosis_table_search.py`, `match_claims_to_tables.py`, `verify_claim.py` 등 실행 코드
 - 삭제한 파일:
   - `__pycache__/`
