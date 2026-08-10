@@ -11,6 +11,36 @@ AI 기반 뉴스 수치 주장 추출 및 KOSIS 사실검증 PoC입니다.
 
 두 영역은 `claim_id`와 측정값별 `claim_measurement_id`로 연결됩니다.
 
+## 최신 개발 상태 (2026-08-10)
+
+현재 개발 기준선은 `codex/repro-baseline-20260727` 브랜치의 `25a9dbb`이며,
+기사 원문부터 HCX 측정값 추출, KOSIS 표 검색, ITEM/OBJ/기간 좌표 선택, 실제값
+검증까지 재현하는 경로를 유지합니다. 다만 아래 수치는 제품 성능이 아니라
+**개발용 홀드아웃8의 KOSIS MCP 실제 좌표 9건**에 대한 단계별 진단 결과입니다.
+
+| 버전 | 변경 범위 | 표 Recall@10 | 최종 표 정확도 | ITEM 정확도 | 기간 정확도 | 완전 좌표 정확도 |
+|---|---|---:|---:|---:|---:|---:|
+| v6 | 대상축·주기·파생률 게이트와 좌표 재순위 | 22.22% | 22.22% | 0.00% | 55.56% | 0.00% |
+| v7 | HCX 고정, 표 후보 Top-10과 좌표 후보 확대 | 22.22% | 22.22% | 11.11% | 66.67% | 11.11% |
+| v8 | 검색·좌표 규칙만 재실행하는 사전등록 실험 | 결과 대기 | 결과 대기 | 결과 대기 | 결과 대기 | 결과 대기 |
+
+v7에서 정답 표 9건 중 7건이 1차 Top-10 후보에 없었으므로 현재 가장 큰 병목은
+**KOSIS 통계표 검색 재현율**입니다. 단순히 후보 수를 5개에서 10개로 늘리는 것만으로는
+개선되지 않았습니다. v8은 같은 HCX 체크포인트를 고정한 채 다음 항목만 평가합니다.
+
+- 주장에 없는 국가·지역·연령·성별·학력·계절조정 축 감점
+- 주장 주기와 통계표 월·분기·연간 표현의 일치 가점
+- 경상수지·국제수지 공식 계열 확장어와 lexical 상위 후보 보존
+- 표별 최소 좌표 보존, 전역 좌표 후보 확대, 정규직·비정규직 정확 구분
+- 표 검색 순위와 좌표 선택 순위를 분리한 단계별 채점
+
+상세 근거는 [`v6 GPU 결과`](docs/holdout8_v6_gpu_result_20260809.md),
+[`v7 GPU 결과`](docs/holdout8_v7_gpu_result_20260809.md),
+[`v8 사전등록`](docs/holdout8_v8_prereg_20260809.md)을 참고합니다. v8 결과가 나오기
+전에는 같은 홀드아웃의 실패 사례를 보고 규칙을 더 추가하지 않습니다. 이후에는
+새 기사 100~200건을 독립 홀드아웃으로 잠그고 extraction → gate → table → ITEM →
+OBJ → period → verdict를 분리 평가해야 합니다.
+
 ## 현행 파이프라인
 
 ```text
@@ -619,11 +649,12 @@ locked gold와의 verdict 일치는 3/5다. 나머지 2건은 차이가 각각 0
 ### 테스트
 
 ```powershell
-pytest
+python -m pytest -q
 ```
 
-`Poc@6ceb3ff` 기준은 `117 passed`, Mapping-end 선택 통합 후 현재 재현 브랜치는
-`120 passed`입니다.
+README에는 계속 낡아지는 누적 테스트 개수를 고정하지 않습니다. 변경 시 위 명령과
+관련 홀드아웃 패킷의 manifest·SHA-256 검증을 함께 실행하고, 해당 시점의 결과는
+버전별 보고서에 기록합니다.
 
 브랜치, locked gold, 파일 해시와 KOSIS 좌표 검증 재현 절차는
 [`docs/reproducibility_baseline_20260727.md`](docs/reproducibility_baseline_20260727.md)를
@@ -653,15 +684,17 @@ python measurement_regression.py audit `
 
 ## 현재 한계와 다음 작업
 
-1. 반도체·석유화학·바이오헬스·농수산식품·화장품과 LCC/대형 항공사 묶음 14행은 단일 OBJ가 아니라 코드셋 합산 규칙이 필요합니다.
-2. 무역수지는 수출액-수입액 계산식을 추가해야 합니다.
-3. 정비사 4행은 현재 후보 표에 의미가 맞는 ITEM이 없습니다. KOSIS 다른 표를 재탐색하고 없으면 국토교통부 등 다른 공식 출처 대상으로 분리합니다.
-4. 기간이 문장에 없는 KOSIS_VALUE 12행은 계속 자동매핑에서 제외합니다.
+1. 홀드아웃8의 MCP 실제 좌표 골드는 9건뿐이고 이미 규칙 개발에 사용했으므로 최종 일반화 성능으로 보고할 수 없습니다.
+2. v7 기준 정답 표 9건 중 7건이 Top-10에 없어 좌표 선택보다 상류 통계표 검색이 먼저 병목입니다.
+3. ITEM·OBJ·기간의 완전 좌표 정확도는 11.11%로, API 성공이나 값의 유사성만으로 자동 확정하면 안 됩니다.
+4. 검색·좌표 점수는 보정된 확률이 아니라 수작업 feature의 합이므로 READY 임계값은 독립 validation에서 precision–coverage 곡선으로 정해야 합니다.
+5. v8 실행과 결과 보존을 끝낸 뒤 같은 홀드아웃에 추가 보정하지 않고, 새 기사 100~200건의 독립 홀드아웃을 동결해 단계별 기준선을 측정합니다.
+6. 무역수지 계산식과 품목 코드셋처럼 단일 KOSIS 좌표로 표현할 수 없는 주장은 별도 계산·집계 경로로 분리합니다.
 
 ## KOSIS 보조 도구
 
 - `kosis_api_test.py`: KOSIS 목록·통계자료 API 기본 호출과 응답 파싱
-- `prepare_kosis_mapping_input.py`: measurement 표준 단위·의미·기간 정규화 및 22행 입력 게이트
+- `prepare_kosis_mapping_input.py`: measurement 표준 단위·의미·기간 정규화 및 입력 게이트
 - `kosis_build_embedding_index.py`: BGE-M3 기반 KOSIS 통계표 dense index 최초 생성
 - `kosis_semantic_search.py`: dense retrieval, RRF hybrid fusion, 다국어 cross-encoder rerank
 - `kosis_match_claims_to_index.py`: measurement 중심 통계표·ITEM·OBJ 후보와 READY/REVIEW/REJECT 판정
