@@ -114,3 +114,35 @@ def test_changing_a_rule_changes_the_manifest(tmp_path, monkeypatch):
     before = module.rule_snapshot()
     monkeypatch.setattr(module, "FOREIGN_MARKET", ("비트코인", "새규칙"))
     assert module.rule_snapshot() != before
+
+
+def test_declared_single_company_scope_propagates_to_anaphoric_financials():
+    rows = [
+        _row(
+            "C1",
+            "기아는 지난해 연결 기준 매출 107조원을 기록했다.",
+            article_id="A1",
+            claim_domain_scope="개별기업",
+        ),
+        _row(
+            "C2",
+            "한편 지난해 4분기 매출은 27조원으로 집계됐다.",
+            article_id="A1",
+            claim_domain_scope="국내공식통계",
+        ),
+    ]
+    kept, dropped = apply_gate(rows)
+    assert kept == []
+    assert {row["claim_measurement_id"] for row in dropped} == {"C1", "C2"}
+    assert {row["scope_gate_code"] for row in dropped} == {"DECLARED_SINGLE_COMPANY"}
+
+
+def test_company_bond_maturity_is_not_a_kosis_measurement():
+    row = _row(
+        "B1",
+        "1900억원 규모의 한전채 3년물은 오는 27일 만기를 맞는다.",
+        unit="원",
+    )
+    kept, dropped = apply_gate([row])
+    assert kept == []
+    assert dropped[0]["scope_gate_code"] == "FINANCIAL_INSTRUMENT_VALUE"

@@ -91,6 +91,20 @@ INTERNAL_DOCUMENT = ("제출받은 자료", "제출한 자료", "제출받은", 
                      "입수한 자료", "확보한 자료", "단독 입수", "내부 자료",
                      "본지가", "본지 분석")
 
+# HCX가 문장 자체를 개별기업 범위로 분류한 경우에는 회사명 사전에 없는
+# 기업이어도 KOSIS 공식 통계 대상이 아니다. 같은 기사에서 회사명이 생략된
+# "한편 4분기 매출은..." 같은 후속 문장까지 막기 위해 기사 범위 코드로 쓴다.
+DECLARED_NON_KOSIS_SCOPE = ("개별기업",)
+
+# 특정 채권·기업어음의 발행·만기·거래 수치는 금융시장 원자료이지 KOSIS
+# 통계표의 관측값이 아니다. 금융상품과 거래/발행 문맥이 함께 있을 때만 막는다.
+FINANCIAL_INSTRUMENT = (
+    "회사채", "은행채", "한전채", "통안채", "특수채", "기업어음", "전자단기사채",
+)
+FINANCIAL_INSTRUMENT_METRIC = (
+    "만기", "발행", "상환", "거래", "수익률", "금리", "스프레드", "잔액", "물량", "규모",
+)
+
 # KOSIS 에 수록되지 않는 것이 확실한 국제기구 통계.
 # OECD·IMF 등은 KOSIS 국제통계에 일부 수록되므로 여기 넣지 않는다.
 FOREIGN_ORG_ONLY = ("국제로봇연맹", "ifr", "international federation of robotics")
@@ -273,6 +287,18 @@ def single_company_metric(claim_text: str, row: Mapping[str, Any]):
     if company:
         return ("SINGLE_COMPANY_METRIC",
                 f"개별 기업({company}) 실적 — KOSIS 는 산업 집계만 수록", REJECT)
+    title = _lower(row.get("title"))
+    title_company = _has(title, SINGLE_COMPANY)
+    metric = _has(
+        " ".join((claim_text, _first(row, "measurement_indicator", "indicator"))),
+        COMPANY_METRIC,
+    )
+    if title_company and metric:
+        return (
+            "SINGLE_COMPANY_METRIC",
+            f"기사 제목의 개별 기업({title_company})과 실적 지표({metric})가 결합됨",
+            REJECT,
+        )
     company = _has(claim_text, SINGLE_COMPANY)
     if not company:
         return None
@@ -345,7 +371,34 @@ def foreign_organization_source(claim_text: str, row: Mapping[str, Any]):
     return None
 
 
-DETECTORS = (foreign_market, global_scope, forecast_or_plan,
+def declared_non_kosis_scope(claim_text: str, row: Mapping[str, Any]):
+    """신뢰도 높은 HCX 개별기업 범위 신호를 기사 전파용으로 보존한다."""
+    scope = _first(row, "claim_domain_scope")
+    hit = _has(scope, DECLARED_NON_KOSIS_SCOPE)
+    if hit:
+        return (
+            "DECLARED_SINGLE_COMPANY",
+            f"claim_domain_scope={hit}: 개별기업 수치는 KOSIS 산업 집계와 다름",
+            REJECT,
+        )
+    return None
+
+
+def financial_instrument_value(claim_text: str, row: Mapping[str, Any]):
+    """개별 채권·기업어음의 발행/만기/거래 수치를 KOSIS 대상에서 제외한다."""
+    instrument = _has(claim_text, FINANCIAL_INSTRUMENT)
+    metric = _has(claim_text, FINANCIAL_INSTRUMENT_METRIC)
+    if instrument and metric:
+        return (
+            "FINANCIAL_INSTRUMENT_VALUE",
+            f"금융상품({instrument})의 {metric} 수치는 KOSIS 공식 통계 관측값이 아님",
+            REJECT,
+        )
+    return None
+
+
+DETECTORS = (declared_non_kosis_scope, financial_instrument_value,
+             foreign_market, global_scope, forecast_or_plan,
              policy_parameter, branded_product_price, derived_difference,
              derived_indicator, intraday_market_rate, single_company_metric,
              enumerated_companies, internal_document_source,
@@ -413,13 +466,14 @@ def has_own_source(claim_text: str) -> bool:
 ARTICLE_SCOPE_CODES = frozenset({
     "OUT_OF_KOSIS_SCOPE", "FOREIGN_ORG_SOURCE", "INTERNAL_DOCUMENT_SOURCE",
     "ENUMERATED_COMPANIES", "SINGLE_COMPANY_METRIC", "FOREIGN_MARKET_VALUE",
+    "DECLARED_SINGLE_COMPANY", "FINANCIAL_INSTRUMENT_VALUE",
 })
 
 # 앞 문장에 기대는 문장. 이 목록을 넓히면 정당한 문장이 죽는다 —
 # 추출 프롬프트에서 규칙을 넓혔다가 대상 있음이 50% -> 22% 로 떨어진 전례가 있다.
 # 넓히기 전에 반드시 88건 전수로 재고, 확정 건이 하나도 안 빠지는지 확인할 것.
 ANAPHORIC_OPENERS = ("이는", "이 ", "그 ", "해당", "분야는", "전체", "나머지",
-                     "이중", "이 중", "그중", "그 중", "반면", "또한", "아울러")
+                     "이중", "이 중", "그중", "그 중", "반면", "한편", "또한", "아울러")
 
 
 def starts_with_anaphor(claim_text: str) -> bool:
@@ -448,17 +502,28 @@ def propagate_by_article(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, st
     """
     decisions = [dict(gate_decision(row)) for row in rows]
     source_of: dict[str, tuple[str, str]] = {}
+    scope_of: dict[str, tuple[str, str]] = {}
     for row, decision in zip(rows, decisions):
         article = _text(row.get("article_id"))
         if article and decision["scope_gate_code"] in ARTICLE_SCOPED_CODES:
             source_of.setdefault(article, (decision["scope_gate_code"],
                                            decision["scope_gate_reason"]))
+        if article and decision["scope_gate_code"] in ARTICLE_SCOPE_CODES:
+            scope_of.setdefault(article, (decision["scope_gate_code"],
+                                          decision["scope_gate_reason"]))
     for row, decision in zip(rows, decisions):
         decision.setdefault("scope_gate_propagated", "N")
         decision.setdefault("article_source_hint", "")
         if decision["scope_gate_blocked"] == "Y":
             continue
-        found = source_of.get(_text(row.get("article_id")))
+        article = _text(row.get("article_id"))
+        found = source_of.get(article)
+        if not found:
+            found = scope_of.get(article)
+            # 주제 범위는 기사 전체로 무조건 번지지 않는다. 앞 문장의 주체를
+            # 이어받는 문장에만 적용해 산업 집계 문장까지 지우는 오탐을 막는다.
+            if found and not starts_with_anaphor(_text(row.get("claim_text"))):
+                found = None
         if not found:
             continue
         code, reason = found

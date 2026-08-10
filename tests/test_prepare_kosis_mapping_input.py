@@ -130,6 +130,28 @@ def test_explicit_comparison_year_beats_incorrect_change_base():
         )
     )
     assert out["comparison_period"] == "2019"
+    assert out["mapping_gate"] == "ENRICH"
+    assert out["mapping_exclusion_code"] == "DERIVED_VALUE_REQUIRES_COMPUTATION"
+
+
+def test_derived_change_rate_is_not_ready_but_level_rate_remains_ready():
+    derived = normalize_row(
+        measurement_row(
+            measurement_indicator="혼인 건수 증감률", value="53.2", unit="%",
+            value_type="증감률", measurement_role="증감률",
+        )
+    )
+    assert derived["mapping_gate"] == "ENRICH"
+    assert derived["mapping_eligible"] == "N"
+    assert derived["enrichment_actions"] == "VERIFY_DIRECT_RATE_ITEM_OR_COMPUTE_FROM_LEVELS"
+
+    direct = normalize_row(
+        measurement_row(
+            measurement_indicator="실업률", value="3.1", unit="%",
+            value_type="비율", measurement_role="현재값",
+        )
+    )
+    assert direct["mapping_gate"] == "READY"
 
 
 def test_change_rate_bound_to_base_period_is_aligned_to_claim_target():
@@ -159,7 +181,8 @@ def test_change_rate_bound_to_base_period_is_aligned_to_claim_target():
     assert out["raw_measurement_period"] == "202401"
     assert out["period"] == "202501"
     assert out["comparison_period"] == "202401"
-    assert out["mapping_gate"] == "READY"
+    assert out["mapping_gate"] == "ENRICH"
+    assert out["mapping_exclusion_code"] == "DERIVED_VALUE_REQUIRES_COMPUTATION"
 
 
 def test_prepare_writes_ready_and_rejected_files(tmp_path):

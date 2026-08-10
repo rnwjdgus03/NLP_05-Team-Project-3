@@ -61,8 +61,12 @@ def float_value(row: Mapping[str, str], field: str) -> float:
 def item_intent_terms(claim: Mapping[str, str]) -> tuple[str, ...]:
     text = clean(claim.get("claim_text"))
     indicator = clean(claim.get("item_intent_terms") or claim.get("measurement_indicator") or claim.get("indicator"))
-    terms = [indicator] if indicator else []
+    terms = [indicator] if indicator and indicator != "-" else []
+    role = clean(claim.get("measurement_role"))
+    value_type = clean(claim.get("value_type"))
     semantic = clean(claim.get("semantic_type") or claim.get("claim_type")).upper()
+    if role == "증감값" or value_type == "증감량" or semantic == "ABSOLUTE_CHANGE":
+        terms.insert(0, "증감")
     if "RATE" in semantic:
         if re.search(r"전월|전달", text):
             terms.insert(0, "전월비")
@@ -78,6 +82,14 @@ def item_match_score(claim: Mapping[str, str], candidate: Mapping[str, str]) -> 
     terms = item_intent_terms(claim)
     matched = [term for term in terms if normalized(term) in item_name or item_name in normalized(term)]
     score = 120.0 if matched else 0.0
+    role = clean(claim.get("measurement_role"))
+    value_type = clean(claim.get("value_type"))
+    semantic = clean(claim.get("semantic_type")).upper()
+    if role == "증감값" or value_type == "증감량" or semantic == "ABSOLUTE_CHANGE":
+        if "증감" in item_name and "증감률" not in item_name:
+            score += 180.0
+        elif "증감률" in item_name:
+            score -= 120.0
     # A candidate already ranked well by dense/lexical/reranker remains the
     # fallback when the article does not expose an item name explicitly.
     score += 25.0 / math.log2(rank_value(candidate, "table_rank") + 1.0)
@@ -99,7 +111,10 @@ def is_aggregate_candidate(candidate: Mapping[str, str]) -> bool:
 def obj_target_terms(claim: Mapping[str, str]) -> tuple[str, ...]:
     raw = clean(claim.get("obj_target_terms"))
     if raw:
-        return tuple(term for term in raw.split("|") if term)
+        return tuple(
+            term for term in raw.split("|")
+            if term and term != "-" and normalized(term)
+        )
     return tuple(
         term
         for term in (
@@ -107,21 +122,47 @@ def obj_target_terms(claim: Mapping[str, str]) -> tuple[str, ...]:
             clean(claim.get("region")), clean(claim.get("age_group")), clean(claim.get("gender")),
             clean(claim.get("industry_or_item") or claim.get("measurement_item")),
         )
-        if term
+        if term and term != "-" and normalized(term)
     )
 
 
-def obj_match_score(claim: Mapping[str, str], candidate: Mapping[str, str]) -> tuple[float, bool, bool]:
+def obj_term_matches(term: str, selected_name: str) -> bool:
+    target = normalized(term)
+    selected = normalized(selected_name)
+    if not target or not selected:
+        return False
+    # '정규직'은 '비정규직'의 부분 문자열이지만 서로 다른 KOSIS OBJ다.
+    if target == "정규직" and "비정규직" in selected:
+        return False
+    if target == "비정규직" and selected == "정규직":
+        return False
+    if target == selected:
+        return True
+    # 행정구역 접미사와 연령/품목의 설명형 코드명은 부분 일치를 허용한다.
+    if selected in {target + "시", target + "도", target + "군", target + "구"}:
+        return True
+    return len(target) >= 3 and (target in selected or selected in target)
+
+
+def obj_match_score(
+    claim: Mapping[str, str], candidate: Mapping[str, str]
+) -> tuple[float, bool, bool, tuple[str, ...]]:
     targets = obj_target_terms(claim)
-    selected = normalized(" ".join(obj_names(candidate)))
-    matched = bool(targets) and all(normalized(term) in selected for term in targets)
+    selected_names = obj_names(candidate)
+    matched_terms = tuple(
+        term for term in targets
+        if any(obj_term_matches(term, name) for name in selected_names)
+    )
+    matched = bool(targets) and len(matched_terms) == len(targets)
     aggregate = is_aggregate_candidate(candidate)
     if targets:
-        score = 160.0 if matched else 0.0
+        # Partial axis coverage is meaningful when a table separates region,
+        # gender and age across several OBJ levels.
+        score = 160.0 * len(matched_terms) / len(targets)
     else:
         score = 100.0 if aggregate else 0.0
     score += 5.0 / math.log2(rank_value(candidate, "candidate_rank") + 1.0)
-    return score, matched, aggregate
+    return score, matched, aggregate, matched_terms
 
 
 def select_two_stage(
@@ -134,13 +175,6 @@ def select_two_stage(
         return None
     baseline = min(candidates, key=lambda row: rank_value(row, "candidate_rank"))
     baseline_table = (clean(baseline.get("org_id")), clean(baseline.get("tbl_id")))
-    # The upstream table/coordinate search already decides which table wins.
-    # Keep that decision fixed so ITEM/OBJ decomposition cannot silently turn
-    # a correct table into a wrong one.
-    candidates = [
-        row for row in candidates
-        if (clean(row.get("org_id")), clean(row.get("tbl_id"))) == baseline_table
-    ]
     item_groups: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for candidate in candidates:
         key = (
@@ -160,18 +194,30 @@ def select_two_stage(
     finalists = []
     for item_rank, (item_score, item_matched, key, rows) in enumerate(staged_items, 1):
         for row in rows:
-            obj_score, obj_matched, aggregate = obj_match_score(claim, row)
+            obj_score, obj_matched, aggregate, obj_matched_terms = obj_match_score(claim, row)
             final_score = item_score + obj_score
+            item_exact = bool(item_matched)
+            targets = obj_target_terms(claim)
+            obj_priority = len(obj_matched_terms) if targets else int(aggregate)
             finalists.append(
-                (final_score, -rank_value(row, "candidate_rank"), item_rank, item_score,
-                 item_matched, obj_score, obj_matched, aggregate, row)
+                (item_exact, obj_priority, final_score, -rank_value(row, "candidate_rank"),
+                 item_rank, item_score, item_matched, obj_score, obj_matched,
+                 aggregate, obj_matched_terms, row)
             )
     if not finalists:
         return None
-    selected = max(finalists, key=lambda value: value[:2])
-    _, _, item_rank, item_score, item_matched, obj_score, obj_matched, aggregate, row = selected
+    selected = max(finalists, key=lambda value: value[:4])
+    (
+        _, _, final_score, _, item_rank, item_score, item_matched, obj_score,
+        obj_matched, aggregate, obj_matched_terms, row,
+    ) = selected
     return {
         **row,
+        "period": clean(claim.get("period")) or clean(row.get("period")),
+        "prd_se": clean(claim.get("prd_se")) or clean(row.get("prd_se")),
+        "previous_period": clean(claim.get("previous_period")) or clean(row.get("previous_period")),
+        "comparison_period": clean(claim.get("comparison_period")) or clean(row.get("comparison_period")),
+        "period_extraction_source": clean(claim.get("period_extraction_source")),
         "candidate_rank": "1",
         "original_candidate_rank": clean(row.get("candidate_rank")),
         "two_stage_item_rank": str(item_rank),
@@ -179,12 +225,16 @@ def select_two_stage(
         "two_stage_item_matched_terms": item_matched,
         "two_stage_obj_score": str(obj_score),
         "two_stage_obj_target_terms": "|".join(obj_target_terms(claim)),
+        "two_stage_obj_matched_terms": "|".join(obj_matched_terms),
         "two_stage_obj_matched": "Y" if obj_matched else "N",
         "two_stage_obj_aggregate": "Y" if aggregate else "N",
-        "two_stage_final_score": str(selected[0]),
-        "selection_backend": "item_then_obj_v1",
-        "two_stage_preserved_org_id": baseline_table[0],
-        "two_stage_preserved_tbl_id": baseline_table[1],
+        "two_stage_final_score": str(final_score),
+        "selection_backend": "item_obj_first_v2",
+        "two_stage_baseline_org_id": baseline_table[0],
+        "two_stage_baseline_tbl_id": baseline_table[1],
+        "two_stage_table_changed": "Y" if (
+            clean(row.get("org_id")), clean(row.get("tbl_id"))
+        ) != baseline_table else "N",
     }
 
 

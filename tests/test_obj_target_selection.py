@@ -29,6 +29,11 @@ def test_ambiguous_country_shorthand_does_not_fire_without_trade_context():
     assert claim_target_terms({"claim_text": "이란 문장은 통계 주장이 아니다"}) == ()
 
 
+def test_regular_worker_target_does_not_match_nonregular_worker_axis():
+    assert target_terms_match_text(("정규직",), ["-비정규직"]) is False
+    assert target_terms_match_text(("정규직",), ["-정규직"]) is True
+
+
 def test_axis_value_recovers_sentence_only_item():
     claim = {"claim_text": "반도체 수출액은 10% 늘었다", "industry_or_item": ""}
     assert "반도체" in claim_target_terms(claim, ["계", "반도체", "자동차"])

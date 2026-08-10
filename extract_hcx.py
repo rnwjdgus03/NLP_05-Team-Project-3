@@ -486,7 +486,12 @@ def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4
                "X-NCP-CLOVASTUDIO-REQUEST-ID": str(uuid.uuid4()),
                "Content-Type": "application/json"}
     for i in range(retries):
-        r = requests.post(URL.format(model=model), headers=headers, json=body, timeout=90)
+        # 연결 자체는 빨리 실패시키고, 응답 본문은 최대 90초까지 기다린다.
+        # 단일 숫자 timeout은 DNS/연결 단계와 응답 단계를 구분하지 않아
+        # Colab에서 멈춘 것처럼 보이는 시간이 길어질 수 있다.
+        r = requests.post(
+            URL.format(model=model), headers=headers, json=body, timeout=(15, 90)
+        )
         if r.status_code == 429:
             time.sleep(5 * (i + 1)); continue
         r.raise_for_status()
@@ -931,7 +936,8 @@ def main():
             )
         print(
             f"retrieval_context={len(context_by_claim)} "
-            f"matched={sum(bool(c.get('_retrieval_context')) for c in claims)}"
+            f"matched={sum(bool(c.get('_retrieval_context')) for c in claims)}",
+            flush=True,
         )
     output_path = Path(a.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -945,7 +951,7 @@ def main():
                     "새 출력 경로를 쓰거나 --overwrite를 지정하세요."
                 )
             done = {r["claim_id"] for r in reader}
-        print(f"이어받기: {len(done)}건 완료됨")
+        print(f"이어받기: {len(done)}건 완료됨", flush=True)
 
     mode = "a" if done else "w"
     with output_path.open(mode, newline="", encoding="utf-8-sig") as f:
@@ -953,11 +959,16 @@ def main():
         if mode == "w":
             w.writeheader()
         n = 0
+        pending_total = sum(c["claim_id"] not in done for c in claims)
         for c in claims:
             if c["claim_id"] in done:
                 continue
             if a.limit and n >= a.limit:
                 break
+            print(
+                f"[{n + 1}/{pending_total}] {c['claim_id']} HCX 요청 시작",
+                flush=True,
+            )
             try:
                 result = extract_claim(key, a.model, c, effort=a.effort)
                 rows = to_rows(c, result, a.model)
@@ -966,12 +977,12 @@ def main():
                 fallback = result.get("_measurement_fallback_count", "0")
                 binding = result.get("_measurement_binding_fallback_count", "0")
                 period_removed = result.get("_measurement_period_removed_count", "0")
-                print(f"[{c['claim_id']}] ok ({len(rows)} 행, repair={repaired}, fallback={fallback}, binding={binding}, period_removed={period_removed})")
+                print(f"[{c['claim_id']}] ok ({len(rows)} 행, repair={repaired}, fallback={fallback}, binding={binding}, period_removed={period_removed})", flush=True)
             except Exception as e:
-                print(f"[{c['claim_id']}] 실패: {type(e).__name__}: {e}")
+                print(f"[{c['claim_id']}] 실패: {type(e).__name__}: {e}", flush=True)
             n += 1
             time.sleep(a.sleep)
-    print("완료 →", a.output)
+    print("완료 →", a.output, flush=True)
 
 
 if __name__ == "__main__":

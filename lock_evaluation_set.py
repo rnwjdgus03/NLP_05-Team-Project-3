@@ -35,6 +35,9 @@ from pathlib import Path
 from kosis_meta_coordinates import read_csv_rows
 from kosis_scope_gate import (
     DIFFERENCE_HINT,
+    DECLARED_NON_KOSIS_SCOPE,
+    FINANCIAL_INSTRUMENT,
+    FINANCIAL_INSTRUMENT_METRIC,
     FOREIGN_MARKET,
     GLOBAL_AGGREGATE,
     GLOBAL_CONTEXT,
@@ -85,6 +88,9 @@ def rule_snapshot() -> dict:
         "plan": list(PLAN),
         "policy_parameter": list(POLICY_PARAM),
         "difference_hint": list(DIFFERENCE_HINT),
+        "declared_non_kosis_scope": list(DECLARED_NON_KOSIS_SCOPE),
+        "financial_instrument": list(FINANCIAL_INSTRUMENT),
+        "financial_instrument_metric": list(FINANCIAL_INSTRUMENT_METRIC),
     }
 
 

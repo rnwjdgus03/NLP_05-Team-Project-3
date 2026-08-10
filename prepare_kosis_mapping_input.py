@@ -284,6 +284,10 @@ def exclusion(row: dict, dimension: str, semantic: str):
         return "UNIT_UNSUPPORTED", f"표준화할 수 없는 unit={nz(row.get('unit')) or '-'}"
     if semantic in {"rate_change", "rate_level"} and dimension != "rate":
         return "VALUE_TYPE_UNIT_CONFLICT", f"semantic_type={semantic}, unit_dimension={dimension}"
+    # 증감률은 두 시점의 수준값으로 계산한 파생값일 수 있다. 선택된 KOSIS ITEM이
+    # 직접 공표한 증감률인지 확인되기 전에는 원자료 직접대조 READY로 보내지 않는다.
+    if semantic == "rate_change":
+        return "DERIVED_VALUE_REQUIRES_COMPUTATION", "증감률은 직접 공표 ITEM 확인 또는 수준값 재계산 필요"
     if semantic == "rank":
         return "RANK_NOT_DIRECTLY_COMPARABLE", "순위는 KOSIS 원자료와 직접 비교하지 않음"
     # 값을 비교하기 **전에** 주장의 모양을 본다.
@@ -306,6 +310,7 @@ ENRICHMENT_ACTIONS = {
     "PERIODICITY_MISSING": "RESOLVE_PERIODICITY",
     "UNIT_UNSUPPORTED": "NORMALIZE_UNIT",
     "VALUE_TYPE_UNIT_CONFLICT": "REPAIR_VALUE_TYPE_OR_UNIT",
+    "DERIVED_VALUE_REQUIRES_COMPUTATION": "VERIFY_DIRECT_RATE_ITEM_OR_COMPUTE_FROM_LEVELS",
 }
 
 

@@ -21,8 +21,11 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_GOLD = ROOT / "data" / "gold" / "mcp_full_gold_200.csv"
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "regression" / "mcp_full_gold_200" / "mapping"
 DEFAULT_KS = (1, 3, 5, 10, 20)
-KEY_COLUMNS = ("gold_id", "claim_id", "claim_measurement_id")
+# A claim can contain several HCX measurements. Prefer the unique measurement
+# key whenever prediction files do not carry gold_id.
+KEY_COLUMNS = ("gold_id", "claim_measurement_id", "claim_id")
 RANK_COLUMNS = ("candidate_rank", "rank", "table_rank", "retrieval_rank")
+RETRIEVAL_RANK_COLUMNS = ("table_rank", "retrieval_rank", "candidate_rank", "rank")
 FIELD_COLUMNS = {
     "org_id": ("predicted_org_id", "auto_org_id", "kosis_org_id", "org_id", "gold_org_id"),
     "tbl_id": ("predicted_tbl_id", "auto_tbl_id", "kosis_tbl_id", "tbl_id", "gold_tbl_id"),
@@ -131,7 +134,7 @@ def rows_for_gold(
     gold: Mapping[str, Any],
     maps: Mapping[str, Mapping[str, list[dict[str, str]]]],
 ) -> tuple[list[dict[str, str]], str, str]:
-    for column in ("gold_id", "claim_id", "claim_measurement_id"):
+    for column in KEY_COLUMNS:
         value = clean(gold.get(column))
         if value and value in maps.get(column, {}):
             return list(maps[column][value]), column, value
@@ -148,6 +151,17 @@ def choose_value(row: Mapping[str, Any], columns: Iterable[str]) -> tuple[str, s
 
 def candidate_rank(row: Mapping[str, Any]) -> int:
     value, _ = choose_value(row, RANK_COLUMNS)
+    if not value:
+        return 1
+    try:
+        return int(float(value))
+    except ValueError:
+        return 999
+
+
+def retrieval_rank(row: Mapping[str, Any]) -> int:
+    """Return the table rank when coordinate candidates expose both ranks."""
+    value, _ = choose_value(row, RETRIEVAL_RANK_COLUMNS)
     if not value:
         return 1
     try:
@@ -192,7 +206,7 @@ def retrieval_metrics(
         candidate_rows_at_k = 0
         for gold in gold_rows:
             rows, matched_by, matched_key = rows_for_gold(gold, maps)
-            rows_at_k = [row for row in rows if candidate_rank(row) <= k]
+            rows_at_k = [row for row in rows if retrieval_rank(row) <= k]
             candidate_rows_at_k += len(rows_at_k)
             if rows_at_k:
                 covered += 1
@@ -247,7 +261,7 @@ def find_mapped_row(
     gold: Mapping[str, Any],
     selected: Mapping[tuple[str, str], dict[str, str]],
 ) -> tuple[dict[str, str] | None, str, str]:
-    for column in ("gold_id", "claim_id", "claim_measurement_id"):
+    for column in KEY_COLUMNS:
         value = clean(gold.get(column))
         key = (column, value)
         if value and key in selected:
@@ -260,6 +274,10 @@ def compare_field(gold: Mapping[str, Any], pred: Mapping[str, Any] | None, suffi
     if pred is None:
         return gold_value, "", "N"
     pred_value, _ = choose_value(pred, FIELD_COLUMNS[suffix])
+    # N/A means the gold coordinate does not require a comparison period.
+    # A pipeline may still preserve that contextual period for auditing.
+    if suffix == "previous_period" and not gold_value:
+        return gold_value, pred_value, "Y"
     return gold_value, pred_value, "Y" if gold_value == pred_value else "N"
 
 
@@ -411,12 +429,16 @@ def main() -> None:
             "input fixture contains forbidden gold fields: "
             + ", ".join(sorted(forbidden_input_fields))
         )
-    ready_keys = {
-        row_key(row)
-        for row in input_rows
-        if clean(row.get("input_quality_status")).upper() == "READY" and row_key(row)[1]
-    }
-    scorable_gold = [row for row in gold_rows if row_key(row) in ready_keys] if input_rows else []
+    input_maps = build_key_maps(input_rows)
+    scorable_gold = []
+    if input_rows:
+        for gold in gold_rows:
+            matched_inputs, _, _ = rows_for_gold(gold, input_maps)
+            if any(
+                clean(row.get("input_quality_status")).upper() == "READY"
+                for row in matched_inputs
+            ):
+                scorable_gold.append(gold)
 
     retrieval_rows: list[dict[str, Any]] = []
     retrieval_misses: list[dict[str, Any]] = []
@@ -444,7 +466,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "gold_rows": len(gold_rows),
         "scorable_rows": len(scorable_gold) if input_rows else None,
-        "needs_input_review_rows": (len(input_rows) - len(scorable_gold)) if input_rows else None,
+        "needs_input_review_rows": (len(gold_rows) - len(scorable_gold)) if input_rows else None,
         "candidate_rows": len(candidate_rows),
         "mapped_rows": len(mapped_rows),
         "table_recall_at_1": retrieval_by_k.get(1, {}).get("table_recall"),

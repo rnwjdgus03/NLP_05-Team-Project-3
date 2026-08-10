@@ -22,6 +22,13 @@ COUNTRY_TERMS = {
     "독일", "프랑스", "영국", "캐나다", "멕시코", "브라질", "러시아",
     "호주", "사우디", "아랍에미리트", "EU", "유럽연합",
 }
+SURVEY_NAMES = (
+    "경제활동인구조사", "지역별고용조사", "인구동향조사", "인구동향통계",
+    "인구동향", "기업특성별무역통계", "기업특성별 무역통계", "무역통계",
+    "광업제조업조사", "서비스업동향조사", "소비자물가조사", "가계동향조사",
+    "농림어업조사", "사회조사", "전국사업체조사", "인구주택총조사",
+    "장래인구추계", "국제수지",
+)
 UNIT_PATTERN = re.compile(
     r"([%％]\s*포인트|퍼센트\s*포인트|[%％]|억\s*달러|만\s*달러|천\s*달러|"
     r"조\s*원|억\s*원|만\s*원|천\s*원|달러|원|만\s*명|천\s*명|명|"
@@ -58,6 +65,45 @@ def infer_table_search_profile(claim: dict[str, str]) -> dict[str, tuple[str, ..
     if "농가" in compact and any(token in compact for token in ("농가인구", "농업인구", "시군구")):
         aliases.append("행정구역 시군구별 농가 농가인구")
     return {"aliases": tuple(aliases), "negative_terms": tuple(negatives)}
+
+
+def extract_survey_hints(claim: dict[str, str]) -> tuple[str, ...]:
+    """Extract public survey/statistics names without using answer columns."""
+
+    explicit = [
+        str(claim.get(key, "") or "").strip()
+        for key in (
+            "survey_name", "statistics_name", "stat_name", "source_survey",
+            "measurement_source", "source_statistics",
+        )
+    ]
+    text = " ".join(
+        str(claim.get(key, "") or "")
+        for key in ("title", "claim_text", "context_before", "context_after")
+    )
+    found = [value for value in explicit if value and value not in {"-", "hcx", "rule_fallback"}]
+    compact = re.sub(r"\s+", "", text)
+    for name in SURVEY_NAMES:
+        if re.sub(r"\s+", "", name) in compact:
+            found.append(name)
+    return tuple(dict.fromkeys(found))
+
+
+def extract_target_axis_terms(claim: dict[str, str]) -> tuple[str, ...]:
+    """Return country/age/gender/region/product targets used by KOSIS OBJ axes."""
+
+    terms: list[str] = []
+    raw = str(claim.get("obj_target_terms", "") or "").strip()
+    if raw:
+        terms.extend(term.strip() for term in raw.split("|") if term.strip())
+    for key in (
+        "destination_country", "origin_country", "region", "age_group", "gender",
+        "industry_or_item", "measurement_item", "extracted_product",
+    ):
+        value = str(claim.get(key, "") or "").strip()
+        if value and value != "-":
+            terms.append(value)
+    return tuple(dict.fromkeys(terms))
 
 
 def _number_variants(value: str) -> list[str]:
@@ -169,6 +215,12 @@ def build_gold_free_table_query(claim: dict[str, str]) -> str:
         suffix.append(f"claim_value: {value}")
     if profile["aliases"]:
         suffix.append("preferred_table: " + "; ".join(profile["aliases"]))
+    survey_hints = extract_survey_hints(claim)
+    if survey_hints:
+        suffix.append("survey_name: " + "; ".join(survey_hints))
+    target_axes = extract_target_axis_terms(claim)
+    if target_axes:
+        suffix.append("target_axes: " + "; ".join(target_axes))
     return " | ".join([shared, *suffix])
 
 

@@ -19,6 +19,13 @@ from pathlib import Path
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 INDEX_FORMAT_VERSION = 1
+SURVEY_NAME_HINTS = (
+    "경제활동인구조사", "지역별고용조사", "인구동향조사", "인구동향통계",
+    "인구동향", "기업특성별무역통계", "기업특성별 무역통계", "무역통계",
+    "광업제조업조사", "서비스업동향조사", "소비자물가조사", "가계동향조사",
+    "농림어업조사", "사회조사", "전국사업체조사", "인구주택총조사",
+    "장래인구추계", "국제수지",
+)
 
 
 def table_key(row):
@@ -44,6 +51,39 @@ def build_table_document(row):
     if row["stat_id"]:
         parts.append(f"통계 ID: {row['stat_id']}")
     return " | ".join(part for part in parts if part.split(":", 1)[-1].strip())
+
+
+def survey_hints_from_claim(claim):
+    explicit = [
+        str(claim.get(key, "") or "").strip()
+        for key in ("survey_name", "statistics_name", "stat_name", "source_survey")
+    ]
+    text = " ".join(
+        str(claim.get(key, "") or "")
+        for key in ("title", "claim_text", "context_before", "context_after")
+    )
+    compact = re.sub(r"\s+", "", text)
+    found = []
+    for value in explicit:
+        if value and value != "-":
+            found.extend(part.strip() for part in value.split("|") if part.strip())
+    for name in SURVEY_NAME_HINTS:
+        if re.sub(r"\s+", "", name) in compact:
+            found.append(name)
+    return tuple(dict.fromkeys(found))
+
+
+def target_axes_from_claim(claim):
+    terms = []
+    for key in (
+        "obj_target_terms", "target_axes", "destination_country", "origin_country",
+        "region", "age_group", "gender", "industry_or_item", "measurement_item",
+    ):
+        raw = str(claim.get(key, "") or "").strip()
+        if not raw or raw == "-":
+            continue
+        terms.extend(part.strip() for part in re.split(r"[|,]", raw) if part.strip())
+    return tuple(dict.fromkeys(terms))
 
 
 def build_claim_query(claim):
@@ -77,8 +117,10 @@ def build_claim_query(claim):
             ]
         )
     fields = [
+        ("조사명", "; ".join(survey_hints_from_claim(claim))),
         ("지표", claim.get("indicator", "")),
         ("대상", claim.get("industry_or_item", "")),
+        ("대상축", "; ".join(target_axes_from_claim(claim))),
         ("의미", claim.get("semantic_type", "")),
         ("단위", claim.get("unit", "")),
         ("단위차원", claim.get("unit_dimension", "")),

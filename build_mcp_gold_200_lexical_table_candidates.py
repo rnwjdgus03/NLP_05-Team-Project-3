@@ -15,7 +15,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from search_mcp_gold_200_chroma_bge import infer_table_search_profile, select_claim_unit
+from search_mcp_gold_200_chroma_bge import (
+    extract_survey_hints,
+    extract_target_axis_terms,
+    infer_table_search_profile,
+    select_claim_unit,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -132,7 +137,9 @@ def query_text(row: Mapping[str, Any]) -> str:
         if trigger in compact:
             hints.extend(values)
     profile = infer_table_search_profile(dict(row))
-    return text + " " + " ".join([*hints, *profile["aliases"]])
+    surveys = extract_survey_hints(dict(row))
+    targets = extract_target_axis_terms(dict(row))
+    return text + " " + " ".join([*hints, *profile["aliases"], *surveys, *targets])
 
 
 def build_index(tables: list[dict[str, str]]) -> tuple[dict[str, list[int]], list[Counter[str]], dict[str, float]]:

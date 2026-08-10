@@ -143,6 +143,54 @@ def fuse_candidates(dense: Sequence[Mapping[str, Any]],
     return fused
 
 
+def diversify_by_table(
+    candidates: Sequence[Mapping[str, Any]],
+    table_ids: Sequence[str],
+    limit: int,
+    min_per_table: int,
+) -> list[dict]:
+    """Keep a small coordinate floor for every retrieved table.
+
+    Without this floor, one table with many ITEM/OBJ combinations can occupy
+    the global coordinate cutoff and erase all coordinates from another table.
+    """
+    if min_per_table <= 0:
+        return [dict(candidate) for candidate in candidates[:limit]]
+    effective_limit = max(limit, len(table_ids) * min_per_table)
+    selected_ids: set[str] = set()
+    selected: list[dict] = []
+    for tbl_id in table_ids:
+        count = 0
+        for candidate in candidates:
+            metadata = candidate.get("metadata") or {}
+            if _text(metadata.get("tbl_id")) != _text(tbl_id):
+                continue
+            coordinate_id = _text(candidate.get("coordinate_id"))
+            if coordinate_id in selected_ids:
+                continue
+            selected.append(dict(candidate))
+            selected_ids.add(coordinate_id)
+            count += 1
+            if count >= min_per_table:
+                break
+    for candidate in candidates:
+        coordinate_id = _text(candidate.get("coordinate_id"))
+        if coordinate_id in selected_ids:
+            continue
+        selected.append(dict(candidate))
+        selected_ids.add(coordinate_id)
+        if len(selected) >= effective_limit:
+            break
+    original_order = {
+        _text(candidate.get("coordinate_id")): index
+        for index, candidate in enumerate(candidates)
+    }
+    selected.sort(key=lambda candidate: original_order.get(
+        _text(candidate.get("coordinate_id")), len(original_order)
+    ))
+    return selected[:effective_limit]
+
+
 # --------------------------------------------------------------------------
 # 출력 스키마 (validate 입력 호환)
 # --------------------------------------------------------------------------
@@ -368,7 +416,8 @@ class InMemoryCoordinateSearcher:
 def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, Any]],
                        searcher, *, dense_top_k: int, lexical_top_k: int,
                        rerank_top_k: int, final_top_k: int, reranker=None,
-                       lexical_pool_per_table: int = 4000) -> tuple[list[dict], dict]:
+                       lexical_pool_per_table: int = 4000,
+                       min_candidates_per_table: int = 0) -> tuple[list[dict], dict]:
     """한 measurement 의 좌표 후보를 dense+lexical+rerank 로 뽑는다."""
     query = build_coordinate_query(claim)
     tbl_ids = [t["tbl_id"] for t in tables]
@@ -467,7 +516,9 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         0 if (target_terms or metadata_is_aggregate(candidate.get("metadata") or {})) else 1,
         -float(candidate.get("fusion_score") or 0.0),
     ))
-    fused = fused[:rerank_top_k]
+    fused = diversify_by_table(
+        fused, tbl_ids, rerank_top_k, min_candidates_per_table
+    )
     rerank_seconds = 0.0
     if reranker is not None and fused:
         started = time.perf_counter()
@@ -530,7 +581,15 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         "search_seconds": search_seconds,
         "rerank_seconds": rerank_seconds,
     }
-    return fused[:final_top_k], stats
+    finalists = diversify_by_table(
+        fused, tbl_ids, final_top_k, min_candidates_per_table
+    )
+    stats["final_candidate_count"] = len(finalists)
+    stats["final_table_coverage"] = len({
+        _text((candidate.get("metadata") or {}).get("tbl_id"))
+        for candidate in finalists
+    })
+    return finalists, stats
 
 
 def main() -> None:
@@ -551,6 +610,12 @@ def main() -> None:
     parser.add_argument("--lexical-pool-per-table", type=int, default=4000)
     parser.add_argument("--rerank-top-k", type=int, default=20)
     parser.add_argument("--final-top-k", type=int, default=10)
+    parser.add_argument(
+        "--min-candidates-per-table",
+        type=int,
+        default=0,
+        help="Minimum coordinate candidates retained for each retrieved table",
+    )
     parser.add_argument("--no-reranker", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--stats-output", default=None)
@@ -594,6 +659,7 @@ def main() -> None:
             dense_top_k=args.dense_top_k, lexical_top_k=args.lexical_top_k,
             rerank_top_k=args.rerank_top_k, final_top_k=args.final_top_k,
             reranker=reranker, lexical_pool_per_table=args.lexical_pool_per_table,
+            min_candidates_per_table=args.min_candidates_per_table,
         )
         for rank, candidate in enumerate(candidates, start=1):
             table = by_table.get(_text(candidate["metadata"].get("tbl_id")), tables[0])

@@ -1,4 +1,9 @@
-from evaluate_mcp_gold_200_mapping import evaluate_mapping, retrieval_metrics
+from evaluate_mcp_gold_200_mapping import (
+    build_key_maps,
+    evaluate_mapping,
+    retrieval_metrics,
+    rows_for_gold,
+)
 
 
 def test_retrieval_metrics_score_table_recall_at_k():
@@ -83,3 +88,69 @@ def test_evaluate_mapping_scores_full_coordinate_match():
     assert by_metric["full_mapping_accuracy"]["rate"] == 0.5
     assert evaluated[0]["full_mapping_correct"] == "Y"
     assert [row["gold_id"] for row in failures] == ["G2"]
+
+
+def test_retrieval_metrics_prefers_table_rank_over_coordinate_rank():
+    gold = [{"gold_id": "G1", "gold_org_id": "101", "gold_tbl_id": "RIGHT"}]
+    candidates = [{
+        "gold_id": "G1", "org_id": "101", "tbl_id": "RIGHT",
+        "candidate_rank": "9", "table_rank": "2",
+    }]
+    metrics, _ = retrieval_metrics(gold, candidates, (1, 2, 10))
+    by_k = {row["top_k"]: row for row in metrics}
+    assert by_k[1]["hits"] == 0
+    assert by_k[2]["hits"] == 1
+
+
+def test_measurement_id_wins_when_claim_has_multiple_predictions():
+    gold = [{
+        "gold_id": "G1", "claim_id": "C1", "claim_measurement_id": "C1-m2",
+        "gold_org_id": "101", "gold_tbl_id": "RIGHT", "gold_itm_id": "I2",
+        "gold_prd_se": "M", "gold_period": "202501",
+    }]
+    mapped = [
+        {
+            "claim_id": "C1", "claim_measurement_id": "C1-m1",
+            "org_id": "101", "tbl_id": "WRONG", "selected_itm_id": "I1",
+            "prd_se": "M", "period": "202501",
+        },
+        {
+            "claim_id": "C1", "claim_measurement_id": "C1-m2",
+            "org_id": "101", "tbl_id": "RIGHT", "selected_itm_id": "I2",
+            "prd_se": "M", "period": "202501",
+        },
+    ]
+
+    evaluated, metrics, failures = evaluate_mapping(gold, mapped)
+
+    assert evaluated[0]["matched_by"] == "claim_measurement_id"
+    assert evaluated[0]["pred_tbl_id"] == "RIGHT"
+    assert evaluated[0]["full_mapping_correct"] == "Y"
+    assert not failures
+
+
+def test_unspecified_previous_period_does_not_penalize_context_preservation():
+    gold = [{
+        "gold_id": "G1", "claim_measurement_id": "C1-m1",
+        "gold_org_id": "101", "gold_tbl_id": "T", "gold_itm_id": "I",
+        "gold_prd_se": "M", "gold_period": "202501", "gold_previous_period": "N/A",
+    }]
+    mapped = [{
+        "claim_measurement_id": "C1-m1", "org_id": "101", "tbl_id": "T",
+        "selected_itm_id": "I", "coordinate_prd_se": "M", "period": "202501",
+        "previous_period": "202401",
+    }]
+    evaluated, _, _ = evaluate_mapping(gold, mapped)
+    assert evaluated[0]["previous_period_correct"] == "Y"
+    assert evaluated[0]["period_group_correct"] == "Y"
+
+
+def test_input_fixture_matches_gold_by_measurement_id_when_gold_id_is_absent():
+    gold = {"gold_id": "G1", "claim_id": "C1", "claim_measurement_id": "C1-m2"}
+    fixture = [{
+        "claim_id": "C1", "claim_measurement_id": "C1-m2",
+        "input_quality_status": "READY",
+    }]
+    rows, matched_by, _ = rows_for_gold(gold, build_key_maps(fixture))
+    assert matched_by == "claim_measurement_id"
+    assert rows[0]["input_quality_status"] == "READY"

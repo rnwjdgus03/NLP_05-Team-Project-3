@@ -309,6 +309,17 @@ def target_terms_match_text(target_terms: Iterable[Any], selected_values: Iterab
         aliases = {normalize_obj_name(alias) for alias, target in FOREIGN_COUNTRY_ALIASES.items()
                    if normalize_obj_name(target) == canonical}
         aliases.add(canonical)
+        # Korean worker categories are nested strings: ``비정규직`` contains
+        # ``정규직`` as a substring but denotes the opposite category.  Treat
+        # these as exact category names so the negative prefix cannot satisfy
+        # a regular-worker target.
+        regular = normalize_obj_name("정규직")
+        nonregular = normalize_obj_name("비정규직")
+        if canonical == regular and nonregular in selected:
+            selected_without_nonregular = selected.replace(nonregular, "")
+            aliases = {alias for alias in aliases if alias != regular}
+            if regular in selected_without_nonregular:
+                aliases.add(regular)
         if not any(alias and alias in selected for alias in aliases):
             return False
     return True

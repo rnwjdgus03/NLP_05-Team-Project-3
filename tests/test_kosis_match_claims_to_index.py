@@ -13,6 +13,8 @@ from kosis_match_claims_to_index import (
     score_table,
     select_structured_meta,
     table_override_matches_claim,
+    table_scope_adjustment,
+    table_year_penalty,
 )
 from kosis_semantic_search import SemanticHit
 
@@ -327,6 +329,27 @@ def test_air_passenger_and_mechanic_population_mismatches_are_hard_rejected():
         "항공산업실태조사",
     )
     assert score_table(shortage, claim_tokens(mechanics), mechanics)[0] <= -10**8
+
+
+def test_year_penalty_only_uses_explicit_coverage_end():
+    assert table_year_penalty(
+        "연령/교육정도별 실업률 (1999. 5월 이전자료는 별도 기준 참조)", "2023"
+    ) == 0
+    assert table_year_penalty("한국도시통계(2009~2022)", "2023") == -300
+    assert table_year_penalty("KSIC10차 기준_'23년 이전", "2025") == -300
+
+
+def test_scope_adjustment_penalizes_unrequested_axes_and_rewards_periodicity():
+    claim = normalized_claim_row(ready_claim(
+        measurement_indicator="혼인 건수", measurement_item="-",
+        measurement_period="202412", measurement_prd_se="M",
+        claim_text="지난 12월 전체 혼인 건수는 2만 건이었다.",
+    ))
+    broad = table(
+        "BROAD", "월.분기.연간 인구동향(출생,사망,혼인,이혼)", "인구동향조사"
+    )
+    narrow = table("NARROW", "시도/성/연령별 혼인", "인구동향조사 > 혼인")
+    assert table_scope_adjustment(broad, claim) > table_scope_adjustment(narrow, claim)
 
 
 def test_candidate_decision_keeps_ambiguity_and_formula_explicit():

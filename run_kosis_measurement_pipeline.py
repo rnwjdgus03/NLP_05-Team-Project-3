@@ -111,6 +111,7 @@ def main():
     parser.add_argument("--semantic-index", default="data/indexes/kosis_bge_m3")
     parser.add_argument("--semantic-top-k", type=int, default=50)
     parser.add_argument("--rerank-top-k", type=int, default=20)
+    parser.add_argument("--lexical-reserve-k", type=int, default=0)
     parser.add_argument("--reranker-model", default="BAAI/bge-reranker-v2-m3")
     parser.add_argument("--device", default=None)
     parser.add_argument("--no-reranker", action="store_true")
@@ -178,6 +179,8 @@ def main():
         args.semantic_top_k,
         "--rerank-top-k",
         args.rerank_top_k,
+        "--lexical-reserve-k",
+        args.lexical_reserve_k,
         "--reranker-model",
         args.reranker_model,
     ]

@@ -10,6 +10,9 @@ from search_mcp_gold_200_chroma_bge import (
     infer_table_search_profile,
     select_claim_unit,
 )
+from kosis_match_claims_to_index import claim_tokens, normalized_claim_row
+from kosis_semantic_search import build_claim_query as build_shared_claim_query
+from kosis_chroma_hybrid_search import diversify_by_table
 
 
 def test_gold_free_query_uses_public_input_fields():
@@ -26,6 +29,38 @@ def test_gold_free_query_uses_public_input_fields():
     assert "LEVEL" in query
     assert "6838" in query
     assert "억 달러" in query
+
+
+def test_table_query_includes_survey_name_and_target_axes():
+    query = build_gold_free_table_query(
+        {
+            "title": "경제활동인구조사 결과",
+            "claim_text": "경제활동인구조사에서 15~29세 여자 실업률을 발표했다.",
+            "measurement_indicator": "실업률",
+            "obj_target_terms": "15 - 29세|여자",
+            "region": "서울",
+        }
+    )
+    assert "survey_name: 경제활동인구조사" in query
+    assert "target_axes: 15 - 29세; 여자; 서울" in query
+
+
+def test_holdout_table_query_path_keeps_survey_and_axes():
+    row = normalized_claim_row(
+        {
+            "title": "경제활동인구조사 결과",
+            "claim_text": "경제활동인구조사에서 여자 실업률을 발표했다.",
+            "measurement_indicator": "실업률",
+            "region": "서울", "age_group": "15 - 29세", "gender": "여자",
+            "measurement_period": "2025", "measurement_prd_se": "Y",
+        }
+    )
+    query = build_shared_claim_query(row)
+    assert "조사명: 경제활동인구조사" in query
+    assert "대상축: 서울; 15 - 29세; 여자" in query
+    tokens = {token: weight for token, _, weight in claim_tokens(row)}
+    assert tokens["경제활동인구조사"] >= 6
+    assert tokens["서울"] >= 4
 
 
 def test_gold_free_query_rejects_answer_columns():
@@ -96,6 +131,71 @@ def test_period_extraction_resolves_relative_month_from_publication_date():
     )
     assert (prd_se, period, source) == ("M", "202505", "previous_month")
     assert previous == "202405"
+
+
+def test_period_extraction_preserves_relative_month_with_excel_serial_date():
+    prd_se, period, previous, source = choose_period(
+        {
+            "date": "45754.0",
+            "claim_text": "작년 12월 혼인 건수는 2만 건이었다.",
+            "claim_value": "2",
+        }
+    )
+    assert (prd_se, period, source) == ("M", "202412", "relative_year_month")
+
+
+def test_comparison_same_month_keeps_target_month():
+    prd_se, period, previous, source = choose_period(
+        {
+            "date": "45769.0",
+            "claim_text": "지난 2월 혼인 건수는 지난해 같은 달보다 14.3% 증가했다.",
+            "claim_value": "14.3",
+        }
+    )
+    assert (prd_se, period, previous) == ("M", "202502", "202402")
+    assert source == "relative_same_month_target"
+
+
+def test_enrichment_preserves_annual_target_over_survey_month():
+    row = enrich_row(
+        {
+            "date": "45714.0", "claim_value": "222422", "claim_unit": "건",
+            "claim_type": "LEVEL", "measurement_period": "2024",
+            "measurement_prd_se": "Y",
+            "claim_text": "2024년 12월 인구동향에 따르면 작년 한해 혼인 건수는 22만2422건이었다.",
+        }
+    )
+    assert (row["prd_se"], row["period"], row["period_extraction_source"]) == (
+        "Y", "2024", "existing_annual_target"
+    )
+
+
+def test_enrichment_combines_reference_month_with_measurement_year():
+    row = enrich_row(
+        {
+            "date": "45787.0", "claim_value": "11120000000", "claim_unit": "달러",
+            "claim_type": "LEVEL", "measurement_period": "2016",
+            "measurement_prd_se": "Y",
+            "claim_text": "3월 기준으로는 2016년(111억2000만달러), 2015년 이후 셋째로 컸다.",
+        }
+    )
+    assert (row["prd_se"], row["period"], row["period_extraction_source"]) == (
+        "M", "201603", "month_with_measurement_year"
+    )
+
+
+def test_enrichment_preserves_structured_change_role():
+    row = enrich_row(
+        {
+            "date": "2025-10-28", "claim_text": "최근 3개월 임금이 7만7000원 증가했다.",
+            "claim_value": "77000", "claim_unit": "원", "semantic_type": "absolute_change",
+            "measurement_role": "증감값", "value_type": "증감량",
+            "measurement_period": "202508", "measurement_prd_se": "M",
+        }
+    )
+    assert row["measurement_role"] == "증감값"
+    assert row["value_type"] == "증감량"
+    assert row["semantic_type"] == "absolute_change"
 
 
 def test_period_extraction_uses_period_nearest_to_claim_value():
@@ -230,6 +330,64 @@ def test_two_stage_selection_chooses_item_before_matching_obj():
     assert selected["selected_itm_id"] == "EXP"
     assert selected["selected_obj_l1_name"] == "미국"
     assert selected["original_candidate_rank"] == "3"
+
+
+def test_two_stage_selection_can_change_table_for_better_item_and_obj():
+    claim = {
+        "claim_text": "서울 여자 실업률은 3.1%였다.",
+        "item_intent_terms": "실업률",
+        "obj_target_terms": "서울|여자",
+    }
+    candidates = [
+        {
+            "org_id": "1", "tbl_id": "WRONG", "selected_itm_id": "EMP",
+            "selected_itm_name": "취업자", "selected_obj_l1_name": "서울",
+            "selected_obj_l2_name": "여자", "candidate_rank": "1", "table_rank": "1",
+        },
+        {
+            "org_id": "1", "tbl_id": "RIGHT", "selected_itm_id": "UNEMP",
+            "selected_itm_name": "실업률", "selected_obj_l1_name": "서울",
+            "selected_obj_l2_name": "여자", "candidate_rank": "7", "table_rank": "4",
+        },
+    ]
+    selected = select_two_stage(claim, candidates, item_top_k=2)
+    assert selected["tbl_id"] == "RIGHT"
+    assert selected["two_stage_table_changed"] == "Y"
+    assert selected["selection_backend"] == "item_obj_first_v2"
+
+
+def test_coordinate_diversification_keeps_each_table_in_global_cutoff():
+    candidates = [
+        {"coordinate_id": f"A-{index}", "metadata": {"tbl_id": "A"}}
+        for index in range(8)
+    ] + [
+        {"coordinate_id": "B-1", "metadata": {"tbl_id": "B"}},
+        {"coordinate_id": "B-2", "metadata": {"tbl_id": "B"}},
+    ]
+    selected = diversify_by_table(candidates, ["A", "B"], limit=4, min_per_table=2)
+    assert len(selected) == 4
+    assert {row["metadata"]["tbl_id"] for row in selected} == {"A", "B"}
+
+
+def test_two_stage_prefers_absolute_change_item_and_exact_regular_worker_obj():
+    claim = {
+        "claim_text": "정규직 근로자는 10만원 증가했다.",
+        "measurement_indicator": "정규직 근로자의 월평균 임금 증감",
+        "measurement_role": "증감값", "value_type": "증감량",
+        "semantic_type": "absolute_change", "obj_target_terms": "-|-|정규직",
+    }
+    candidates = [
+        {"org_id": "101", "tbl_id": "T", "selected_itm_id": "T10",
+         "selected_itm_name": "월평균임금", "selected_obj_l1_name": "-비정규직",
+         "candidate_rank": "1", "table_rank": "1"},
+        {"org_id": "101", "tbl_id": "T", "selected_itm_id": "T20",
+         "selected_itm_name": "증감(전년동월)", "selected_obj_l1_name": "-정규직",
+         "candidate_rank": "8", "table_rank": "1"},
+    ]
+    selected = select_two_stage(claim, candidates, item_top_k=2)
+    assert selected["selected_itm_id"] == "T20"
+    assert selected["selected_obj_l1_name"] == "-정규직"
+    assert selected["two_stage_obj_target_terms"] == "정규직"
 
 
 def test_two_stage_selection_prefers_aggregate_when_claim_has_no_obj_target():

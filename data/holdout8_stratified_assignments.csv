@@ -1,0 +1,49 @@
+﻿holdout_id,stratum,source_row_1_based,trigger_terms,selection_score,URL
+H8-001,gender,1251,남녀|남성|여성,9,https://www.chosun.com/economy/economy_general/2025/04/07/LBO7UL4UXNHUJJNR6MHPXL4W2M
+H8-002,gender,1473,여성,7,https://www.chosun.com/economy/economy_general/2025/04/24/LVTPH6GRPJHYTDZKQLARLSAKYU
+H8-003,gender,2692,성별,7,https://biz.chosun.com/policy/policy_sub/2025/11/10/FJZFOVSDGBEVDPIJJYVIHAC63E/
+H8-004,gender,1122,남성|여성,5,https://www.chosun.com/economy/economy_general/2025/03/28/FV56ZTW6QJB45D7N322ZPHFHYU
+H8-005,gender,2661,성별|여성,5,https://biz.chosun.com/policy/policy_sub/2025/10/31/6UQHYBB6XRBRPEQR4PGKFQEGLI/
+H8-006,gender,2634,성별,4,https://biz.chosun.com/policy/policy_sub/2025/10/22/Y52CEAHNIBH2NJ6IYR5I2AR6OI/
+H8-007,gender,1786,여성,4,https://www.chosun.com/economy/money/2025/05/18/GNYIXNZ3ZBU3UX2MXRLPE22PO4
+H8-008,gender,2687,남녀,4,https://www.chosun.com/national/weekend/2025/11/08/ZXTXYIJJFJFLTIJZMLEW4IDNN4/
+H8-009,gender,738,남녀,4,https://www.chosun.com/economy/economy_general/2025/02/26/GSSMZGGYMBGKXLHSR4WOOWUCQ4
+H8-010,gender,1921,남녀,4,https://www.chosun.com/economy/economy_general/2025/05/29/4U6B4YZJFFBRFFDJZFYTZWWI5A
+H8-011,gender,801,여성,4,https://www.chosun.com/economy/market_trend/2025/03/03/2UOZGHNYNRATZH3YP5CQCWSJQU
+H8-012,gender,1448,남성|여성,3,https://www.chosun.com/economy/industry-company/2025/04/22/BYCTML74DFCA3HLEJIUNEUKDDI
+H8-013,age,2548,23~27세|55~59세|고령층|청년,9,https://www.chosun.com/economy/industry-company/2025/07/16/3BWCULXU4RCWVPSF4467OCVDSU
+H8-014,age,707,15세 이상|30~59세,8,https://www.chosun.com/economy/economy_general/2025/02/24/AXTTAUKCC5FQNGJDVW7EUZW55Y
+H8-015,age,2177,20대|25~29세,8,https://www.chosun.com/economy/economy_general/2025/06/17/Y6ZA43IVONCVNC77CHG4DVAKW4
+H8-016,age,919,15~29세|청년,8,https://www.chosun.com/economy/economy_general/2025/03/12/RYNZ7HLF3JCOJKSPPE4VJMSTEE
+H8-017,age,2611,20대,7,https://biz.chosun.com/policy/policy_sub/2025/10/12/YBXDEQKJIBBF7IS5Y2PJ2PO2BU/
+H8-018,age,2612,65세 이상,7,https://biz.chosun.com/policy/policy_sub/2025/10/12/XI3INZMW3NEONORMIWDLZN3XVU/
+H8-019,age,586,50대,7,https://www.chosun.com/economy/economy_general/2025/02/15/246PHXLEYJAYHEXIH47DMU6MTI
+H8-020,age,539,15~34세,7,https://www.chosun.com/economy/economy_general/2025/02/11/FTWRQGMI25DAZHELW5DE2DOVCI
+H8-021,age,2637,청년,7,https://www.chosun.com/economy/smb-venture/2025/10/23/CMO3EJ3XWRHZBPAMRMH346MDXU/
+H8-022,age,871,50세 이상,7,https://www.chosun.com/economy/industry-company/2025/03/09/5LCMRV45ANG2FOSJCWA4DIICPQ
+H8-023,age,2626,청년,7,https://biz.chosun.com/policy/policy_sub/2025/10/19/74YLI5YIDZAHLKBG3KMG7WNB6Y/
+H8-024,age,2647,15세 이상,7,https://www.chosun.com/economy/economy_general/2025/10/28/BEESNX7GT5CP5F3KPXWZI7JORQ/
+H8-025,country,1942,미국|중국|캐나다,9,https://www.chosun.com/economy/industry-company/2025/05/30/3BKKMLIR3BBLTKO6DFZBQEMLKM
+H8-026,country,1749,미국|베트남|일본|중국|캐나다|호주,9,https://www.chosun.com/economy/industry-company/2025/05/15/5KKCJYW34ND2TDI5ZOBAOSTW7M
+H8-027,country,1941,미국|중국,8,https://www.chosun.com/economy/economy_general/2025/05/30/TJY63R4V55F3HOICGFQN6VAWUM
+H8-028,country,640,일본|중국,8,https://www.chosun.com/economy/economy_general/2025/02/19/2BA62DZKERGZPHCKVBLNSCVVLQ
+H8-029,country,420,베트남|중국,8,https://www.chosun.com/economy/industry-company/2025/02/02/SMSS3IK545D3XOJTWMFZUVR2JM
+H8-030,country,1266,미국|중국,8,https://www.chosun.com/economy/economy_general/2025/04/08/7LQM7XCTENHN7J2SJR7O47ZBLI
+H8-031,country,1207,미국|중국,8,https://www.chosun.com/economy/money/2025/04/04/BFS7SI3WDSCR3DPGWWZMN55KAI
+H8-032,country,2474,미국|일본,8,https://www.chosun.com/economy/economy_general/2025/07/11/BPX33NHQDVE5VLU4Z7WBZQQYAA
+H8-033,country,1627,미국|중국,8,https://www.chosun.com/economy/industry-company/2025/05/06/6BXI7JWERNGDNLBDAEVLNQOMWU
+H8-034,country,1652,미국,7,https://www.chosun.com/economy/economy_general/2025/05/08/CSVVRMIPH5HR5PGSVRXC3QSXEI
+H8-035,country,2291,중국,7,https://www.chosun.com/economy/industry-company/2025/06/26/242ZTRV6DBHHDKZAERO23L2UNU
+H8-036,country,1550,미국,7,https://www.chosun.com/economy/economy_general/2025/04/30/IHLL6GLF6VCRBHK424ULGPUN2A
+H8-037,product,2249,반도체|자동차,8,https://www.chosun.com/economy/economy_general/2025/06/23/VRSULF3KLRDCXJYUXRMNW45AIY
+H8-038,product,1133,자동차|철강,8,https://www.chosun.com/economy/int_economy/2025/03/29/RTG4AHNFFBGKNCC7UJHQNRIQRA
+H8-039,product,1007,디스플레이|반도체,8,https://www.chosun.com/economy/economy_general/2025/03/19/ZQRVHLKR3VGPPCKNALVPPPKKZU
+H8-040,product,2593,쌀,7,https://biz.chosun.com/policy/policy_sub/2025/10/02/VEEJT4Y6QZC47FKCRUA42LWB4Q/
+H8-041,product,1598,석유,7,https://www.chosun.com/economy/industry-company/2025/05/04/RR7V7DOSHBCMTB5SBNV4SGATHE
+H8-042,product,2596,쌀,7,https://biz.chosun.com/distribution/food/2025/10/04/HZHJBLXLJJBYDEGLBFTUK7VMCM/
+H8-043,product,2200,쌀,7,https://www.chosun.com/economy/economy_general/2025/06/19/OFPRME6OBVHBTOWNXMX52M3TVI
+H8-044,product,2169,자동차,7,https://www.chosun.com/economy/auto/2025/06/17/I5JM7ENETNBTFERPXYW7YPJ2PY
+H8-045,product,1674,밀,7,https://www.chosun.com/economy/economy_general/2025/05/10/23LWEN4VKJCQHPMQCDSE7KATY4
+H8-046,product,2659,반도체,7,https://www.chosun.com/economy/economy_general/2025/10/31/CUFPGSG2FJGXFEGSSNASWN7IVY/
+H8-047,product,812,돼지고기,7,https://www.chosun.com/economy/economy_general/2025/03/04/CL2YYZMINFDPPCJUIROOZNZLLI
+H8-048,product,2571,자동차,7,https://www.chosun.com/economy/industry-company/2025/07/18/C7ULQI2PJZHQFLSGFVXGFOJZBI

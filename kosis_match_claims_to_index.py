@@ -33,6 +33,8 @@ from kosis_semantic_search import (
     build_claim_query,
     file_sha256,
     normalized_rrf_score,
+    survey_hints_from_claim,
+    target_axes_from_claim,
     table_key,
 )
 
@@ -83,6 +85,7 @@ TOKEN_EXPANSIONS = {
     "수출": ["수출액", "품목별", "총액"],
     "수입": ["수입액", "품목별", "총액"],
     "무역수지": ["무역", "수출액", "수입액", "국제수지"],
+    "경상수지": ["국제수지", "국제수지통계"],
     "흑자": ["무역수지", "수출액", "수입액"],
     "적자": ["무역수지", "수출액", "수입액"],
     "자동차": ["승용자동차", "차량", "자동차"],
@@ -211,7 +214,7 @@ def normalized_claim_row(row):
     )
     if has_measurement_contract:
         row = normalize_mapping_row(row)
-    return {
+    normalized = {
         "claim_id": get_first(row, "claim_id", "claimId", "id"),
         "claim_measurement_id": get_first(row, "claim_measurement_id", "measurement_id"),
         "indicator": get_first(row, "indicator", "measurement_indicator", "지표"),
@@ -239,8 +242,24 @@ def normalized_claim_row(row):
         "prd_se": get_first(row, "prd_se", "measurement_prd_se", "주기"),
         "change_base": get_first(row, "change_base"),
         "comparison_period": get_first(row, "comparison_period"),
+        "title": get_first(row, "title", "제목"),
+        "survey_name": get_first(row, "survey_name", "statistics_name", "stat_name", "source_survey"),
+        "obj_target_terms": get_first(row, "obj_target_terms"),
+        "destination_country": get_first(row, "destination_country"),
+        "origin_country": get_first(row, "origin_country"),
         "claim_text": get_first(row, "claim_text", "문장", "sentence", "evidence_text"),
     }
+    if not normalized["survey_name"]:
+        normalized["survey_name"] = "|".join(survey_hints_from_claim({**row, **normalized}))
+    axes = list(target_axes_from_claim({**row, **normalized}))
+    # HCX v1.6에는 국가 전용 필드가 없으므로 keywords를 마지막 보조 축으로 쓴다.
+    if not axes:
+        axes.extend(
+            part.strip() for part in re.split(r"[|,]", normalized["keywords"])
+            if part.strip()
+        )
+    normalized["target_axes"] = "|".join(dict.fromkeys(axes))
+    return normalized
 
 
 def tokens_from_text(text):
@@ -262,8 +281,10 @@ def claim_tokens(row):
     row = normalized_claim_row(row)
     weighted = []
     weights = [
+        ("survey_name", 6),
         ("indicator", 5),
         ("industry_or_item", 5),
+        ("target_axes", 4),
         ("keywords", 3),
         ("metric_domain", 3),
         ("region", 2),
@@ -354,12 +375,77 @@ def table_year_penalty(table_text, period):
     if not match:
         return 0
     target_year = int(match.group())
-    years = [int(year) for year in re.findall(r"(?:19|20)\d{2}", table_text)]
-    if years and max(years) < target_year - 1:
-        return -300
-    if "이전" in table_text and years and max(years) < target_year:
+    compact_text = compact(table_text)
+    coverage_end_years = [
+        int(year)
+        for year in re.findall(
+            r"(?:19|20)\d{2}(?:\.\d{1,2})?\s*[~～\-–]\s*((?:19|20)\d{2})",
+            compact_text,
+        )
+    ]
+    coverage_end_years.extend(
+        int(year)
+        for year in re.findall(r"((?:19|20)\d{2})년?(?:이전|까지|종료)", compact_text)
+    )
+    coverage_end_years.extend(
+        2000 + int(year)
+        for year in re.findall(r"['’]?(\d{2})년(?:이전|까지|종료)", compact_text)
+    )
+    if coverage_end_years and max(coverage_end_years) < target_year:
         return -300
     return 0
+
+
+def table_scope_adjustment(row, claim):
+    """Prefer tables whose explicit axes match the claim's target scope."""
+    norm_claim = normalized_claim_row(claim)
+    table_name = compact(row.get("tbl_name", ""))
+    focused = compact(
+        " ".join(
+            str(norm_claim.get(field, ""))
+            for field in (
+                "indicator", "industry_or_item", "region", "age_group", "gender",
+                "origin_country", "destination_country", "claim_text",
+            )
+        )
+    )
+    score = 0
+    has_region = compact(norm_claim.get("region")) not in {"", "-", "전국"}
+    has_country = any(
+        compact(norm_claim.get(field)) not in {"", "-"}
+        for field in ("origin_country", "destination_country")
+    )
+    has_age = compact(norm_claim.get("age_group")) not in {"", "-"} or bool(
+        re.search(r"\d{1,2}대|\d{1,2}\s*[~\-]\s*\d{1,2}세|연령", focused)
+    )
+    has_gender = compact(norm_claim.get("gender")) not in {"", "-"} or any(
+        token in focused for token in ("남자", "여자", "남성", "여성", "성별")
+    )
+    has_education = any(
+        token in focused for token in ("교육정도", "학력", "고졸", "대졸", "중졸", "초졸")
+    )
+
+    if not has_country and any(token in table_name for token in ("국가별", "주요국가", "교역상대국")):
+        score -= 180
+    if not has_region and any(token in table_name for token in ("지역별", "시도", "시군구", "읍면동")):
+        score -= 160
+    if not has_age and "연령" in table_name:
+        score -= 120
+    if not has_gender and "성별" in table_name:
+        score -= 120
+    if not has_education and any(token in table_name for token in ("교육정도", "학력")):
+        score -= 120
+    if "계절조정" in table_name and "계절조정" not in focused:
+        score -= 180
+
+    prd_se = str(norm_claim.get("prd_se", "")).upper()
+    if prd_se == "M" and "월" in table_name:
+        score += 80
+    elif prd_se == "Q" and "분기" in table_name:
+        score += 80
+    elif prd_se == "Y" and any(token in table_name for token in ("연간", "연도", "년별")):
+        score += 80
+    return score
 
 
 def score_table(row, tokens, claim):
@@ -371,7 +457,13 @@ def score_table(row, tokens, claim):
     anchors = measurement_anchors(norm_claim)
     family = claim_item_family(norm_claim)
 
-    anchor_hits = [anchor for anchor in anchors if anchor in table_text]
+    anchor_aliases = {
+        "경상수지": ("경상수지", "국제수지"),
+    }
+    anchor_hits = [
+        anchor for anchor in anchors
+        if any(alias in table_text for alias in anchor_aliases.get(anchor, (anchor,)))
+    ]
     if anchor_hits:
         score += 120 + 20 * len(anchor_hits)
     elif anchors:
@@ -507,6 +599,7 @@ def score_table(row, tokens, claim):
         if any(token in table_text for token in ("수상여객", "철도여객", "도로여객")):
             return -10**9, []
     score += table_year_penalty(f"{row['tbl_name']} {row['category_path']}", norm_claim.get("period"))
+    score += table_scope_adjustment(row, norm_claim)
     return score, list(dict.fromkeys(hits_name + hits_path))
 
 
@@ -1003,6 +1096,7 @@ def rank_table_candidates(
     semantic_runtime=None,
     semantic_top_k=50,
     rerank_top_k=20,
+    lexical_reserve_k=0,
     table_overrides=None,
 ):
     """Return table candidates using lexical or hybrid retrieval.
@@ -1139,7 +1233,26 @@ def rank_table_candidates(
             item["table"]["tbl_name"],
         )
     )
-    return fused[:top_tables]
+    if lexical_reserve_k <= 0:
+        return fused[:top_tables]
+
+    required_keys = {
+        table_key(table)
+        for _, _, table in lexical[: min(lexical_reserve_k, top_tables)]
+    }
+    selected = [item for item in fused if table_key(item["table"]) in required_keys]
+    selected_keys = {table_key(item["table"]) for item in selected}
+    for item in fused:
+        key = table_key(item["table"])
+        if key in selected_keys:
+            continue
+        selected.append(item)
+        selected_keys.add(key)
+        if len(selected) >= top_tables:
+            break
+    original_order = {table_key(item["table"]): index for index, item in enumerate(fused)}
+    selected.sort(key=lambda item: original_order[table_key(item["table"])])
+    return selected[:top_tables]
 
 
 def _float_or_none(value):
@@ -1207,6 +1320,12 @@ def main():
     parser.add_argument("--semantic-index", default=str(DEFAULT_SEMANTIC_INDEX))
     parser.add_argument("--semantic-top-k", type=int, default=50)
     parser.add_argument("--rerank-top-k", type=int, default=20)
+    parser.add_argument(
+        "--lexical-reserve-k",
+        type=int,
+        default=0,
+        help="Keep this many strongest lexical tables in the final hybrid Top-K",
+    )
     parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
     parser.add_argument("--device", default=None, help="임베딩/리랭커 장치: cuda 또는 cpu")
     parser.add_argument("--no-reranker", action="store_true")
@@ -1311,6 +1430,7 @@ def main():
                 semantic_runtime=semantic_runtime,
                 semantic_top_k=args.semantic_top_k,
                 rerank_top_k=args.rerank_top_k,
+                lexical_reserve_k=args.lexical_reserve_k,
                 table_overrides=table_overrides,
             )
         for rank, candidate in enumerate(ranked, 1):

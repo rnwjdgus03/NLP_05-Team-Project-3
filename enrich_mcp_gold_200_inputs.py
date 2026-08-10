@@ -8,7 +8,7 @@ import csv
 import json
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -66,6 +66,10 @@ def _month_period(year: int, month: int) -> str:
     return f"{year:04d}{month:02d}"
 
 
+def _quarter_period(year: int, quarter: int) -> str:
+    return f"{year:04d}{quarter:02d}"
+
+
 def _previous_month(period: str) -> str:
     year, month = int(period[:4]), int(period[4:])
     return _month_period(year - 1, 12) if month == 1 else _month_period(year, month - 1)
@@ -111,7 +115,7 @@ def period_mentions(text: str, publication_date: date) -> list[PeriodMention]:
     _add_matches(
         mentions, occupied, text,
         r"(?P<year>20\d{2})년\s*(?P<quarter>[1-4])분기",
-        lambda m: ("M", _month_period(int(m.group("year")), int(m.group("quarter")) * 3)),
+        lambda m: ("Q", _quarter_period(int(m.group("year")), int(m.group("quarter")))),
         "explicit_year_quarter", 7,
     )
     _add_matches(
@@ -136,8 +140,11 @@ def period_mentions(text: str, publication_date: date) -> list[PeriodMention]:
         mentions, occupied, text,
         r"(?P<rel>지난해|작년|올해|지난)\s*(?P<quarter>[1-4])분기",
         lambda m: (
-            "M",
-            _month_period(year if m.group("rel") in {"올해", "지난"} else year - 1, int(m.group("quarter")) * 3),
+            "Q",
+            _quarter_period(
+                year if m.group("rel") in {"올해", "지난"} else year - 1,
+                int(m.group("quarter")),
+            ),
         ),
         "relative_quarter", 6,
     )
@@ -260,10 +267,28 @@ def extract_structured_targets(claim: dict[str, str]) -> dict[str, str]:
     }
 
 
-def choose_period(claim: dict[str, str]) -> tuple[str, str, str, str]:
+def parse_publication_date(value: object) -> date | None:
+    """Parse ISO dates and Excel serial dates found in article CSV exports."""
+
+    raw = str(value or "").strip()
+    if not raw:
+        return None
     try:
-        publication_date = date.fromisoformat(str(claim.get("date", ""))[:10])
+        return date.fromisoformat(raw[:10])
     except ValueError:
+        pass
+    try:
+        serial = float(raw)
+    except ValueError:
+        return None
+    if not 1 <= serial <= 100000:
+        return None
+    return date(1899, 12, 30) + timedelta(days=int(serial))
+
+
+def choose_period(claim: dict[str, str]) -> tuple[str, str, str, str]:
+    publication_date = parse_publication_date(claim.get("date", ""))
+    if publication_date is None:
         return "", "", "", "no_publication_date"
     text = str(claim.get("claim_text", "") or "")
     mentions = period_mentions(text, publication_date)
@@ -282,6 +307,16 @@ def choose_period(claim: dict[str, str]) -> tuple[str, str, str, str]:
         return distance, -mention.priority, -mention.start
 
     selected = min(mentions, key=score)
+    # "지난 2월 ... 지난해 같은 달보다 14.3%"에서 값 근처의 '지난해'는
+    # 비교 시점이다. 같은 문장에 있는 월을 대상 시점으로 보존한다.
+    if selected.source == "relative_year":
+        following = text[selected.end : selected.end + 18]
+        if re.search(r"같은\s*달|동월", following):
+            monthly = [mention for mention in mentions if mention.prd_se == "M"]
+            if monthly:
+                target = min(monthly, key=lambda mention: abs(mention.start - selected.start))
+                previous = str(int(target.period[:4]) - 1) + target.period[4:]
+                return "M", target.period, previous, "relative_same_month_target"
     previous = ""
     local = text[max(0, selected.start - 80) : min(len(text), selected.end + 140)]
     if selected.prd_se == "M":
@@ -343,12 +378,47 @@ def enrich_row(row: dict[str, str]) -> dict[str, str]:
         "claim_type": row.get("claim_type") or row.get("semantic_type", ""),
     }
     prd_se, period, previous, source = choose_period(adapted)
+    existing_period = str(
+        row.get("measurement_period") or row.get("period") or ""
+    ).strip()
+    existing_prd_se = str(
+        row.get("measurement_prd_se") or row.get("prd_se") or ""
+    ).strip().upper()
+    claim_text = str(adapted.get("claim_text", "") or "")
+    compact_text = re.sub(r"\s+", "", claim_text)
+    # 조사명에 포함된 '2024년 12월'보다 실제 측정 대상 '작년 한해'를 우선한다.
+    if (
+        existing_prd_se == "Y"
+        and re.fullmatch(r"(?:19|20)\d{2}", existing_period)
+        and re.search(r"작년한해|지난해한해|지난한해|연간", compact_text)
+    ):
+        prd_se, period, previous, source = "Y", existing_period, "", "existing_annual_target"
+    # '3월 기준으로는 2016년(111억...)'처럼 월은 공통이고 연도는
+    # measurement별로 다른 문장은 HCX가 잡은 연도와 문장의 월을 결합한다.
+    elif (
+        source == "month"
+        and existing_prd_se == "Y"
+        and re.fullmatch(r"(?:19|20)\d{2}", existing_period)
+        and existing_period in claim_text
+    ):
+        month_match = re.search(r"(?<!\d)(1[0-2]|0?[1-9])월\s*기준", claim_text)
+        if month_match:
+            prd_se = "M"
+            period = _month_period(int(existing_period), int(month_match.group(1)))
+            previous = ""
+            source = "month_with_measurement_year"
     selected_unit = select_claim_unit(adapted)
     canonical_unit = canonicalize_unit(selected_unit)
     dimension = unit_dimension(canonical_unit)
     value_type, measurement_role, change_base = infer_change_fields(
         adapted, prd_se, period, previous
     )
+    existing_value_type = str(row.get("value_type", "") or "").strip()
+    existing_role = str(row.get("measurement_role", "") or "").strip()
+    if existing_value_type and existing_value_type != "-":
+        value_type = existing_value_type
+    if existing_role and existing_role != "-":
+        measurement_role = existing_role
     if not previous and period:
         if change_base == "전월" and len(period) == 6:
             previous = _previous_month(period)
