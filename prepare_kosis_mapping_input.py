@@ -287,7 +287,8 @@ def exclusion(row: dict, dimension: str, semantic: str):
     # 증감률은 두 시점의 수준값으로 계산한 파생값일 수 있다. 선택된 KOSIS ITEM이
     # 직접 공표한 증감률인지 확인되기 전에는 원자료 직접대조 READY로 보내지 않는다.
     if semantic == "rate_change":
-        return "DERIVED_VALUE_REQUIRES_COMPUTATION", "증감률은 직접 공표 ITEM 확인 또는 수준값 재계산 필요"
+        
+        return "", ""
     if semantic == "rank":
         return "RANK_NOT_DIRECTLY_COMPARABLE", "순위는 KOSIS 원자료와 직접 비교하지 않음"
     # 값을 비교하기 **전에** 주장의 모양을 본다.

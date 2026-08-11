@@ -446,6 +446,8 @@ def is_unit_compatible(kosis_unit, claim_unit, item_name=''):
 
 def needs_manual_code_review(row, obj_reason):
     """표는 맞아도 세부 품목/산업 코드가 좁게 잡히면 불일치 확정 대신 보류한다."""
+    if compact(str(row.get('mapping_override_rule', ''))):
+        return False, ''   # override로 확정된 좌표는 이 휴리스틱 검사를 건너뜀
     text = compact(' '.join(str(row.get(k, '')) for k in ['indicator', 'industry_or_item', 'claim_text']))
     reason = compact(obj_reason)
     broad_to_narrow = {
