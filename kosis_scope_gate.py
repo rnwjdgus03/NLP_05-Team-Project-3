@@ -104,6 +104,20 @@ FINANCIAL_INSTRUMENT = (
 FINANCIAL_INSTRUMENT_METRIC = (
     "만기", "발행", "상환", "거래", "수익률", "금리", "스프레드", "잔액", "물량", "규모",
 )
+# 순위 주장: KOSIS는 원자료(수출액·판매량 등)만 수록하고 '순위' 자체는 만들지 않는다.
+# 목록은 관측된 표현에서만 뽑았으므로 확장 전제다.
+RANKING_HINT = ("위를 차지", "위에 올랐", "위를 기록", "위로 올라섰", "위에 이름을 올",
+                "톱3", "top3", "top 3", "1위", "2위", "3위", "1~3위", "1-3위")
+
+# 환율·기준금리 등 한국은행 등 타기관이 편제하는 지표. 확실한 미수록 단정은 아니므로
+# REVIEW로만 남긴다 — intraday_market_rate 처럼 시각까지 특정된 경우만 REJECT.
+OTHER_AGENCY_SUBJECT = ("환율", "기준금리", "국채금리", "회사채금리", "콜금리",
+                        "코스피지수", "코스닥지수")
+
+# 원자료 집계가 필요한 파생값 — 품목 수·업체 수 등은 KOSIS 표에 그대로 있지 않고
+# 여러 항목을 세거나 나눈 값일 가능성이 높다. 목록은 관측 사례 확장 전제다.
+DERIVED_COUNT_HINT = ("품목 수", "업체 수", "기업 수", "브랜드 수",
+                      "차지하는 비율", "차지하는 비중", "비중을 차지")
 
 # KOSIS 에 수록되지 않는 것이 확실한 국제기구 통계.
 # OECD·IMF 등은 KOSIS 국제통계에 일부 수록되므로 여기 넣지 않는다.
@@ -396,12 +410,42 @@ def financial_instrument_value(claim_text: str, row: Mapping[str, Any]):
         )
     return None
 
+def ranking_claim(claim_text: str, row: Mapping[str, Any]):
+    """순위 표현. KOSIS는 원자료만 수록하며 '순위'는 재현할 관측값이 없다."""
+    hit = _has(claim_text, RANKING_HINT)
+    if hit:
+        return ("RANKING_CLAIM_UNSUPPORTED",
+                f"순위 표현({hit}) — KOSIS는 순위를 산출하지 않고 원자료만 수록", REJECT)
+    return None
+
+
+def other_agency_scope(claim_text: str, row: Mapping[str, Any]):
+    """환율·기준금리 등 한국은행 등 타기관 소관으로 추정되는 지표.
+
+    intraday_market_rate 가 시각까지 특정된 경우를 REJECT 로 잡는 것과 달리,
+    여기는 확신이 서지 않으므로 REVIEW 로만 남긴다.
+    """
+    hit = _has(claim_text, OTHER_AGENCY_SUBJECT)
+    if hit:
+        return ("OUT_OF_KOSIS_SCOPE",
+                f"'{hit}' — 한국은행 등 타기관 소관 지표로 추정, KOSIS 수록 여부 확인 필요", REVIEW)
+    return None
+
+
+def derived_count(claim_text: str, row: Mapping[str, Any]):
+    """품목 수·업체 수 등 원자료를 세거나 나눠야 나오는 값. 표에 그대로 없을 가능성이 높다."""
+    hit = _has(claim_text, DERIVED_COUNT_HINT)
+    if hit:
+        return ("DERIVED_COUNT_UNSUPPORTED",
+                f"'{hit}' — 원자료를 세거나 나눈 파생값으로 추정, 단일 표 조회로 재현 불가 가능성", REVIEW)
+    return None
 
 DETECTORS = (declared_non_kosis_scope, financial_instrument_value,
              foreign_market, global_scope, forecast_or_plan,
              policy_parameter, branded_product_price, derived_difference,
-             derived_indicator, intraday_market_rate, single_company_metric,
-             enumerated_companies, internal_document_source,
+             derived_indicator, intraday_market_rate, other_agency_scope,
+             single_company_metric, enumerated_companies, ranking_claim,
+             derived_count, internal_document_source,
              foreign_organization_source)
 
 

@@ -126,6 +126,22 @@ def main():
         action="store_true",
         help="기존 table candidates를 검증해 재사용하고 GPU 검색은 건너뜀",
     )
+    # --- 여기부터 추가: kosis_match_claims_to_index.py 가 이미 지원하는 override
+    # 인자를 오케스트레이터가 그대로 물려주게 한다. 지금까지는 오케스트레이터로
+    # 돌리면 이 두 파일이 항상 무시돼서, override를 쓰려면 2차 검색 단계를 손으로
+    # 다시 실행해야 했다 (2026-08-11 KOSIS 매핑 점검에서 발견).
+    parser.add_argument(
+        "--table-overrides",
+        default="",
+        help="감사 가능한 통계표 검색 override CSV. 빈 문자열이면 사용하지 않음. "
+        "1차(표만) 검색과 2차(메타 포함) 검색 모두에 전달된다.",
+    )
+    parser.add_argument(
+        "--mapping-overrides",
+        default="",
+        help="공식 ITEM/OBJ 코드로 검증되는 매핑 override CSV. 빈 문자열이면 사용하지 않음. "
+        "메타 인덱스가 있는 2차 검색에만 전달된다(좌표 확정에 메타가 필요하므로).",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -188,6 +204,8 @@ def main():
         retrieval_command.extend(["--device", args.device])
     if args.no_reranker:
         retrieval_command.append("--no-reranker")
+    if args.table_overrides:
+        retrieval_command.extend(["--table-overrides", args.table_overrides])
     if args.reuse_table_candidates:
         validate_reusable_candidates(ready, table_candidates)
     else:
@@ -215,28 +233,31 @@ def main():
             "--with-periodicity",
         ]
     )
-    run(
-        [
-            sys.executable,
-            SCRIPT_DIR / "kosis_match_claims_to_index.py",
-            "--claims",
-            ready,
-            "--table-index",
-            args.table_index,
-            "--meta-index",
-            meta_index,
-            "--out",
-            final_candidates,
-            "--ranking-input",
-            table_candidates,
-            "--top-tables",
-            args.top_tables,
-            "--top-meta",
-            args.top_meta,
-            "--min-score",
-            args.min_score,
-        ]
-    )
+    final_command = [
+        sys.executable,
+        SCRIPT_DIR / "kosis_match_claims_to_index.py",
+        "--claims",
+        ready,
+        "--table-index",
+        args.table_index,
+        "--meta-index",
+        meta_index,
+        "--out",
+        final_candidates,
+        "--ranking-input",
+        table_candidates,
+        "--top-tables",
+        args.top_tables,
+        "--top-meta",
+        args.top_meta,
+        "--min-score",
+        args.min_score,
+    ]
+    if args.table_overrides:
+        final_command.extend(["--table-overrides", args.table_overrides])
+    if args.mapping_overrides:
+        final_command.extend(["--mapping-overrides", args.mapping_overrides])
+    run(final_command)
 
     if args.verify:
         run(
