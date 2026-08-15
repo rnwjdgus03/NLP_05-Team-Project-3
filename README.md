@@ -1,5 +1,42 @@
 # NLP_05-Team-Project-3
 
+> 다른 컴퓨터에서 v15 SQLite exact 작업을 이어갈 때는
+> [`docs/HANDOFF_20260815.md`](docs/HANDOFF_20260815.md)를 먼저 읽고,
+> Git에서 제외된 실행 자산은 `scripts/restore_v15_portable_assets.ps1`로 복원하세요.
+
+## MCP 실제조회 v13 개발 결과 (2026-08-13)
+
+기존 개발 골드의 좌표를 그대로 신뢰하지 않고 KOSIS MCP
+`search → validate → get_data`로 23행·12개 고유 좌표의 공식 값과 단위를 다시
+확인했습니다. 이어 기사 claim 값을 실제 응답에서 재현하는 의미 게이트를 적용해
+엄격 회귀 표본 8행만 분리했습니다.
+
+v13은 미요청 지역 세분 표를 감점하고, 지표가 ITEM 또는 OBJ 어느 쪽에 표현되든
+공동 개념 일치로 평가하며, ITEM 후보 제한을 표별로 적용합니다. 원본 Top-20 후보
+재평가에서 엄격 8행과 좌표 확인 23행의 완전 좌표 정확도는 각각 100%였습니다.
+다만 기존 개발 골드에서 추린 작은 표본이므로 일반화 성능이나 최종 verdict 성능을
+뜻하지 않습니다. 상세 결과와 한계는
+[`docs/mcp_gold_v13_actual_verified_result_20260813.md`](docs/mcp_gold_v13_actual_verified_result_20260813.md)를
+참고하세요.
+
+## Holdout8 v9 실행 (2026-08-10)
+
+v9은 v8의 HCX 추출 결과를 고정하고 다음 네 변경만 다시 평가합니다.
+
+- 성별·지역·국가·연령·품목 대상어를 같은 의미의 실제 KOSIS OBJ 축에 우선 정렬
+- 표 후보 Top-k를 자르기 전에 월·분기·연 수록주기 불일치 제거
+- 정확 좌표가 빈 응답일 때 OBJ를 하나씩 제거하되 회수 결과는 `NEEDS_CONFIRMATION` 유지
+- Top-5 기술 실패 건만 Top-10 좌표를 추가 검증
+
+KOSIS MCP `search → table_info → validate → get_data`로 독립 확인한 실제 좌표 골드 4건과 주기 음성 골드 2건을 번들에 포함했습니다. v8 기준선은 실제 좌표 골드 4건에서 표 Recall@5 25%, Recall@10 50%, 완전 좌표 Recall@5/10 0%입니다.
+
+- 실행 노트북: `notebooks/holdout8_stratified48_v9_axis_fallback_gpu_colab.ipynb`
+- Colab 입력 번들: `outputs/holdout8_stratified48_v9/holdout8_v9_axis_fallback_colab_input_bundle.zip`
+- 사전등록: `docs/holdout8_v9_prereg_20260810.md`
+- 번들 생성: `python scripts/build_holdout8_v9_axis_fallback_packet.py`
+
+이 평가는 개발 홀드아웃의 4건 좌표 골드를 사용하므로 최종 일반화 성능이 아니라 회귀 진단으로만 해석합니다.
+
 AI 기반 뉴스 수치 주장 추출 및 KOSIS 사실검증 PoC입니다.
 
 발표 이후 실전2에서는 전달받은 정제 문장 파일을 시작점으로 사용하지 않고, **뉴스 기사 원문 CSV부터 동일한 결과를 다시 생성하는 코드 기반 파이프라인**으로 전환했습니다.
@@ -225,6 +262,34 @@ measurement_binding_source
 추출 CSV에는 `verifiable_kosis`와 `unverifiable_reason`을 저장하지 않습니다. KOSIS 검색 전에 검증 가능 여부를 단정하면 실제 통계표 탐색 결과와 순환 관계가 생기기 때문입니다.
 
 ### 4. KOSIS 매핑·검증
+
+#### 표 검색과 정확 좌표 조회 분리
+
+신규 `sqlite` backend는 역할을 다음처럼 분리합니다.
+
+```text
+lexical/BGE-M3/reranker 표 Top-N
+→ SQLite ITEM·OBJ·수록주기 exact resolver
+→ KOSIS Open API
+→ MATCH / MISMATCH / 판단불가
+```
+
+좌표 전체를 ChromaDB에 임베딩하지 않으며, 기존 좌표 Chroma 경로는 A/B 회귀 비교용으로만 보존합니다.
+
+```powershell
+python run_kosis_measurement_pipeline.py `
+  --input outputs/run/05_hcx_measurements.csv `
+  --table-index data/reference/kosis_table_summary.csv `
+  --semantic-index data/indexes/kosis_bge_m3 `
+  --retrieval-mode hybrid `
+  --top-tables 10 `
+  --top-rank-for-meta 10 `
+  --coordinate-backend sqlite `
+  --metadata-db data/indexes/kosis_metadata.sqlite `
+  --out-dir outputs/run/07_mapping_sqlite
+```
+
+구조와 스키마는 `docs/kosis_vector_sqlite_exact_architecture.md`에 기록했습니다.
 
 #### 실험: 구조화 전 원문 BGE 검색
 
@@ -699,6 +764,9 @@ python measurement_regression.py audit `
 - `kosis_semantic_search.py`: dense retrieval, RRF hybrid fusion, 다국어 cross-encoder rerank
 - `kosis_match_claims_to_index.py`: measurement 중심 통계표·ITEM·OBJ 후보와 READY/REVIEW/REJECT 판정
 - `kosis_build_meta_index.py`: 상위 통계표의 KOSIS 메타 long index 생성
+- `kosis_sqlite_metadata.py`: 표·ITEM·OBJ·수록주기를 누적 SQLite DB로 변환
+- `kosis_sqlite_resolver.py`: 표 Top-N 내부의 ITEM·typed OBJ exact 좌표 선택
+- `run_kosis_sqlite_exact_pipeline.py`: SQLite 좌표 선택과 KOSIS API 검증 연결
 - `kosis_build_chroma_meta_index.py`: 공식 메타의 ITEM/OBJ 좌표를 ChromaDB에 영속 저장
 - `kosis_chroma_hybrid_search.py`: 표 Top-K 내부 좌표를 BGE-M3 + lexical + reranker로 검색
 - `kosis_validate_mapping_candidates.py`: 공식 메타·KOSIS API로 2차 READY/PROVISIONAL 판정

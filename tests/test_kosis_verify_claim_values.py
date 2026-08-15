@@ -4,6 +4,7 @@ from kosis_verify_claim_values import (
     item_compatible,
     parse_number,
     unit_factor,
+    validated_matching_rows,
     verify_row,
 )
 
@@ -17,6 +18,53 @@ def test_base_unit_conversion_uses_multiplication_for_canonical_claim_values():
     assert unit_factor("백만원", "원")[0] == 1_000_000
     assert unit_factor("천명", "명")[0] == 1_000
     assert unit_factor("백만달러", "원")[0] is None
+
+
+def test_ten_thousand_won_conversion_is_not_silently_treated_as_one_won():
+    assert unit_factor("만원", "원")[0] == 10_000
+
+
+def test_compound_person_density_is_not_a_person_count():
+    assert unit_factor("명/㎢", "명")[0] is None
+
+
+def test_validated_api_rows_are_reused_only_for_the_selected_coordinate():
+    row = {
+        "mapping_status": "READY",
+        "item_meta_valid": "True",
+        "obj_meta_valid": "True",
+        "response_code_valid": "True",
+        "selected_itm_id": "I1",
+        "selected_obj_l1": "A1",
+        "selected_combination": '{"matching_rows": ['
+        '{"ITM_ID":"I1","C1":"A1","PRD_DE":"2024","PRD_SE":"A","DT":"10"},'
+        '{"ITM_ID":"I2","C1":"A1","PRD_DE":"2024","PRD_SE":"A","DT":"99"}]}'
+    }
+    rows = validated_matching_rows(row)
+    assert len(rows) == 1
+    assert rows[0]["DT"] == "10"
+
+
+def test_empty_mapping_type_recovers_direct_for_ready_level_value(monkeypatch):
+    row = {
+        "mapping_status": "READY", "value": "10", "period": "2024",
+        "semantic_type": "count", "value_type": "수준값", "unit": "명",
+        "org_id": "101", "tbl_id": "T1", "selected_itm_id": "I1",
+        "selected_itm_name": "인구", "selected_itm_unit": "명",
+        "selected_obj_l1": "A1", "selected_obj_l1_name": "전국",
+        "selected_obj_l1_axis_id": "A", "prd_se": "Y",
+        "item_meta_valid": "True", "obj_meta_valid": "True",
+        "response_code_valid": "True",
+        "selected_combination": '{"matching_rows": ['
+        '{"ITM_ID":"I1","ITM_NM":"인구","UNIT_NM":"명",'
+        '"C1":"A1","PRD_DE":"2024","PRD_SE":"A","DT":"10"}]}'
+    }
+    meta = [{"OBJ_ID": "ITEM", "ITM_ID": "I1", "ITM_NM": "인구", "UNIT_NM": "명"},
+            {"OBJ_ID": "A", "ITM_ID": "A1", "ITM_NM": "전국"}]
+    out = verify_row(row, {("101", "T1"): meta}, 0, use_pinned_item=True)
+    assert out["mapping_type"] == "direct"
+    assert out["value_data_source"] == "validated_api_response"
+    assert out["verdict"] == "일치"
 
 
 def test_explicit_year_over_year_text_infers_comparison_period():

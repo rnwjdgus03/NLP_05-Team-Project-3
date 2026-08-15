@@ -12,12 +12,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+GOLD_OBJ_FIELDS = [
+    field
+    for level in range(1, 9)
+    for field in (
+        f"gold_obj_l{level}", f"gold_obj_l{level}_name",
+        f"gold_obj_l{level}_axis_id", f"gold_obj_l{level}_axis_name",
+    )
+]
 GOLD_FIELDS = [
     "gold_id", "gold_org_id", "gold_tbl_id", "gold_tbl_name",
-    "gold_obj_l1", "gold_obj_l1_name", "gold_obj_l2", "gold_obj_l2_name",
+    *GOLD_OBJ_FIELDS,
     "gold_itm_id", "gold_itm_name", "gold_prd_se", "gold_period",
     "gold_previous_period", "gold_source_value", "gold_source_unit",
-    "gold_actual_value", "gold_coordinate_status", "gold_label_source",
+    "gold_actual_value", "gold_actual_unit", "gold_coordinate_status", "gold_label_source",
     "gold_evidence_url", "gold_retrieved_at", "human_reviewed",
 ]
 REQUIRED_AUDIT = {
@@ -86,10 +94,6 @@ def main() -> None:
             gold_org_id=audit["org_id"],
             gold_tbl_id=audit["tbl_id"],
             gold_tbl_name=audit["tbl_name"],
-            gold_obj_l1=audit["obj_l1"],
-            gold_obj_l1_name=audit.get("obj_l1_name", ""),
-            gold_obj_l2=audit.get("obj_l2", "N/A"),
-            gold_obj_l2_name=audit.get("obj_l2_name", "N/A"),
             gold_itm_id=audit["itm_id"],
             gold_itm_name=audit.get("itm_name", ""),
             gold_prd_se=audit["prd_se"],
@@ -98,12 +102,18 @@ def main() -> None:
             gold_source_value=audit["source_value"],
             gold_source_unit=audit["source_unit"],
             gold_actual_value=audit["actual_value"],
+            gold_actual_unit=audit.get("actual_unit", audit["source_unit"]),
             gold_coordinate_status="MCP_ACTUAL_VALUE_CONFIRMED",
             gold_label_source="KOSIS_MCP_SEARCH_VALIDATE_GET_DATA",
             gold_evidence_url=audit["evidence_url"],
             gold_retrieved_at=audit["retrieved_at"],
             human_reviewed="N",
         )
+        for level in range(1, 9):
+            row[f"gold_obj_l{level}"] = audit.get(f"obj_l{level}", "N/A")
+            row[f"gold_obj_l{level}_name"] = audit.get(f"obj_l{level}_name", "N/A")
+            row[f"gold_obj_l{level}_axis_id"] = audit.get(f"obj_l{level}_axis_id", "N/A")
+            row[f"gold_obj_l{level}_axis_name"] = audit.get(f"obj_l{level}_axis_name", "N/A")
         rows.append(row)
 
     source_fields = list(next(iter(measurements.values())).keys()) if measurements else []
@@ -115,7 +125,7 @@ def main() -> None:
         writer.writerows(rows)
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "row_count": len(rows),
         "unique_measurement_count": len({row["claim_measurement_id"] for row in rows}),

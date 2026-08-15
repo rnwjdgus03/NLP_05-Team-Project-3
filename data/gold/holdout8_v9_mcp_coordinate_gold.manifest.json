@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "created_at": "2026-08-10T03:08:17.677741+00:00",
+  "row_count": 4,
+  "unique_measurement_count": 4,
+  "human_reviewed": false,
+  "label_source": "KOSIS MCP search -> validate -> get_data",
+  "measurements": ".codex_analysis\\holdout8_v8_gpu_results_20260810\\07_mapping_v2\\evaluation_set_v8_enriched.csv",
+  "measurements_sha256": "2216a76332fbaa0c5f8585f70264fe2dd69a020bdb0ea48a750af3223c812d23",
+  "audit_jsonl": "data\\gold\\holdout8_v9_mcp_coordinate_audit.jsonl",
+  "audit_sha256": "fc27bfb2f9a4100ff646fd504fbaeae59d4dd5bd01ab3d611a93f5301dda5cc0",
+  "output": "data\\gold\\holdout8_v9_mcp_coordinate_gold.csv",
+  "output_sha256": "ddcfbe0c7e5c5bdf585550b7501a5dc091c1a2a19e89ef406459d4e2b296821e"
+}

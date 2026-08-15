@@ -24,6 +24,7 @@ from kosis_validate_mapping_candidates import (
     resolve_table_ambiguity,
     required_periods_for_row,
     response_matches_request,
+    semantic_ready_gate,
     validate_candidate_codes_against_meta,
     validate_mapping_candidates,
     validate_unit_and_period,
@@ -346,6 +347,30 @@ def test_api_error_and_empty_response_have_distinct_outcomes():
     assert empty["mapping_reason"] == "EMPTY_RESPONSE"
 
 
+def test_empty_coordinate_can_be_relaxed_but_never_auto_ready():
+    calls = []
+
+    def fetcher(request):
+        calls.append(dict(request))
+        if all(request.get(f"objL{level}") for level in (1, 2, 3)):
+            return []
+        return response_rows(periods=("2024",))
+
+    result = validate_mapping_candidates(
+        org_id="ORG", tbl_id="TBL", meta_rows=official_meta(),
+        item_candidates=[{"code": "I_TOTAL", "semantic_score": 0.9}],
+        obj_candidates=explicit_obj_candidates(), data_fetcher=fetcher,
+        expected_unit="명", required_periods=["2024"],
+        relax_empty_obj=True, max_relaxed_requests=3, max_relaxed_obj_drops=1,
+    )
+    assert result["obj_relaxation_attempted"] is True
+    assert result["obj_relaxation_recovered"] is True
+    assert result["mapping_status"] == NEEDS_CONFIRMATION
+    assert result["mapping_reason"] == "OBJ_RELAXED_AFTER_EMPTY_RESPONSE"
+    assert result["relaxed_obj_fields"]
+    assert len(calls) >= 2
+
+
 def test_kosis_error_payloads_distinguish_no_data_from_bad_request():
     kwargs = dict(
         org_id="ORG",
@@ -450,6 +475,25 @@ def test_validate_recovers_mapping_type_from_structural_fields():
     })
     assert mapping_type == "direct"
     assert reason == ""
+
+
+def test_relational_age_matrix_claim_cannot_be_auto_ready_from_total_axes():
+    gate = semantic_ready_gate(
+        {
+            "claim_text": "남편이 연상인 초혼 건수는 11만3400건이다.",
+            "measurement_indicator": "남편이 연상인 경우의 건수",
+        },
+        {
+            "tbl_name": "초혼부부의 연령별 혼인",
+            "selected_itm_name": "혼인",
+            "selected_obj_l1_axis_name": "남편의 연령별",
+            "selected_obj_l1_name": "계",
+            "selected_obj_l2_axis_name": "아내의 연령별",
+            "selected_obj_l2_name": "계",
+        },
+    )
+    assert gate["semantic_gate_valid"] is False
+    assert "RELATIONAL_AXIS_DERIVATION_REQUIRED" in gate["semantic_gate_details"]
 
 
 def test_required_periods_use_structural_monthly_base_for_level_derivation():

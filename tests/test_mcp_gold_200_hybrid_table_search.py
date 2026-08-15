@@ -10,7 +10,13 @@ from search_mcp_gold_200_chroma_bge import (
     infer_table_search_profile,
     select_claim_unit,
 )
-from kosis_match_claims_to_index import claim_tokens, normalized_claim_row
+from kosis_match_claims_to_index import (
+    claim_tokens,
+    compact,
+    norm_table_row,
+    normalized_claim_row,
+    rank_table_candidates,
+)
 from kosis_semantic_search import build_claim_query as build_shared_claim_query
 from kosis_chroma_hybrid_search import diversify_by_table
 
@@ -29,6 +35,84 @@ def test_gold_free_query_uses_public_input_fields():
     assert "LEVEL" in query
     assert "6838" in query
     assert "억 달러" in query
+
+
+def test_measurement_local_gender_wins_over_shared_claim_order():
+    targets = extract_structured_targets(
+        {
+            "claim_text": (
+                "성별로는 남자 비정규직 근로자가 365만명이고 "
+                "여자는 491만8000명이다."
+            ),
+            "claim_value": "4918000",
+            "measurement_indicator": "여자 비정규직 근로자 수",
+            "measurement_text": "491만8000명",
+        }
+    )
+
+    assert targets["gender"] == "여자"
+    assert "여자" in targets["obj_target_terms"].split("|")
+    assert "남자" not in targets["obj_target_terms"].split("|")
+
+
+def test_measurement_local_education_is_preserved_as_obj_target():
+    targets = extract_structured_targets(
+        {
+            "claim_text": "대졸 실업률은 6.2%, 고졸은 5.2%였다.",
+            "claim_value": "6.2",
+            "measurement_indicator": "대졸 실업률",
+        }
+    )
+
+    assert targets["education_level"] == "대졸"
+    assert "대졸" in targets["obj_target_terms"].split("|")
+
+
+def test_upstream_ranking_prefers_official_survey_and_required_gender_axis():
+    raw_tables = [
+        {
+            "org_id": "101",
+            "tbl_id": "DT_1DE7106S",
+            "tbl_name": "성/근로형태별 임금근로자 규모 및 비중(총괄)",
+            "category_path": "경제활동인구조사 > 근로형태별 부가조사",
+        },
+        {
+            "org_id": "999",
+            "tbl_id": "WRONG_PANEL",
+            "tbl_name": "사업체 특성별 비정규직 근로자 현황",
+            "category_path": "사업체패널조사 > 고용 현황",
+        },
+        {
+            "org_id": "998",
+            "tbl_id": "WRONG_DISABLED",
+            "tbl_name": "장애인 비정규직 근로자 현황",
+            "category_path": "장애인경제활동실태조사 > 고용 형태",
+        },
+    ]
+    tables = []
+    for raw in raw_tables:
+        table = norm_table_row(raw)
+        table["_compact_tbl_name"] = compact(table["tbl_name"])
+        table["_compact_category_path"] = compact(table["category_path"])
+        tables.append(table)
+    claim = enrich_row(
+        {
+            "claim_text": "여자는 비정규직 근로자가 491만8000명이다.",
+            "claim_value": "4918000",
+            "claim_unit": "명",
+            "measurement_indicator": "여자 비정규직 근로자 수",
+            "measurement_text": "491만8000명",
+            "entity_type": "person",
+            "metric_domain": "고용",
+            "measurement_period": "202508",
+            "measurement_prd_se": "M",
+        }
+    )
+
+    ranked = rank_table_candidates(tables, claim, min_score=-10**8, top_tables=3)
+
+    assert ranked[0]["table"]["tbl_id"] == "DT_1DE7106S"
+    assert any(hit.startswith("survey_axis_scope:") for hit in ranked[0]["hits"])
 
 
 def test_table_query_includes_survey_name_and_target_axes():
@@ -209,6 +293,40 @@ def test_period_extraction_uses_period_nearest_to_claim_value():
     assert (prd_se, period, source) == ("M", "202201", "explicit_year_month")
 
 
+def test_period_extraction_does_not_bind_post_value_historical_benchmark():
+    prd_se, period, previous, source = choose_period(
+        {
+            "date": "2025-03-11",
+            "claim_text": "1월 주점업 생산의 낙폭도 6.7%에 달해 2021년 1월 이후 가장 컸다.",
+            "claim_value": "6.7",
+        }
+    )
+    assert (prd_se, period, source) == ("M", "202501", "month")
+
+
+def test_period_extraction_resolves_last_year_month_end_from_article_date():
+    prd_se, period, previous, source = choose_period(
+        {
+            "date": "2025-02-08",
+            "claim_text": "지난해 12월말 기준 준공 후 미분양 주택은 2만1480가구였다.",
+            "claim_value": "21480",
+        }
+    )
+    assert (prd_se, period, source) == ("M", "202412", "relative_year_month")
+
+
+def test_period_extraction_keeps_value_bound_existing_year_for_compact_amount():
+    prd_se, period, previous, source = choose_period(
+        {
+            "date": "2025-01-01",
+            "claim_text": "거래규모는 2022년 31조6000억원에서 2024년 36조9000억원으로 늘었다.",
+            "claim_value": "36900000000000",
+            "measurement_period": "2024",
+        }
+    )
+    assert (prd_se, period, source) == ("Y", "2024", "explicit_year")
+
+
 def test_enriched_row_adds_pipeline_period_and_unit_fields():
     row = enrich_row(
         {
@@ -353,7 +471,32 @@ def test_two_stage_selection_can_change_table_for_better_item_and_obj():
     selected = select_two_stage(claim, candidates, item_top_k=2)
     assert selected["tbl_id"] == "RIGHT"
     assert selected["two_stage_table_changed"] == "Y"
-    assert selected["selection_backend"] == "item_obj_first_v2"
+    assert selected["selection_backend"] == "item_obj_joint_v4"
+
+
+def test_two_stage_forces_gender_to_gender_axis():
+    claim = {
+        "claim_text": "여자 고용률은 60%였다.",
+        "item_intent_terms": "고용률", "gender": "여자",
+        "obj_target_terms": "여자",
+    }
+    candidates = [
+        {
+            "org_id": "1", "tbl_id": "WRONG", "selected_itm_id": "I",
+            "selected_itm_name": "고용률", "selected_obj_l1_name": "여자",
+            "selected_obj_l1_axis_name": "지역별", "candidate_rank": "1",
+            "table_rank": "1",
+        },
+        {
+            "org_id": "1", "tbl_id": "RIGHT", "selected_itm_id": "I",
+            "selected_itm_name": "고용률", "selected_obj_l1_name": "여자",
+            "selected_obj_l1_axis_name": "성별", "candidate_rank": "5",
+            "table_rank": "2",
+        },
+    ]
+    selected = select_two_stage(claim, candidates, item_top_k=2)
+    assert selected["tbl_id"] == "RIGHT"
+    assert selected["two_stage_axis_strict_match"] == "Y"
 
 
 def test_coordinate_diversification_keeps_each_table_in_global_cutoff():
@@ -407,6 +550,57 @@ def test_two_stage_selection_prefers_aggregate_when_claim_has_no_obj_target():
     selected = select_two_stage(claim, candidates)
     assert selected["selected_obj_l1_name"] == "-"
     assert selected["two_stage_obj_aggregate"] == "Y"
+
+
+def test_two_stage_accepts_indicator_represented_on_obj_axis() -> None:
+    claim = {
+        "claim_text": "지난해 출생아 수가 3.6% 늘었다.",
+        "measurement_indicator": "출생아수",
+        "item_intent_terms": "출생아수",
+    }
+    candidates = [
+        {
+            "org_id": "101", "tbl_id": "NATIONAL", "selected_itm_id": "T1",
+            "selected_itm_name": "인구동태건수 및 동태율 추이",
+            "selected_obj_l1_name": "출생아수(명)",
+            "candidate_rank": "1", "table_rank": "1",
+        },
+        {
+            "org_id": "101", "tbl_id": "REGIONAL", "selected_itm_id": "T1",
+            "selected_itm_name": "출생아수", "selected_obj_l1_name": "전국",
+            "candidate_rank": "2", "table_rank": "2",
+        },
+    ]
+    selected = select_two_stage(claim, candidates, item_top_k=2)
+    assert selected["tbl_id"] == "NATIONAL"
+    assert selected["two_stage_concept_matched_terms"] == "출생아수"
+
+
+def test_item_cutoff_is_applied_per_table_not_globally() -> None:
+    claim = {
+        "claim_text": "지난해 출생아 수가 늘었다.",
+        "measurement_indicator": "출생아수",
+        "item_intent_terms": "출생아수",
+    }
+    candidates = [
+        {
+            "org_id": "101", "tbl_id": "NATIONAL", "selected_itm_id": "GENERIC",
+            "selected_itm_name": "인구동태건수 및 동태율 추이",
+            "selected_obj_l1_name": "출생아수(명)",
+            "candidate_rank": "1", "table_rank": "1",
+        }
+    ]
+    candidates.extend(
+        {
+            "org_id": "331", "tbl_id": "DISTRACTOR", "selected_itm_id": f"I{index}",
+            "selected_itm_name": f"특성별 출생아수 {index}",
+            "selected_obj_l1_name": "전체", "candidate_rank": str(index + 1),
+            "table_rank": "4",
+        }
+        for index in range(12)
+    )
+    selected = select_two_stage(claim, candidates, item_top_k=3)
+    assert selected["tbl_id"] == "NATIONAL"
 
 
 def test_pool_deduplicates_and_preserves_both_ranks():

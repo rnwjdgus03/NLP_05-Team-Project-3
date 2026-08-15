@@ -8,6 +8,7 @@ from kosis_semantic_search import (
     build_semantic_index,
     build_table_document,
     normalized_rrf_score,
+    survey_hints_from_claim,
 )
 
 
@@ -89,6 +90,22 @@ def test_query_and_table_documents_keep_mapping_semantics():
     assert "상위 N개와 평균값 표 제외" in query
     assert "통계표: 품목별 수출액" in document
     assert "분류경로: 무역통계" in document
+
+
+def test_official_series_cues_add_specific_survey_hints():
+    assert "사망원인통계" in survey_hints_from_claim({
+        "measurement_indicator": "영아돌연사증후군 사망자 수",
+    })
+    assert "인구동향조사" not in survey_hints_from_claim({
+        "measurement_indicator": "영아돌연사증후군 사망자 수",
+    })
+    assert "온라인쇼핑동향조사" in survey_hints_from_claim({
+        "measurement_indicator": "온라인 음식서비스 거래규모",
+    })
+    assert "인구총조사" in survey_hints_from_claim({
+        "measurement_indicator": "1인 가구 수",
+        "claim_text": "국내 1인 가구가 800만 가구를 넘었다.",
+    })
 
 
 def test_rrf_rewards_overlap_between_lexical_and_semantic_results():

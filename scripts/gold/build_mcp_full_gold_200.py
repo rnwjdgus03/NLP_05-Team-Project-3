@@ -116,6 +116,17 @@ def to_float(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def canonical_article_id(value: Any) -> str:
+    """Represent source news IDs in the article-level ``A0000`` convention."""
+    raw = str(value or "").strip()
+    if re.fullmatch(r"\d+", raw):
+        return f"A{int(raw):04d}"
+    match = re.fullmatch(r"[Aa](\d+)", raw)
+    if match:
+        return f"A{int(match.group(1)):04d}"
+    return raw
+
+
 def select_candidates() -> list[dict[str, Any]]:
     rows = read_csv(SOURCE)
     eligible: list[dict[str, str]] = []
@@ -360,10 +371,21 @@ def infer_unit(point: dict[str, Any], candidate: dict[str, Any]) -> str:
     return "원응답 단위 미표기"
 
 
-def build_output() -> None:
+def build_output(
+    target_count: int = 200,
+    output: Path = OUTPUT,
+    manifest_path: Path = MANIFEST,
+) -> None:
+    if target_count < 1:
+        raise ValueError("target_count must be positive")
     candidates: list[dict[str, Any]] = json.loads(CANDIDATES.read_text(encoding="utf-8"))
     candidates.sort(key=lambda row: (0 if row.get("source_refined_verdict") == "일치" else 1, int(row["candidate_no"])))
     evidence = load_evidence()
+    locked_manifest = (
+        json.loads(MANIFEST.read_text(encoding="utf-8"))
+        if MANIFEST.exists()
+        else {}
+    )
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -418,7 +440,7 @@ def build_output() -> None:
         accepted.append({
             "gold_id": f"MCPG-{len(accepted) + 1:03d}",
             "claim_id": candidate["claim_id"],
-            "article_id": candidate["article_id"],
+            "article_id": canonical_article_id(candidate["article_id"]),
             "title": candidate["title"],
             "date": candidate["date"],
             "url": candidate["url"],
@@ -453,21 +475,34 @@ def build_output() -> None:
             "gold_evidence_batch": ev.get("batch", ""),
             "gold_retrieved_at": ev.get("retrieved_at", now),
         })
-        if len(accepted) == 200:
+        if len(accepted) == target_count:
             break
 
-    if len(accepted) != 200:
-        raise ValueError(f"expected 200 accepted MCP rows, got {len(accepted)}; rejected={len(rejected)}")
+    if len(accepted) != target_count:
+        raise ValueError(
+            f"expected {target_count} accepted MCP rows, got {len(accepted)}; "
+            f"rejected={len(rejected)}"
+        )
+    if len({row["claim_id"] for row in accepted}) != target_count:
+        raise ValueError("claim_id is not unique across accepted rows")
     fields = list(accepted[0])
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT.open("w", encoding="utf-8-sig", newline="") as handle:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(accepted)
 
+    original_200_preserved: bool | None = None
+    if target_count > 200 and OUTPUT.exists():
+        locked_200 = read_csv(OUTPUT)
+        generated = read_csv(output)
+        original_200_preserved = generated[:200] == locked_200
+        if not original_200_preserved:
+            raise ValueError("the locked mcp_full_gold_200 prefix changed")
+
     blank_required = []
     required = [
-        "gold_id", "claim_id", "title", "url", "claim_text", "gold_label", "gold_org_id",
+        "gold_id", "claim_id", "article_id", "title", "url", "claim_text", "gold_label", "gold_org_id",
         "gold_tbl_id", "gold_tbl_name", "gold_obj_l1", "gold_itm_id", "gold_item_name",
         "gold_prd_se", "gold_period", "gold_source_value", "gold_source_unit",
         "gold_actual_value", "gold_evidence_url", "gold_retrieved_at",
@@ -480,7 +515,7 @@ def build_output() -> None:
         raise ValueError(f"blank required fields: {blank_required[:10]}")
 
     manifest = {
-        "dataset": "mcp_full_gold_200",
+        "dataset": f"mcp_full_gold_{target_count}",
         "created_at": now,
         "row_count": len(accepted),
         "all_rows_mcp_actual_value": True,
@@ -489,21 +524,48 @@ def build_output() -> None:
         "label_counts": dict(Counter(row["gold_label"] for row in accepted)),
         "table_counts": dict(Counter(row["gold_tbl_id"] for row in accepted)),
         "unique_claim_count": len({row["claim_id"] for row in accepted}),
+        "unique_article_count": len({row["article_id"] for row in accepted}),
+        "article_id_format": "A + zero-padded source article number (minimum 4 digits)",
         "unique_coordinate_period_count": len({
             (row["gold_org_id"], row["gold_tbl_id"], row["gold_obj_l1"], row["gold_obj_l2"], row["gold_itm_id"], row["gold_prd_se"], row["gold_period"], row["gold_previous_period"])
             for row in accepted
         }),
         "blank_required_count": len(blank_required),
-        "rejected_candidate_count_before_200": len(rejected),
+        "original_200_preserved": original_200_preserved,
+        f"rejected_candidate_count_before_{target_count}": len(rejected),
         "source": str(SOURCE.relative_to(ROOT)).replace("\\", "/"),
-        "source_sha256": sha256(SOURCE),
+        "source_sha256": (
+            sha256(SOURCE)
+            if SOURCE.exists()
+            else locked_manifest.get("source_sha256", "")
+        ),
+        "source_file_available": SOURCE.exists(),
         "candidate_file": str(CANDIDATES.relative_to(ROOT)).replace("\\", "/"),
         "candidate_sha256": sha256(CANDIDATES),
         "evidence_files": [str(path.relative_to(ROOT)).replace("\\", "/") for path in sorted(EVIDENCE_DIR.glob("batch_*.jsonl"))],
-        "output": str(OUTPUT.relative_to(ROOT)).replace("\\", "/"),
-        "output_sha256": sha256(OUTPUT),
+        "output": str(output.relative_to(ROOT)).replace("\\", "/"),
+        "output_sha256": sha256(output),
     }
-    MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if target_count > 200:
+        additions = accepted[200:]
+        manifest["added_rows"] = {
+            "total": len(additions),
+            "gold_id_range": [additions[0]["gold_id"], additions[-1]["gold_id"]],
+            "label_counts": dict(Counter(row["gold_label"] for row in additions)),
+            "table_counts": dict(Counter(row["gold_tbl_id"] for row in additions)),
+            "evidence_batch_counts": dict(
+                Counter(row["gold_evidence_batch"] for row in additions)
+            ),
+            "all_rows_mcp_actual_value": all(
+                row["gold_label_source"] == "KOSIS_MCP_GET_DATA"
+                and row["gold_coordinate_status"] == "MCP_ACTUAL_VALUE_CONFIRMED"
+                for row in additions
+            ),
+        }
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 
@@ -520,7 +582,10 @@ def main() -> None:
     batch = sub.add_parser("batch")
     batch.add_argument("--start", type=int, required=True)
     batch.add_argument("--size", type=int, default=10)
-    sub.add_parser("build")
+    build = sub.add_parser("build")
+    build.add_argument("--target-count", type=int, default=200)
+    build.add_argument("--output", type=Path)
+    build.add_argument("--manifest", type=Path)
     args = parser.parse_args()
     if args.command == "select":
         write_candidates()
@@ -529,7 +594,15 @@ def main() -> None:
     elif args.command == "batch":
         print_batch(args.start, args.size)
     else:
-        build_output()
+        output = args.output or (
+            OUTPUT if args.target_count == 200
+            else ROOT / "data" / "gold" / f"mcp_full_gold_{args.target_count}.csv"
+        )
+        manifest = args.manifest or (
+            MANIFEST if args.target_count == 200
+            else ROOT / "data" / "gold" / f"mcp_full_gold_{args.target_count}_manifest.json"
+        )
+        build_output(args.target_count, output, manifest)
 
 
 if __name__ == "__main__":

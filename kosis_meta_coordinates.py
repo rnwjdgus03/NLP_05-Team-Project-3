@@ -26,7 +26,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from prepare_kosis_mapping_input import canonicalize_unit, unit_dimension
 
-SCHEMA_VERSION = "kosis-meta-coordinates-v1"
+SCHEMA_VERSION = "kosis-meta-coordinates-v2"
 
 # obj 축은 KOSIS objL1~objL8 과 1:1 로 대응한다.
 MAX_AXIS = 8
@@ -36,7 +36,7 @@ DEFAULT_MAX_COORDINATES_PER_TABLE = 4000
 # 좌표 생성 시 축 상한(DEFAULT_AXIS_VALUE_LIMIT)을 적용해도 집계값이 살아남게 하는 목록.
 # 여기를 바꾸면 어떤 좌표가 인덱스에 들어가는지가 바뀌므로 Chroma 인덱스를 재빌드해야 한다.
 # 그래서 아래 AGGREGATE_OBJ_NAMES(순위·판정용)와 일부러 분리해 둔다.
-AGGREGATE_NAMES = ("계", "전체", "총계", "총액", "전국", "합계", "총지수")
+AGGREGATE_NAMES = ("계", "전체", "총계", "총액", "전국", "합계")
 
 # 순위·판정에서 '이 좌표가 집계값인가'를 볼 때 쓰는 정식 목록.
 # 2026-08-02 이전에는 kosis_meta_coordinates 와 kosis_validate_mapping_candidates 에
@@ -102,8 +102,25 @@ NON_TARGET_TERM_NAMES = frozenset({
 TARGET_AXIS_NAME_MARKERS = (
     "국가", "국적", "지역", "권역", "시도", "시군구", "도시", "소재지",
     "산업", "업종", "품목", "상품", "재화", "서비스", "직업",
-    "연령", "성별", "인구", "가구", "계층", "세대", "대상",
+    "연령", "성별", "교육정도", "학력", "인구", "가구", "계층", "세대", "대상",
+    "원인", "사유", "관계", "혼인형태", "소유", "점유", "입주형태",
 )
+
+# 구조화된 claim 대상은 같은 이름이 보이는 아무 OBJ에나 붙이지 않고 실제 축 의미와
+# 함께 비교한다. 예를 들어 ``여자``는 성별 축, ``대전``은 지역 축에서만 정답이다.
+AXIS_KIND_MARKERS = {
+    "gender": ("성별", "남녀", "성"),
+    "region": ("지역", "권역", "시도", "시군구", "행정구역", "도시", "소재지"),
+    "age": ("연령", "나이", "연령대"),
+    "education": ("교육정도", "학력", "최종학력", "학교"),
+    "country": ("국가", "국적", "상대국", "교역국", "수출입국", "대상국"),
+    "product": ("품목", "상품", "산업", "업종", "재화", "서비스"),
+}
+
+GENDER_ALIASES = {
+    "남": "남자", "남성": "남자", "남자": "남자",
+    "여": "여자", "여성": "여자", "여자": "여자",
+}
 
 _TARGET_FIELD_SPLIT_RE = re.compile(
     r"\s*(?:,|·|/|\|)\s*|\s+(?:및|와|과)\s+"
@@ -117,6 +134,35 @@ _DEFAULT_REGION_TERMS = frozenset({
     "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
     "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
 })
+
+# HCX sometimes writes a lower-level administrative region into
+# ``measurement_item`` instead of ``region``.  The seed file intentionally
+# contains only the nationwide/province-level codes, so it cannot recognise
+# places such as 울릉군 by exact membership alone.  Keep this fallback narrow:
+# require a Korean administrative suffix, at least three syllables, and an
+# exact mention in the claim text.  Generic groups and household nouns ending
+# in 군/구 are explicitly excluded.
+_ADMIN_REGION_RE = re.compile(
+    r"^[가-힣]{2,}(?:특별자치시|특별자치도|특별시|광역시|시|군|구)$"
+)
+_NON_REGION_SUFFIX_TERMS = frozenset({
+    "상품군", "품목군", "연령군", "대조군", "실험군", "직업군", "산업군",
+    "기업군", "소득군", "계층군", "가구", "1인가구",
+})
+
+
+def looks_like_administrative_region(value: Any, claim_text: Any = "") -> bool:
+    """Return true for an explicit lower-level Korean region mention.
+
+    This is a classification repair for structured HCX output, not a free-form
+    region extractor.  Requiring the same literal in the claim prevents a code
+    or hallucinated item value from silently becoming an OBJ region target.
+    """
+
+    raw = _text(value)
+    if raw in _NON_REGION_SUFFIX_TERMS or not _ADMIN_REGION_RE.fullmatch(raw):
+        return False
+    return raw in _text(claim_text)
 
 
 def _text(value: Any) -> str:
@@ -325,6 +371,212 @@ def target_terms_match_text(target_terms: Iterable[Any], selected_values: Iterab
     return True
 
 
+def _canonical_axis_target(kind: str, value: Any) -> str:
+    raw = _text(value)
+    if kind == "gender":
+        return normalize_obj_name(GENDER_ALIASES.get(raw, raw))
+    return _canonical_target(raw)
+
+
+def claim_axis_targets(claim: Mapping[str, Any] | None) -> dict[str, tuple[str, ...]]:
+    """Return typed OBJ targets extracted independently of candidate coordinates."""
+    row = claim or {}
+    values: dict[str, list[str]] = defaultdict(list)
+
+    structured = {
+        "gender": (row.get("gender"), row.get("sex")),
+        "region": (row.get("region"),),
+        "age": (row.get("age_group"), row.get("age")),
+        "education": (
+            row.get("education_level"), row.get("education"),
+            row.get("education_group"),
+        ),
+        "country": (row.get("origin_country"), row.get("destination_country")),
+        "product": (
+            row.get("extracted_product"), row.get("industry_or_item"),
+            row.get("measurement_item"),
+        ),
+    }
+    known_regions = seed_region_terms()
+    for kind, raw_values in structured.items():
+        for raw_value in raw_values:
+            for part in _structured_target_parts(raw_value):
+                if part in AGGREGATE_ITEM_TOKENS or not _target_term_allowed(part):
+                    continue
+                if kind == "age" and _age_target_is_explanatory_context(row, part):
+                    continue
+                # HCX occasionally stores a place name in measurement_item.
+                # Treat an official region name as a region, never as a product;
+                # otherwise strict alignment demands the impossible pair
+                # region=울릉군 and product=울릉군.
+                if kind == "product" and (
+                    any(_region_is_mentioned(part, region) for region in known_regions)
+                    or looks_like_administrative_region(part, _claim_text(row))
+                ):
+                    values["region"].append(normalize_obj_name(part))
+                    continue
+                canonical = _canonical_axis_target(kind, part)
+                if canonical:
+                    values[kind].append(canonical)
+
+    # 문장 기반 안전망은 지역·국가만 사용한다. 품목·성별·연령을 문장에서 다시
+    # 추측하면 구조화 추출과 독립적인 강제 정렬이 아니게 된다.
+    text = _claim_text(row)
+    normalized_text = normalize_obj_name(text)
+    for region in seed_region_terms():
+        if _region_is_mentioned(text, region):
+            values["region"].append(normalize_obj_name(region))
+    for alias, canonical in FOREIGN_COUNTRY_ALIASES.items():
+        if _country_alias_is_mentioned(normalized_text, alias):
+            values["country"].append(normalize_obj_name(canonical))
+
+    return {
+        kind: tuple(dict.fromkeys(term for term in terms if term))
+        for kind, terms in values.items() if terms
+    }
+
+
+def _age_target_is_explanatory_context(row: Mapping[str, Any], age: str) -> bool:
+    """Reject an HCX age slot when it belongs to a causal explanation.
+
+    A sentence such as ``실업률이 낮아진 현상의 상당 부분이 청년층의
+    구직 포기`` is about the total unemployment rate, not a youth-rate
+    coordinate.  True breakdown claims normally bind the age directly to the
+    measured noun (``60세 이상 가구의 순자산``) and do not contain a causal
+    bridge between the metric and the age phrase.
+    """
+
+    text = normalize_obj_name(_claim_text(row))
+    age_text = normalize_obj_name(age)
+    indicator = normalize_obj_name(_first(
+        row, "measurement_indicator", "indicator", "measurement_item",
+    ))
+    if not text or not age_text or not indicator:
+        return False
+    metric_at = text.find(indicator)
+    age_aliases = [age_text]
+    if age_text in {"1529세", "15세29세", "1529"}:
+        age_aliases.extend((normalize_obj_name("청년층"), normalize_obj_name("청년")))
+    elif age_text in {"60세이상", "65세이상"}:
+        age_aliases.extend((normalize_obj_name("고령층"), normalize_obj_name("노년층")))
+    age_positions = [text.find(alias) for alias in age_aliases if alias and alias in text]
+    age_at = min(age_positions) if age_positions else -1
+    if metric_at < 0 or age_at <= metric_at:
+        return False
+    bridge = text[metric_at + len(indicator):age_at]
+    return any(marker in bridge for marker in (
+        "원인", "영향", "때문", "상당부분", "배경", "기여", "현상의",
+    ))
+
+
+def claim_axis_value_mentions(
+    claim: Mapping[str, Any] | None,
+    axis_name: Any,
+    axis_values: Iterable[Any],
+) -> tuple[str, ...]:
+    """공식 축 값이 주장 지표에 직접 등장하면 해당 축의 동적 target으로 삼는다.
+
+    구조화 슬롯에 없는 사망원인·혼인관계·점유형태도 KOSIS의 실제 축 값과
+    문장이 완전 일치할 때만 승격한다. 후보 축 이름이 허용 범위가 아니면 작동하지
+    않으므로 일반 단어가 우연히 같은 다른 축으로 붙는 것을 막는다.
+    """
+    if not _axis_can_define_target(axis_name):
+        return ()
+    normalized_text = normalize_obj_name(_claim_text(claim))
+    found: list[str] = []
+    for value in axis_values:
+        raw, _ = _axis_value_and_name(value)
+        normalized = normalize_obj_name(raw)
+        if (not _target_term_allowed(raw) or not normalized
+                or normalized not in normalized_text):
+            continue
+        found.append(normalized)
+    # 같은 축에 '증후군'과 '영아돌연사증후군'처럼 중첩된 값이 있으면 더 구체적인
+    # 긴 값을 남긴다.
+    ordered = sorted(dict.fromkeys(found), key=lambda value: (-len(value), value))
+    return tuple(
+        value for index, value in enumerate(ordered)
+        if not any(value in other for other in ordered[:index])
+    )
+
+
+def axis_name_matches_kind(axis_name: Any, kind: str) -> bool:
+    normalized = normalize_obj_name(axis_name)
+    if not normalized:
+        return False
+    markers = AXIS_KIND_MARKERS.get(kind, ())
+    for marker in markers:
+        normalized_marker = normalize_obj_name(marker)
+        if normalized_marker == "성":
+            if normalized == normalized_marker:
+                return True
+        elif normalized_marker and normalized_marker in normalized:
+            return True
+    return False
+
+
+def _metadata_axis_pairs(metadata: Mapping[str, Any]) -> list[tuple[str, str]]:
+    pairs = []
+    for level in range(1, MAX_AXIS + 1):
+        axis_name = _first(
+            metadata,
+            f"obj_l{level}_axis_name",
+            f"selected_obj_l{level}_axis_name",
+        )
+        value_name = _first(
+            metadata,
+            f"obj_l{level}_name",
+            f"selected_obj_l{level}_name",
+        )
+        if axis_name or value_name:
+            pairs.append((_text(axis_name), _text(value_name)))
+    return pairs
+
+
+def axis_target_alignment(
+    claim: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Score structured targets only on compatible official OBJ axes.
+
+    Old v1 indexes do not contain axis names. In that case ``enforceable`` is false
+    so callers can report that a rebuild is required instead of silently claiming a
+    typed match.
+    """
+    targets = claim_axis_targets(claim)
+    pairs = _metadata_axis_pairs(metadata or {})
+    required = sum(len(terms) for terms in targets.values())
+    matched: list[str] = []
+    missing_axis: list[str] = []
+    mismatched: list[str] = []
+    axis_names_available = any(axis_name for axis_name, _ in pairs)
+
+    for kind, terms in targets.items():
+        compatible_values = [
+            value_name for axis_name, value_name in pairs
+            if axis_name_matches_kind(axis_name, kind)
+        ]
+        if not compatible_values:
+            missing_axis.append(kind)
+            continue
+        for term in terms:
+            if target_terms_match_text((term,), compatible_values):
+                matched.append(f"{kind}:{term}")
+            else:
+                mismatched.append(f"{kind}:{term}")
+
+    return {
+        "required_count": required,
+        "matched_count": len(matched),
+        "matched": tuple(matched),
+        "missing_axis": tuple(dict.fromkeys(missing_axis)),
+        "mismatched": tuple(mismatched),
+        "enforceable": bool(required and axis_names_available),
+        "strict_match": bool(required and len(matched) == required),
+        "score": (len(matched) / required) if required else 1.0,
+    }
+
+
 def claim_specifies_target(claim: Mapping[str, Any] | None) -> bool:
     """주장이 세부 대상(국가·지역·품목·업종)을 특정했는가."""
     return bool(claim_target_terms(claim))
@@ -517,10 +769,12 @@ def coordinate_metadata(coordinate: Mapping[str, Any]) -> dict[str, Any]:
     obj_codes = coordinate.get("obj_codes") or {}
     obj_names = coordinate.get("obj_names") or {}
     axis_ids = coordinate.get("axis_ids") or {}
+    axis_names = coordinate.get("axis_names") or {}
     for level in range(1, MAX_AXIS + 1):
         meta[f"obj_l{level}"] = _text(obj_codes.get(level))
         meta[f"obj_l{level}_name"] = _text(obj_names.get(level))
         meta[f"obj_l{level}_axis_id"] = _text(axis_ids.get(level))
+        meta[f"obj_l{level}_axis_name"] = _text(axis_names.get(level))
     return meta
 
 

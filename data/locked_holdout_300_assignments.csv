@@ -1,0 +1,301 @@
+﻿holdout_id,article_id,stratum,all_strata,selection_score,official_context,source_row_1_based,date,title,url
+LH300-001,A2668,gender,gender|product,11,Y,2668,2025-11-04,"10월 소비자물가, 2.4% 올랐다… 15개월 만에 최대 상승폭(종합)",https://biz.chosun.com/policy/policy_sub/2025/11/04/ANKBQTEEQ5CPPE7DIX7SMKCLWE/
+LH300-002,A2691,gender,gender|country|product|region,11,Y,2691,2025-11-10,수출 ‘톱10′ 기업 비중 40%로 역대 최대...‘대기업 쏠림’ 심화,https://www.chosun.com/economy/economy_general/2025/11/10/STP3LFTONFGQLFJKML7SF2LS24/
+LH300-003,A2681,gender,gender|country,11,Y,2681,2025-11-06,"다문화 혼인 5% 증가, 전체 혼인 10건 중 1건은 다문화 결혼",https://www.chosun.com/economy/economy_general/2025/11/06/ICMO6ZPTDVFSNKDVKFZJT2F77U/
+LH300-004,A2286,gender,gender|age,11,Y,2286,2025-06-26,결혼·출산은 33년 만에 10개월 연속 증가,https://www.chosun.com/economy/economy_general/2025/06/26/GDQ3PEJNV5H3RGFRU6KZAZ6BSE
+LH300-005,A1019,gender,gender,10,Y,1019,2025-03-20,‘연상녀·연하남’ 초혼 부부 비중 19.9% 역대 최대,https://www.chosun.com/economy/economy_general/2025/03/20/KH26XILK7FGYPGUVBBDUA2B3OU
+LH300-006,A2686,gender,gender,10,Y,2686,2025-11-07,"경제지표는 올랐지만… 국민 “불행하고, 사회 신뢰 안 해”",https://health.chosun.com/site/data/html_dir/2025/11/07/2025110702781.html
+LH300-007,A2386,gender,gender,10,Y,2386,2025-07-04,"1955년엔 전쟁 여파 ‘불구 상태’, 2020년부터는 ‘혼자 산 기간’ 조사",https://www.chosun.com/economy/economy_general/2025/07/04/3TM7NWTGMBHMBB7OVKWWMTLA6E
+LH300-008,A1919,gender,gender|age|region,5,N,1919,2025-05-29,"1000만 개 불티나게 팔린 크보빵… SPC삼립, 결국 생산 중단",https://www.chosun.com/economy/economy_general/2025/05/29/T7KNWTEKSRDE3NFGHMEBJ32H3A
+LH300-009,A2377,gender,gender|age|country,5,N,2377,2025-07-03,보험료 1000원 안되는 ‘동전 보험’도 등장,https://www.chosun.com/economy/economy_general/2025/07/03/LWPYVDPWV5ESBMHLEMJRBZN4M4
+LH300-010,A0003,gender,gender|age|product|region,5,N,3,2025-01-01,최저임금 1만30원으로 인상… 육아휴직 급여 최대 월 250만원,https://www.chosun.com/economy/economy_general/2025/01/01/ADO7O3Q4WJBCJAX6UUEY4MSBV4
+LH300-011,A0662,gender,gender|age|region,5,N,662,2025-02-21,음식점서 60대 여성 흉기 찔려 사망... 함께 있던 여성은 중상,https://www.chosun.com/national/incident/2025/02/21/A4SQ5MK67RGEDJESVZADKBQZEA
+LH300-012,A2333,gender,gender|age|region,5,N,2333,2025-06-30,초인종 소리에 문 여니 다짜고짜 찔렀다…피해자들 맨발 탈출,https://www.chosun.com/national/national_general/2025/06/30/CPTMCDX2HFG55O5AQWUGHVWEGY
+LH300-013,A1538,age,age|region,11,Y,1538,2025-04-29,무인점포 5년 만에 4배 급증… 점주 30%는 2030,https://www.chosun.com/economy/economy_general/2025/04/29/YHLWHVQFHVFWBD5BVLNBKYG77Y
+LH300-014,A2667,age,age|country|region,11,Y,2667,2025-11-04,회사 퇴근 후 알바 출근… N잡러 68만 시대,https://www.chosun.com/economy/economy_general/2025/11/04/XOP2Q6LUQBGGFLV32XW7X6AU5Q/
+LH300-015,A2648,age,age|region,11,Y,2648,2025-10-28,고령화가 바꾼 노동시장… 올해 상반기 일자리 증가 1위는 '돌봄·노인 일자리',https://biz.chosun.com/policy/policy_sub/2025/10/28/UI24JIQ5KVFK7ARLCFJWISN6LE/
+LH300-016,A1459,age,age|region,11,Y,1459,2025-04-23,2월 혼인 14.3% 증가...11개월 연속 늘어 ‘통계 집계 이래 최장’,https://www.chosun.com/economy/economy_general/2025/04/23/7YEGSLKLSVAFNI3AVZCTZ5HYH4
+LH300-017,A2029,age,age|region,11,Y,2029,2025-06-06,"“전세사기 두려워 택했는데, ‘미친 월세’에 생활비 절반 나간다”",https://www.chosun.com/economy/economy_general/2025/06/06/OS5ROBTDJFHNHCVRV3DJBRRB34
+LH300-018,A2195,age,age|product|region,11,Y,2195,2025-06-19,"국내 1인 가구 800만 돌파... 700만 넘은 지 3년 만, 소형 가전-소용량 식품 인기 등 트렌드도 바뀌어",https://www.chosun.com/economy/economy_general/2025/06/19/BTSFRUAWDRGIVETHM7KHYIUDAA
+LH300-019,A1121,age,age|region,11,Y,1121,2025-03-28,"양양, 관광객이 주민의 28배… 인구감소지역 살리는 외부인",https://www.chosun.com/economy/economy_general/2025/03/28/ECG25DYMGVGYDFA2RBNNGCAAVY
+LH300-020,A0834,age,age|country|product,11,Y,834,2025-03-06,한국 11년째 갇힌 ‘3만달러 벽’… 美·英은 어떻게 뚫었나,https://www.chosun.com/economy/economy_general/2025/03/06/5HV7ZTS6RBEK5BBZBNLJDPBZPY
+LH300-021,A0517,age,age,10,Y,517,2025-02-09,"‘연 9%대’ 청년도약계좌 신청, 올해 들어 5배 이상 급증",https://www.chosun.com/economy/money/2025/02/09/4SL5TSLL7KPMWQWY3QNXI2LUU4
+LH300-022,A0983,age,age,10,Y,983,2025-03-17,"“청년 목소리 듣는다”… 산업부, 2030청년자문단 2기 공식 출범",https://www.chosun.com/economy/economy_general/2025/03/17/OWSZVRC6NBBAZM7SD4GOTNQNCQ
+LH300-023,A2440,age,age,10,Y,2440,2025-07-08,"가계 여윳돈 93조 사상 최대, 집값 상승 뇌관 되나",https://www.chosun.com/economy/economy_general/2025/07/08/UZSAKR4BQ5GEBKX7LSZIQHCEQA
+LH300-024,A1381,age,age,10,Y,1381,2025-04-17,"가파른 농촌 소멸의 현실... 작년 농가 수 97만가구, 1년새 2.5% 줄어",https://www.chosun.com/economy/economy_general/2025/04/17/3OPFBMB5FND7LKAFGEU5LNCDGA
+LH300-025,A1975,age,age,10,Y,1975,2025-06-02,"10년간 소비 증가율 둔화 폭 절반, 인구 감소·고령화 탓",https://www.chosun.com/economy/economy_general/2025/06/02/7ATDCHLPMJEBHDPJAYYK2QSDOE
+LH300-026,A1411,age,age,10,Y,1411,2025-04-19,“은퇴하는 베이비붐 세대 잡아라”… 시니어 공략 속도 내는 은행,https://www.chosun.com/economy/money/2025/04/19/EQO5AO3LFD6GDC5KEWSCAL6NBI
+LH300-027,A0646,age,age,10,Y,646,2025-02-19,도소매·건설업 부진에 20대 이하·40대 일자리 집계 이래 최대 폭 감소,https://www.chosun.com/economy/economy_general/2025/02/19/SI6AI3ZZVJGNTL3TYFHWMMNUEQ
+LH300-028,A0819,age,age,10,Y,819,2025-03-05,韓銀 “높은 물가 경험하면 주택 수요 늘어”,https://www.chosun.com/economy/economy_general/2025/03/05/6DSMQOPJUJCORAWYIUBUVZ4A2I
+LH300-029,A0835,age,age,10,Y,835,2025-03-06,1인 年소득 5000만원? 난 왜 체감이 안 될까,https://www.chosun.com/economy/economy_general/2025/03/06/6NO5N7ES2NFOJIC7KKZF4E3ZHI
+LH300-030,A2016,age,age|country|region,9,Y,2016,2025-06-05,"한국 민간 부채, 日 버블 수준 근접... 한은 “저성장 요인 닮았다”",https://www.chosun.com/economy/economy_general/2025/06/05/TIX2SNANIZFRBAHXBSJKZ6DIGY
+LH300-031,A1586,age,age|country|product|region,9,Y,1586,2025-05-03,中 기업도 25개 참여… 더 풍성해진 라이프쇼,https://www.chosun.com/economy/economy_general/2025/05/03/CWJNCOYZ6ZD3NFDEF3MD5AIHIQ
+LH300-032,A1839,age,age|region,9,Y,1839,2025-05-22,“지속가능한 고령화 사회의 해법은 ‘건강한 노인’”,https://www.chosun.com/economy/economy_general/2025/05/22/J6RDBX6G6NGBFDCDKSFKJFTKLY
+LH300-033,A2199,age,age|region,5,N,2199,2025-06-19,지역화폐 8조원 추가 발행…인구감소지역은 15% 할인,https://www.chosun.com/economy/economy_general/2025/06/19/LFVLKCDEYBCSFJEG37OEC6MCI4
+LH300-034,A2174,age,age|country|product,5,N,2174,2025-06-17,하버드 출신도 갈 데 없어… 美서도 고학력자 구직난,https://www.chosun.com/economy/economy_general/2025/06/17/FV3YPUQKWZD75IN3ZLHIEPCX6U
+LH300-035,A1819,age,age|product,5,N,1819,2025-05-21,"BMW 코리아, 국내 수입차 최초로 SUV 판매량 1만대 넘겨",https://www.chosun.com/economy/auto/2025/05/21/PEY2OI7ADJHBJHE7M4MAYNNFNE
+LH300-036,A2008,age,age|country,5,N,2008,2025-06-04,"KAI, 필리핀에 FA-50 12대 추가 수출...약 1조원 규모",https://www.chosun.com/economy/industry-company/2025/06/04/ANV2W5SOWJDHHHLC776XNNY7TM
+LH300-037,A2083,age,age|region,5,N,2083,2025-06-10,"수십억 체납한 80대, 위장이혼한 아내 집에 현금다발 숨겨놨다",https://www.chosun.com/economy/economy_general/2025/06/10/V45AKTIYUBGMTIBXIVQNCOC3WA
+LH300-038,A0460,age,age|country,5,N,460,2025-02-05,美 노동자 630만명이 펜타닐에 빠져… 사망자만 연 7만명 넘어,https://www.chosun.com/economy/economy_general/2025/02/05/UWBH26Z6L5CABIVFXZPJDQWX3A
+LH300-039,A0826,age,age|country|region,5,N,826,2025-03-05,소상공인 육아휴직 지원… 초등생 돌봄센터 48곳 운영 예정,https://www.chosun.com/economy/economy_general/2025/03/05/NB5IK3GA4RHORDOV7UQHFBPTQY
+LH300-040,A0631,age,age|country|region,5,N,631,2025-02-18,崔 대행 “이제부터 통상 ‘총력전’...범정부 수출대책 내놓을 것”,https://www.chosun.com/economy/economy_general/2025/02/18/OWSJDHAUG5GELNXU2SCVD3Y2UE
+LH300-041,A2368,age,age|country,5,N,2368,2025-07-02,K2 전차 9조원 폴란드 수출 확정... 기술 로열티도 받는다,https://www.chosun.com/economy/industry-company/2025/07/02/6GJMGN2SD5EYTIIEFLBWLN7JLY
+LH300-042,A2530,age,age|region,5,N,2530,2025-07-15,"청년 사업자, 1분기 역대 최대 폭 줄어",https://www.chosun.com/economy/economy_general/2025/07/15/DTJQOLRIERCX3NWU7O572LD5IE
+LH300-043,A2182,age,age|country|product|region,5,N,2182,2025-06-18,“BMW 과거·현재·미래를 체험”… 1만8천명 다녀가,https://www.chosun.com/economy/auto/2025/06/18/LEXVLBPYHVCBVDYHTRYZRCFVSU
+LH300-044,A1164,age,age|product,5,N,1164,2025-03-31,"年 9조 매출 골다공증 치료제, 바이오시밀러 본격 경쟁",https://www.chosun.com/economy/economy_general/2025/03/31/L7JXVSCOVNAB5CCYIBBYHALFZM
+LH300-045,A2189,age,age|product,5,N,2189,2025-06-18,DSR 규제 안 받는 대출 찾아 나선다,https://www.chosun.com/economy/economy_general/2025/06/18/X6DQGTR6F5EK3CHCW66D7MNQCI
+LH300-046,A1719,age,age|region,5,N,1719,2025-05-13,불경기에 보험 해약 환급금 3년 새 2배 급증,https://www.chosun.com/economy/economy_general/2025/05/13/QE5NJTKFRBE7VB347MKM653GJQ
+LH300-047,A1174,age,age|product,5,N,1174,2025-04-01,운전자보험에 골프 특약까지… 잘 모르면 보험료 바가지,https://www.chosun.com/economy/economy_general/2025/04/01/QQ5GBZMWEFDHZJGJMBORAEBYRA
+LH300-048,A2610,age,age,4,N,2610,2025-10-12,"20대 인구, 70대보다도 적어졌다… 100년 만에 처음",https://www.chosun.com/economy/economy_general/2025/10/12/FMDPGJ7YRVBNBDL4K6QPEGOT4Q/
+LH300-049,A1442,age,age,4,N,1442,2025-04-22,EV3·캐스퍼 일렉트릭 1·2위… 작은 전기차가 잘 팔리네,https://www.chosun.com/economy/auto/2025/04/22/IMZIK7BVE5D55BM2N6S2U4FOFI
+LH300-050,A2677,age,age,4,N,2677,2025-11-05,‘쉬었음 인구’ 7만3000명↑… 30대 취업 공백 커졌다,https://biz.chosun.com/policy/policy_sub/2025/11/05/WAX7C4MP3JALHGM3AKYQZOI45E/
+LH300-051,A2136,age,age,4,N,2136,2025-06-14,“우리 집 위층은 시니어타운” 3기 신도시에 어르신 아파트 속속,https://www.chosun.com/economy/realty/allthatsenior/2025/06/14/N76L6ZA6WFECZY6SVM2DAKK6PU
+LH300-052,A2680,age,age,4,N,2680,2025-11-06,"KDI “최근 실업률 하락 상당 부분 청년 구직 포기 때문, 낮은 실업률이 반드시 고용 개선 의미하지 않아”",https://www.chosun.com/economy/economy_general/2025/11/06/T4WNY7YVT5HZ7P5BSUZSYGTMB4/
+LH300-053,A2613,age,age,4,N,2613,2025-10-13,"70대 이상 인구, 20대 추월… 소비·납세 ‘큰손’으로",https://www.chosun.com/economy/economy_general/2025/10/13/YEKQPXY5Q5G7TM5LDDUSCDEJTM/
+LH300-054,A2651,age,age,4,N,2651,2025-10-29,"출생 14개월, 혼인 17개월째↑ 1~8월 출생아 증가율 18년 만에 최대",https://www.chosun.com/national/national_general/2025/10/29/7DKFAO2FJJDRNPKGSM7OLLX4VY/
+LH300-055,A0614,age,age,4,N,614,2025-02-17,청년도약계좌 日평균 가입자 5배로 늘었네,https://www.chosun.com/economy/economy_general/2025/02/17/7TUGCFA65NBVZKGIG6LR2EZSBQ
+LH300-056,A1477,age,age,4,N,1477,2025-04-24,KDI “기대 수명 길어져 소비 줄이고 저축 늘려”,https://www.chosun.com/economy/economy_general/2025/04/24/ZM56P432OVDJBMLIZLWKCNL4PI
+LH300-057,A1960,age,age,4,N,1960,2025-06-01,"10년 전보다 지출 3.3%p 줄어… 2030은 소득 감소, 60대는 노후불안",https://www.chosun.com/economy/industry-company/2025/06/01/MTWGGBPM3BAEVKO7NHOHPYORY4
+LH300-058,A2604,region,region,10,Y,2604,2025-10-09,"사람도 적은데 자살률도 높다... 인구 감소 지역 89곳 중 67곳, 전국 평균보다 자살률 높아",https://www.chosun.com/national/welfare-medical/2025/10/09/DAZEL5GOYVBUXF26H72PGAKEMU/
+LH300-059,A1157,region,region,10,Y,1157,2025-03-31,“돈 못 갚아요” 자영업자 저축은행 연체율 9년여 만에 최고치,https://www.chosun.com/economy/economy_general/2025/03/31/2RJUSYPX5RFTPAAUAFTPTVJ5RM
+LH300-060,A2361,region,region,10,Y,2361,2025-07-02,韓銀 “가계 대출 8~9월 급증 가능성… 금리 인하에 신중”,https://www.chosun.com/economy/economy_general/2025/07/02/CAA2F6B3NRD4ZOE27LMOOOJUPQ
+LH300-061,A0673,region,region,10,Y,673,2025-02-21,"울릉군, 전국 고용률 1위 83.5%… 2위에는 청송군",https://www.chosun.com/economy/economy_general/2025/02/21/WTMGCNUZRFBDBEF3XXSEMSPMXA
+LH300-062,A2437,region,region,10,Y,2437,2025-07-08,‘1병당 1000원’ 할인 끝나자...식당 소주값 10개월 만에 올라,https://www.chosun.com/economy/economy_general/2025/07/08/2JC6QOKX7BGM7J2UJAPZZYZ2SE
+LH300-063,A0382,region,region,10,Y,382,2025-01-30,"내수부진, 혼술 문화... 서울 호프집 10곳 중 3곳 1년 내 폐업",https://www.chosun.com/economy/economy_general/2025/01/30/QGHF2IJIGRHQZOVCDRVOH7YSRE
+LH300-064,A0495,region,region,10,Y,495,2025-02-08,지방 미분양 DSR 완화 압박에 난처한 금융위 “효과 의문”,https://www.chosun.com/economy/economy_general/2025/02/08/KIO3SWFQ3ND2VOYMOMNJ7P3GL4
+LH300-065,A2657,region,region,10,Y,2657,2025-10-30,우리나라 거주 외국인 주민 '역대 최다' 258만명… 전체 인구의 5%,https://biz.chosun.com/topics/topics_social/2025/10/30/QR4AGGYKCBEB3AWOYIWTGTC3LM/
+LH300-066,A1956,region,region,10,Y,1956,2025-05-31,‘악성 미분양’ 전국 2만6422가구… 11년 8개월 만에 최대치,https://www.chosun.com/economy/real_estate/2025/05/31/ELW4AZVHQVDPPM44UAGICLQM2U
+LH300-067,A2656,region,region,10,Y,2656,2025-10-29,"기재부·국세청 1급 이상 13명 중 6명, 토허제 내 아파트 보유하고도 실거주 안 해",https://biz.chosun.com/policy/policy_sub/2025/10/29/MYZE6KNCJFAE5MWQLKJ5WE22XM/
+LH300-068,A2290,region,region,10,Y,2290,2025-06-26,빚의 늪 빠진 저소득 자영업자… 1분기 연체율 12% ’12년만에 최고',https://www.chosun.com/economy/economy_general/2025/06/26/XMXERK3NLNH2XI5QIICOGSEXSE
+LH300-069,A2273,region,region,10,Y,2273,2025-06-25,"서울 집값 16% 오를 때, 비수도권은 오히려 2% 하락",https://www.chosun.com/economy/economy_general/2025/06/25/AV5W73HJC5GN3LWFBP4ZKTXQXI
+LH300-070,A2439,region,region,10,Y,2439,2025-07-08,“집값 못 잡으면 재정 지출 늘려도 내수 안 살아나”,https://www.chosun.com/economy/economy_general/2025/07/08/SA6WVXYNPFDFBMQTLTRXP2I7UM
+LH300-071,A2110,region,region,10,Y,2110,2025-06-12,당국 규제에도 펄펄 끓는 주담대… 지난달 5.6조 급증,https://www.chosun.com/economy/economy_general/2025/06/12/VCKXZWTLQNFE7CLYPDR6ROMK3U
+LH300-072,A1521,region,region,8,Y,1521,2025-04-28,경기 악화에 카드 연체율 10년 만에 최고,https://www.chosun.com/economy/economy_general/2025/04/28/BEF6I5JTIFBLXI5ALIOBKJVLUI
+LH300-073,A1495,region,region,8,Y,1491,2025-04-26,"최상목, 국회 추경 증액 요구에 “유연하게 임하겠다”",https://www.chosun.com/economy/economy_general/2025/04/26/XO7LM5AOP5BJXKN6HQQO3RXFOU
+LH300-074,A1852,region,region,8,Y,1852,2025-05-23,"정부 “강남3구·용산 집값 변동성 확대... 규제지역 추가 지정 강구""",https://www.chosun.com/economy/economy_general/2025/05/23/LVETWNCZPZE7LMZB2BUYKJ7IGI
+LH300-075,A2354,region,region,8,Y,2354,2025-07-01,"저소득층 많고 재정 열악한 지자체, 등골 더 휜다",https://www.chosun.com/economy/economy_general/2025/07/01/ZC3FP7NO5NDN7PU25BINNTGSDQ
+LH300-076,A0851,region,region,8,Y,851,2025-03-07,“한국도 美·英처럼”… 부부 상속세 폐지론 확산,https://www.chosun.com/economy/economy_general/2025/03/07/GU6E7NMMPFHH3GAINQ5OP5SURM
+LH300-077,A0101,region,region,8,Y,101,2025-01-08,崔 대행 “다음달 중 비상수출대책 수립...100조 무역보험 공급”,https://www.chosun.com/economy/economy_general/2025/01/08/M6GC4QNEYVG4FBWYYJ6PPLI2RY
+LH300-078,A1890,region,region,4,N,1890,2025-05-26,30國 해군 찾는다...K 해양방산 전시회 ‘마덱스’ 역대 최대 규모 개최,https://www.chosun.com/economy/industry-company/2025/05/26/FC3R3OR52REW7N3Z7LIVU6M3MI
+LH300-079,A0768,region,region,4,N,768,2025-03-01,강남‧왕십리 600억 넘는 초고가 빌딩 연이어 경매로… 무슨 일?,https://www.chosun.com/economy/economy_general/2025/03/01/2TDZHPZRK5HR7JW5RBT7CXF77Y
+LH300-080,A1693,region,region,4,N,1693,2025-05-11,큰 이견 없던 하남시 변전소 증설... 반대한 추미애 당선으로 꼬여,https://www.chosun.com/economy/industry-company/2025/05/11/X2Y4X7ISKZF5TO4AQ4OYYJPZIA
+LH300-081,A2084,region,region,4,N,2084,2025-06-10,체납자 전처 집에선 현금 다발... 등산배낭에선 금괴뭉치 ‘우수수’,https://www.chosun.com/economy/economy_general/2025/06/10/YV24ZOQ2CFAYFDWG4KAMAMBXVA
+LH300-082,A1208,region,region,4,N,1208,2025-04-04,"현대차, 7년 만에 새 수소전기차 공개… 주요 브랜드 신차 21종 쏟아져",https://www.chosun.com/economy/auto/2025/04/04/VGEZ36XQKZEVLBMPJ4DIOXCRSQ
+LH300-083,A1860,region,region,4,N,1860,2025-05-24,“중소기업은 대한민국의 힘… 추경 신속히 집행할 것”,https://www.chosun.com/economy/industry-company/2025/05/24/B4WV3E2J3JCHDKMANHWP5EBC6Q
+LH300-084,A1948,region,region,4,N,1948,2025-05-31,심상찮은 계란값… 5개월새 17% 올라,https://www.chosun.com/economy/economy_general/2025/05/31/ZFYVG5URS5E2RNU63C5VNGI25Q
+LH300-085,A2654,region,region,4,N,2654,2025-10-29,"기재부·국세청 고위직 85%, 토허제 아파트 소유",https://www.chosun.com/economy/economy_general/2025/10/29/ZI6TO7EFBFHDNOH5LPJLHXMHUI/
+LH300-086,A0732,region,region,4,N,732,2025-02-26,BMW 코리아 설립 30년… 전기차 충전 인프라 확대,https://www.chosun.com/economy/auto/2025/02/26/MPNM366EVNDLLC25MB7FNE3AQA
+LH300-087,A0869,region,region,4,N,869,2025-03-09,“아이 낳으면 1억 드립니다”… 인구 증가 ‘전국 1위’ 찍은 이 도시,https://www.chosun.com/national/national_general/2025/03/09/2FUPCN2GEBEJBF4V7LWZ7PD62I
+LH300-088,A0423,region,region,4,N,423,2025-02-02,5대은행 가계대출 10개월 만에 축소…연초 성과급 영향,https://www.chosun.com/economy/money/2025/02/02/ELWE4ZA2GRMUY7Q24NBVV7ZD7E
+LH300-089,A0787,region,region,4,N,787,2025-03-02,"HMG그룹, 용인·남양주서 잇따라 개발 부지 확보",https://www.chosun.com/economy/real_estate/2025/03/02/AIRYI2ZUVBAPLLJSN3MHIBZ35Y
+LH300-090,A2498,region,region,4,N,2498,2025-07-12,"서울역 30분대…옆 단지보다 1억 비싸고, 커뮤니티는 ""겨우?""｜검단호수공원역 중흥S-클래스",https://www.chosun.com/economy/realty/apartment_sales/2025/07/12/DWUHDSXZ6KLEKSQEBK53P4I4EU
+LH300-091,A0788,region,region,4,N,788,2025-03-02,1월 서울 아파트 평균가격 13억8289만원...역대 최고,https://www.chosun.com/economy/real_estate/2025/03/02/RNOY6YTQ4JCN3OC5ZPKMVJMRMA
+LH300-092,A2460,region,region,4,N,2460,2025-07-10,내년 최저임금 1만320원... 17년만에 표결 아닌 노사 합의,https://www.chosun.com/national/labor/2025/07/10/VBLP6W3UJVCYTJXFUYH7B5M7DE
+LH300-093,A0927,country,country|product,11,Y,927,2025-03-13,소고기도?,https://www.chosun.com/economy/economy_general/2025/03/13/CHA4LVC4VVGY3OCN2XAY5VQK5Y
+LH300-094,A0656,country,country|product,11,Y,656,2025-02-20,"中 후판 덤핑 공세에... 정부, 최고 38% 관세 매겼다",https://www.chosun.com/economy/economy_general/2025/02/20/KVREWPDZMNGK3A5YW2LDZOOL3Q
+LH300-095,A0980,country,country|region,11,Y,980,2025-03-17,한국 가계부채 비율 세계 2위로 떨어져,https://www.chosun.com/economy/economy_general/2025/03/17/K6UPVFG6DZE7TDKCKQPUDFWCPE
+LH300-096,A0680,country,country|product,11,Y,680,2025-02-22,中후판 반덤핑 관세에 철강주 일제히 올라,https://www.chosun.com/economy/industry-company/2025/02/22/WGVPVSSBRNFQHPACCTQ52GXBH4
+LH300-097,A0536,country,country|product,11,Y,536,2025-02-11,1~10일 일평균 수출액 6.4% 줄어...17개월 만 최대폭 감소,https://www.chosun.com/economy/economy_general/2025/02/11/3H2PYHOJFBEXLARKGB4QNSQZ2A
+LH300-098,A2047,country,country|product|region,11,Y,2047,2025-06-07,편의점들이 초저가 경쟁 벌이는 이유는?,https://www.chosun.com/economy/market_trend/2025/06/07/77V6YZ6X3NHKPDXS6UHNXJ6DXA
+LH300-099,A0083,country,country|product,11,Y,83,2025-01-07,BYD “모든 멕시코 주민의 첫 전기차” 내세우자… 멕시코 “전기차 독자 생산할 것”,https://www.chosun.com/economy/auto/2025/01/07/TY2H22LT25BJRA73UP7YYS7WEU
+LH300-100,A0901,country,country|product,11,Y,901,2025-03-11,1~10일 수출 2.9% 증가...무역수지 적자도 7억달러 늘어,https://www.chosun.com/economy/economy_general/2025/03/11/6ADKWRZJQBHAHDLDFSDDZTWLTM
+LH300-101,A2606,country,country|region,11,Y,2606,2025-10-10,"지난해 국내 영아 47명, ‘이것’으로 사망… 침실서 특히 주의해야 하는 것",https://health.chosun.com/site/data/html_dir/2025/10/10/2025101002702.html
+LH300-102,A0163,country,country|product,11,Y,163,2025-01-13,"1월 1~10일 수출, 3.8% 증가…‘15개월 연속’ 수출 호조세 이어갈까",https://www.chosun.com/economy/economy_general/2025/01/13/E7Q2DRJNOBHZ5DZJGFL5HTRYK4
+LH300-103,A0849,country,country|region,11,Y,849,2025-03-07,국산으로 둔갑해버린 중국산 골프채 적발…“시가 90억원 상당”,https://www.chosun.com/economy/economy_general/2025/03/07/DWZW4F6ZJ5FTZJZOBVRER2PVWM
+LH300-104,A0821,country,country|product,11,Y,821,2025-03-05,"中·캐나다 즉각 보복, 관세 전쟁 본격화",https://www.chosun.com/economy/economy_general/2025/03/05/G3NVC2B3PBCXZN3EHFNL2HACSA
+LH300-105,A2106,country,country|product,11,Y,2106,2025-06-12,반도체·자동차 호조로 1~10일 수출 5.4% 늘어,https://www.chosun.com/economy/economy_general/2025/06/12/4HDJMNREQZEBFKMU3JQBHHAYVA
+LH300-106,A2432,country,country|product,11,Y,2432,2025-07-07,트럼프 ‘관세 편지’ 막아라… 여한구 “올코트 프레싱”,https://www.chosun.com/economy/industry-company/2025/07/07/HZCBGWGDLBALHLMVOALK74ZYJY
+LH300-107,A1727,country,country|region,11,Y,1727,2025-05-14,주담대 연체율도 두 달 연속 최고치,https://www.chosun.com/economy/economy_general/2025/05/14/7NSJI2LCGFEVLORPOGD5NAGVJU
+LH300-108,A2337,country,country|product|region,11,Y,2337,2025-06-30,인구소멸지역 갈 때 버스비 50% 할인...농림축산식품부 다음달 1일부터 ‘농촌투어패스’ 사업 추진,https://www.chosun.com/economy/economy_general/2025/06/30/EPJOGMWLHFEWFDPHG5UKKGRVHY
+LH300-109,A1312,country,country|product,11,Y,1312,2025-04-12,수출 13.7% 늘었는데 對美 수출은 0.6% 줄어,https://www.chosun.com/economy/economy_general/2025/04/12/XZJZPJWCNVE5XGNSDDXW3USMKQ
+LH300-110,A2480,country,country|product,11,Y,2480,2025-07-11,7월 1~10일 수출 전년 동기 대비 9.5% 증가..반도체 12.8% 증가,https://www.chosun.com/economy/economy_general/2025/07/11/KWBDNQWXBRDVVPA3PXT4EP3AHQ
+LH300-111,A1912,country,country|product|region,11,Y,1912,2025-05-28,국내 최대 코카인 약 1.7t 해양 밀반입 선원 4명 구속 송치,https://www.chosun.com/economy/economy_general/2025/05/28/KSPMFLMNWRDZFI6G3GKIUCSNBM
+LH300-112,A1959,country,country|product,11,Y,1959,2025-06-01,‘트럼프 관세’ 본격화에 5월 수출 -1.3%...대미·자동차 수출↓,https://www.chosun.com/economy/industry-company/2025/06/01/7D6MSBKIRRBFHESPZCNVFAFABU
+LH300-113,A1431,country,country|product,11,Y,1431,2025-04-21,美 관세 충격 영향에 4월 1~20일 수출 5.2% 감소...대미 수출은 1년 전보다 14.3% 급감,https://www.chosun.com/economy/economy_general/2025/04/21/2GWDSTNBWBDRDNIWDPJDWFQFDE
+LH300-114,A1703,country,country|product,11,Y,1703,2025-05-12,‘관세쇼크’에 5월 1~10일 대미 수출 30.4% ‘급감’…전체 수출도 23.8% 감소,https://www.chosun.com/economy/economy_general/2025/05/12/F7R2UFZ4ZFD3XFXBSUT7UQEX6Q
+LH300-115,A1987,country,country|region,11,Y,1987,2025-06-03,“관세 10% 높아지면 美물가 0.3%p 오를 것… 그 영향은 일시적”,https://www.chosun.com/economy/economy_general/2025/06/03/5PQFJXPLEFAZ5AU5OA7OH4XR4A
+LH300-116,A0967,country,country|product|region,11,Y,967,2025-03-16,지난달 IT 수출액 늘었지만… 對中 반도체 수출은 30% ‘뚝’,https://www.chosun.com/economy/industry-company/2025/03/16/YTIMRXZ7Z5EUFFJHJSX6EFBY3U
+LH300-117,A2553,country,country|product,11,Y,2553,2025-07-17,‘광우병 파동’ 재발 우려에 소고기는 신중… 쌀·사과로 협상할 듯,https://www.chosun.com/economy/economy_general/2025/07/17/7RFL2EZOUBGS3CSGOMK5WJWC7M
+LH300-118,A0179,country,country|product,11,Y,179,2025-01-14,"국내 산업용 로봇업계, 中·日 반덤핑 제소",https://www.chosun.com/economy/industry-company/2025/01/14/4PAQCDOULZGMDB3J2TD6GPMMZQ
+LH300-119,A2379,country,country|product,11,Y,2379,2025-07-03,올 상반기 韓 농식품 수출 전년 대비 8.4% 증가...불닭맛 인기에 라면 24% 수출 높아져,https://www.chosun.com/economy/economy_general/2025/07/03/T7MSW2CNINHAZO2OORXLNKWARY
+LH300-120,A0853,country,country|product|region,11,Y,853,2025-03-07,1월 경상수지 전년과 비슷한 29.4억달러↑…21개월 연속 흑자,https://www.chosun.com/economy/economy_general/2025/03/07/NF4SHDL7TBDHVKLE4MDN4DI66M
+LH300-121,A0507,country,country|product|region,11,Y,507,2025-02-09,3분기 연속 0%대 성장...쓸 사람도 없는 한국의 돌파구는? [송의달 LIVE],https://www.chosun.com/economy/economy_general/2025/02/09/3TOJKHHJPVBKPLEORVUCWACWEU
+LH300-122,A2394,country,country|region,11,Y,2394,2025-07-04,상반기 외국인 직접투자 15% 급감,https://www.chosun.com/economy/industry-company/2025/07/04/E77JPFMZCNHHVEQGDGIPU4IPIQ
+LH300-123,A1537,country,country|region,11,Y,1537,2025-04-29,5월 초 LA입항 컨테이너 36% 급감. 미 실물 경제 타격 현실화,https://www.chosun.com/economy/economy_general/2025/04/29/UBPAUAJWS5BCPO5KA6ZKTIFGZE
+LH300-124,A0668,country,country|region,11,Y,668,2025-02-21,한국 대도시·소도시 집값 격차 3배 ‘OECD 최대’,https://www.chosun.com/economy/economy_general/2025/02/21/IXS5JNAIDBA5PDDU3A5TSB3TKM
+LH300-125,A2032,country,country|product|region,11,Y,2032,2025-06-06,"日 버블붕괴 직전과 닮은 민간 부채, 그런데 더 악성이다",https://www.chosun.com/economy/economy_general/2025/06/06/XJSXS6L5XREVJLWEKTP6XDC5UY
+LH300-126,A1299,country,country|product,11,Y,1299,2025-04-11,"1~10일 수출 13.7% 증가, 일평균 0.3% 늘어...대미 수출은 0.6% 감소",https://www.chosun.com/economy/economy_general/2025/04/11/JLLHJ2T7UBE6ZOJH4H6O2GZX4I
+LH300-127,A2092,country,country|product,11,Y,2092,2025-06-11,1~10일 수출 5.4% 증가... 대미 수출도 3.9% 늘어,https://www.chosun.com/economy/economy_general/2025/06/11/BDA2MMKGDJAJNK3EKOWZYKHFSU
+LH300-128,A1946,country,country|product|region,11,Y,1946,2025-05-31,관세 충격에… 4월 생산·소비·투자 ‘트리플 감소’,https://www.chosun.com/economy/economy_general/2025/05/31/3BPJ2QXR5ZAP7HSRL5H6XDK6Z4
+LH300-129,A0951,country,country|product,11,Y,951,2025-03-15,"기후 변화까지 겹쳐, 세계식량가격지수 8.3% 급등",https://www.chosun.com/economy/economy_general/2025/03/15/ZC7AXUKTWJB63EAITOHPOXXD34
+LH300-130,A1714,country,country|product,11,Y,1714,2025-05-13,美中관세 합의 희소식… 한국 타결 가능성 커져,https://www.chosun.com/economy/auto/2025/05/13/B6FLJXMDNBGUXBB6PREUAMETBY
+LH300-131,A1185,country,country|product|region,11,Y,1185,2025-04-02,"관세청-해경청, 강릉 옥계항 외국 무역선서 ‘200만명 동시 투약 가능’ 코카인 추정 마약 1t 적발",https://www.chosun.com/economy/economy_general/2025/04/02/CC25Q7TOMZEZJLQSRSF6DSPKOQ
+LH300-132,A2629,country,country,10,Y,2629,2025-10-21,"100주년 맞은 인구총조사, 내일부터 시작",https://biz.chosun.com/policy/policy_sub/2025/10/21/GFF5NBFTAREJLPUBAGCC53CLOQ/
+LH300-133,A0736,country,country,10,Y,736,2025-02-26,"산업부 장관, 미국 가서 ‘관세 대응’",https://www.chosun.com/economy/economy_general/2025/02/26/CNEZTF6F3RGKRJC6KUACHUZFMQ
+LH300-134,A1730,country,country,10,Y,1730,2025-05-14,내수 살리겠다던 임시·대체 공휴일 수출 실적만 깎아,https://www.chosun.com/economy/economy_general/2025/05/14/EEI3XRMU55DPHFH5OCYHB2GYHQ
+LH300-135,A0149,country,country,10,Y,149,2025-01-12,"중국, 무역에 영향주는 기술장벽 1년새 3배 늘어",https://www.chosun.com/economy/industry-company/2025/01/12/OTV6PV55KFCWDCO2C53C7DEB34
+LH300-136,A1549,country,country,10,Y,1549,2025-04-30,"한국서 中철사로 만든 와이어, 美는 원산지 어디로 볼까?",https://www.chosun.com/economy/economy_general/2025/04/30/HJ54JIP4BBBJ3CMLCYITAEYJXE
+LH300-137,A1503,country,country,10,Y,1503,2025-04-26,"이창용 한은 총재 “전 세계 재무장관, 미·중 합의 촉구""",https://www.chosun.com/economy/int_economy/2025/04/26/M3NLCWON5NFXZNQK2E6OPLA4EU
+LH300-138,A0827,country,country,10,Y,827,2025-03-05,"트럼프 “한국 관세, 미국의 4배” 발언에...정부 “사실과 달라”",https://www.chosun.com/economy/economy_general/2025/03/05/PYJPK3AIDJHVBP3OXRFBYGUH3A
+LH300-139,A0148,country,country,10,Y,148,2025-01-12,‘300인 이상’ 대졸 초임 처음으로 5000만원 돌파…日보다 높은 수준,https://www.chosun.com/economy/industry-company/2025/01/12/JUXCUOIRFJAEXIUIS4CSYYLWW4
+LH300-140,A0438,country,country,10,Y,438,2025-02-03,日 금리 올려도… ‘정국 혼란 충격’ 원화보다 더 떨어진 엔화,https://www.chosun.com/economy/economy_general/2025/02/03/VYSTHUNQQNHHNDASV5NEENXIKA
+LH300-141,A2650,country,country,10,Y,2650,2025-10-29,"[카드뉴스]센서스 100년, '2025 인구주택총조사' 본격 시작",https://biz.chosun.com/industry/business_info/2025/10/29/7NDKOQDZXZDPVEZLIGVHVLMKF4/
+LH300-142,A2288,country,country,10,Y,2288,2025-06-26,[HOT ISSUE] 스테이블 코인 뭐길래… 한은까지 나서 경고하나,https://www.chosun.com/economy/economy_general/2025/06/26/M6WN6C3YMJGYXM7WKMUZ3OW2SQ
+LH300-143,A2614,country,country,10,Y,2614,2025-10-13,"“내가 5000원 할인받아 먹은 치킨, 점주는 할인 전 가격으로 배달앱 수수료를 냈다고?”..공정위, 쿠팡이츠 불공정약관 시정 권고",https://www.chosun.com/economy/economy_general/2025/10/13/I2WQ3A3YQVA7XIQTM7USZN5JBI/
+LH300-144,A2015,country,country,10,Y,2015,2025-06-05,작년 한국 1인당 국민소득 3만6745달러... 2년 연속 일본 앞질러,https://www.chosun.com/economy/economy_general/2025/06/05/P2N35XU7BJFIDBL32N3K3SYKKA
+LH300-145,A0408,country,country,10,Y,408,2025-02-01,"“한국, 美제조업 부활 파트너로서의 역할 강조해야”",https://www.chosun.com/economy/industry-company/2025/02/01/TOFJ23ZGXZDJNBBXTQA6JC5EHA
+LH300-146,A2597,country,country,10,Y,2597,2025-10-05,[국가 통계의 미래]㊤ '조사 없는 센서스'를 향해… 북유럽 통계史로 보는 지향점,https://biz.chosun.com/policy/policy_sub/2025/10/05/VSDQYV46DREDRBQXPV2Q3OP4JM/
+LH300-147,A0168,country,country,10,Y,168,2025-01-13,[모닝] 中의 무역 기술 규제 1년 만에 3배 늘렸다,https://www.chosun.com/economy/industry-company/2025/01/13/A7ABQVG7ZBE4JN35MP6WDUR5YI
+LH300-148,A2676,country,country,10,Y,2676,2025-11-05,일자리 못 구해 ‘울며 겨자 먹기’ 창업하는 자영업자 비율 2년 연속 증가,https://www.chosun.com/economy/economy_general/2025/11/05/2W34BPNBCVHEJE5W64TXGTKGWQ/
+LH300-149,A2176,country,country,10,Y,2176,2025-06-17,"韓 IMD 국가경쟁력 20→27위, 하락폭 ‘역대 최대’...기업 효율성 ‘뚝’",https://www.chosun.com/economy/economy_general/2025/06/17/WV56QB7SWVBRJLMGPZRTFO5QHY
+LH300-150,A0564,country,country,10,Y,564,2025-02-13,10원짜리 만드는 데 40원?… 쓸일 없어 90%는 집에서 굴러다녀,https://www.chosun.com/economy/economy_general/2025/02/13/E5QR6SBMHJGBJPO2JOTDVZNULI
+LH300-151,A0561,country,country,10,Y,561,2025-02-13,"﻿금값 폭등, 골드바 판매 중단에도… 한국은행은 ‘뒷짐’, 왜?",https://www.chosun.com/economy/economy_general/2025/02/13/3WAQAYQMI5GW7LAHECXARQMZPY
+LH300-152,A1204,country,country,10,Y,1204,2025-04-03,3월 외환보유액 석 달 만에 증가… “달러 약세·분기 말 계절효과”,https://www.chosun.com/economy/economy_general/2025/04/03/YOCGQD4OFBHTRBCFDXXUCZNU3Q
+LH300-153,A1925,country,country|product,9,Y,1925,2025-05-29,“미국 관세 정책에 한국 자동차 최대 타격…대미수출 연 4%↓”,https://www.chosun.com/economy/economy_general/2025/05/29/7YRD6PZWZZBO7LPF53SPGOMWPU
+LH300-154,A2125,country,country|product,9,Y,2125,2025-06-13,[뉴스&뷰] 관세 유예 기한 한 달 앞두고… 연장 시사한 美 속내는?,https://www.chosun.com/economy/industry-company/2025/06/13/WKZAMMFS2VEW3M3MLD5NNBYPF4
+LH300-155,A1406,country,country|product,9,Y,1406,2025-04-19,"트럼프發 ‘관세 전쟁’ 속 한국, 올 1분기 대미 무역 ‘흑자’ 유지",https://www.chosun.com/economy/economy_general/2025/04/19/MKAZITSVSJH5ZONYQDBJTM5LR4
+LH300-156,A0628,country,country|region,9,Y,628,2025-02-18,崔 대행 “관세 피해 지원에 가용수단 총동원”...무역금융 366조 ‘역대 최대’,https://www.chosun.com/economy/economy_general/2025/02/18/JFYMRGPAZJCONG3ETG4NONEWEY
+LH300-157,A2116,country,country|region,9,Y,2116,2025-06-13,기재부 “경기 하방압력 여전” 새 정부 첫 경기 진단,https://www.chosun.com/economy/economy_general/2025/06/13/3HOBUSHCWRGQTI54MM6NEZUZTM
+LH300-158,A1705,country,country|product|region,9,Y,1705,2025-05-12,KDI “대외 여건 급격 악화... 경기 둔화 시사 지표 나와”,https://www.chosun.com/economy/economy_general/2025/05/12/OV4FYY2JTVFNVDVBRW6GAPBFNE
+LH300-159,A2267,country,country|product,9,Y,2267,2025-06-24,美 관세에 5월 현대차·기아 수출 21.5％ 급감…국내車 총생산도 줄어,https://www.chosun.com/economy/industry-company/2025/06/24/NZVTZJYUQJAMVGCSRHJIHRK2VY
+LH300-160,A2332,country,country|product,9,Y,2332,2025-06-29,반려동물 치료비 100만원 넘어...양육비 月 19만원,https://www.chosun.com/economy/money/2025/06/29/LORCAVRLEVHSXPE2Z3EVNIBHF4
+LH300-161,A0950,country,country|product,9,Y,950,2025-03-15,혼란 속 슬그머니… 10개 품목은 원료값 떨어졌는데도 가격 올렸다,https://www.chosun.com/economy/economy_general/2025/03/15/B4O6DPNDU5B6BPU37GY67GLW54
+LH300-162,A0030,country,country|region,9,Y,30,2025-01-03,은행 선물환 규제 풀어 시장에 달러 공급,https://www.chosun.com/economy/economy_general/2025/01/03/7FSYM4YTJJEFBNUC6B4JOHW2RE
+LH300-163,A2261,country,country,8,Y,2261,2025-06-24,"은행권, 새 정부에 “소상공인금융공사 세워야”",https://www.chosun.com/economy/economy_general/2025/06/24/KQVWXEUKUNBFDBXML6JDFJYW5A
+LH300-164,A1047,country,country,8,Y,1047,2025-03-22,"[주간코인시황] 짧았던 연준 호재 효과… 비트코인, 8만3000달러로 하락",https://www.chosun.com/economy/money/2025/03/22/CUFOLVEBPBNDA6OTKJH5YCSMOE
+LH300-165,A0602,country,country,8,Y,602,2025-02-16,"비트코인 말고 금도 ‘김치 프리미엄’? 국내 시세, 해외보다 20% 비싸",https://www.chosun.com/economy/money/2025/02/16/4MVXKERCMJATTP4RSQYVGPYEUE
+LH300-166,A1864,country,country,8,Y,1864,2025-05-24,[주간코인시황] 12만달러 근접한 비트코인… “규제 명확화 덕분”,https://www.chosun.com/economy/money/2025/05/24/DKC2SMEUC64VXMUP2V565D32UU
+LH300-167,A2387,country,country,8,Y,2387,2025-07-04,“국내 서비스업 생산성… 제조업의 40%에 그쳐”,https://www.chosun.com/economy/economy_general/2025/07/04/425XTIBLWJFQZMOTOK4GZRNGKQ
+LH300-168,A2655,product,product|region,11,Y,2655,2025-10-29,"""대통령도 집 팔아야"" 질문에 ""검토하겠다""는 황당한 국토부 장관",https://realty.chosun.com/site/data/html_dir/2025/10/29/2025102903270.html
+LH300-169,A1199,product,product|region,11,Y,1199,2025-04-03,"정부, 산불 피해 농가에 4000억 지원",https://www.chosun.com/economy/economy_general/2025/04/03/HQPSFWAFAZFLVF5L4JOYASYODE
+LH300-170,A2335,product,product|region,11,Y,2335,2025-06-30,5월 생산·투자 2달째 동반 감소... 소비도 3달째 반등 못해,https://www.chosun.com/economy/economy_general/2025/06/30/2IZSHTWSWNEJ5FGXOMCGGEDVW4
+LH300-171,A2603,product,product|region,11,Y,2603,2025-10-09,먹거리 물가 고공행진… 빵·과일 상승률 40% 육박,https://www.chosun.com/economy/industry-company/2025/10/09/GMBIZP7ATNGJ3JGCY4ZXS267BU/
+LH300-172,A2284,product,product|region,11,Y,2284,2025-06-26,"광업·제조업 생산 늘어난 경북과 울산, 실질 지역내총생산 증가율 1·2위, 대구와 세종은 꼴찌 수준",https://www.chosun.com/economy/economy_general/2025/06/26/6JB2D4IQQZHCFKGAPHZLSUQ7OY
+LH300-173,A2348,product,product|region,11,Y,2348,2025-07-01,"살아나지 않는 내수… 생산·투자, 두 달째 동반 감소",https://www.chosun.com/economy/economy_general/2025/07/01/7YDOCXENUFGG3LEUYND4ABIJK4
+LH300-174,A2666,product,product|region,11,Y,2666,2025-11-04,"다 비싸졌다… 월세 상승률 10년래 최고, 물가도 껑충",https://www.chosun.com/economy/economy_general/2025/11/04/LTSPY3AKDFGO3PYENJYCXAAWAU/
+LH300-175,A2468,product,product|region,11,Y,2468,2025-07-10,때이른 역대급 폭염에… 농수산물 줄줄이 올라 ‘비상’,https://www.chosun.com/economy/economy_general/2025/07/10/NXE3Y4QH2RB6XIIY7EH3S3CJXI
+LH300-176,A2376,product,product|region,11,Y,2376,2025-07-03,허리 휘겠네… 가공식품 73 품목 중 62개가 올랐다,https://www.chosun.com/economy/economy_general/2025/07/03/JEUGULFQ25DL7CC2HWSYW5VDUE
+LH300-177,A0020,product,product|region,11,Y,20,2025-01-02,채용·인력배치 로봇 혁명… “관리·설계직 더 뽑고 야근도 확 줄어”,https://www.chosun.com/economy/economy_general/2025/01/02/A7CI5RF3WNDZ3IYINXCYLMBVS4
+LH300-178,A0189,product,product,10,Y,189,2025-01-15,고환율 쓰나미...수입물가 전년대비 7% 올라,https://www.chosun.com/economy/economy_general/2025/01/15/A7RGQGDZHBAYLEWBZEBFOJULHM
+LH300-179,A0886,product,product,10,Y,886,2025-03-10,"1월 제조업 생산, 18개월 만에 최대폭 감소",https://www.chosun.com/economy/economy_general/2025/03/10/65PWQSE4ORDSLO4NS6PESQ6SXQ
+LH300-180,A2424,product,product,10,Y,2424,2025-07-07,"가파른 가공식품 물가 상승세... 정부, 이달 라면·빵 등 반값 할인 행사 연다",https://www.chosun.com/economy/economy_general/2025/07/07/HWRBILKDRFB4PDMSMTYE3MOO5M
+LH300-181,A1795,product,product,10,Y,1795,2025-05-19,[모닝] 브라질에서 터진 조류인플루엔자… 순살 치킨 값 오르나,https://www.chosun.com/economy/economy_general/2025/05/19/SDVLEHC5O5HQRDA64LNPPHDWVM
+LH300-182,A0957,product,product,10,Y,957,2025-03-15,라면·빵·만두·과자 이어 햄버거까지…,https://www.chosun.com/economy/market_trend/2025/03/15/NP75CA4JJNDVPD55HESOG3NQRM
+LH300-183,A0814,product,product,10,Y,814,2025-03-04,1월 생산 2.7%↓ 소비 0.6%↓ 투자 14.2%↓ ‘트리플 감소’,https://www.chosun.com/economy/economy_general/2025/03/04/FU65MUD47VCAFLZSKULBHJ3HDY
+LH300-184,A2004,product,product,10,Y,2004,2025-06-04,돼지고기·계란 고공행진에 축산물 물가 3년래 최고,https://www.chosun.com/economy/economy_general/2025/06/04/ZXZNKUNMVBB23IAKVMXPXYQYHQ
+LH300-185,A2544,product,product,10,Y,2544,2025-07-16,한우 최대 50% 할인,https://www.chosun.com/economy/economy_general/2025/07/16/HQW3QS2NJZA45ORTAT6OCGZKIA
+LH300-186,A2375,product,product,10,Y,2375,2025-07-03,대출 ‘이중 규제’ 첫날… 꺾였지만 수요는 여전했다,https://www.chosun.com/economy/economy_general/2025/07/03/GTPTNKZWEJGWLFDIV4SYU62T5U
+LH300-187,A1034,product,product,10,Y,1034,2025-03-21,"반도체·車 수출 호조에 3월 1~20일 수출, 전년 동기 대비 4.5% 증가",https://www.chosun.com/economy/economy_general/2025/03/21/DJTK7PWYEBCM3HVMSAKDZI74ZI
+LH300-188,A2196,product,product,10,Y,2196,2025-06-19,한은 “체감 물가가 소비자물가보다 더 뛰어… 소비 위축시켜”,https://www.chosun.com/economy/economy_general/2025/06/19/FI33P26UAFDJVPWRSHBEIUK3AQ
+LH300-189,A2590,product,product,10,Y,2590,2025-10-02,9월 소비자물가 상승률 2.1%… 두 달 만에 다시 2%대 (종합),https://biz.chosun.com/policy/policy_sub/2025/10/02/YB7FNXZNQZFM3NPRM33AMSWXYE/
+LH300-190,A2012,product,product,10,Y,2012,2025-06-05,돼지고기·계란 고공행진… 축산물 물가 6% 올라,https://www.chosun.com/economy/economy_general/2025/06/05/7CAZV7VZIVDGVJTCK22YR6RKMI
+LH300-191,A2601,product,product,10,Y,2601,2025-10-08,5년간 먹거리 물가 20% 이상 상승… 과일·빵 상승률 40% 수준,https://biz.chosun.com/distribution/food/2025/10/08/RXZHN5KKIVDYDBTMMCPVRSVQUE/
+LH300-192,A2669,product,product,10,Y,2669,2025-11-04,10월 소비자물가 2.4% 상승...15개월만 최대 상승률,https://www.chosun.com/economy/economy_general/2025/11/04/IQO3Q645VRHHBDUAFXCXBPH5Z4/
+LH300-193,A0783,product,product,10,Y,783,2025-03-02,3월에도 식품 가격 인상… “원자재·환율 상승으로 인상 불가피”,https://www.chosun.com/economy/market_trend/2025/03/02/LC446SXXIFG3VDE72NPSG55NVE
+LH300-194,A1977,product,product,10,Y,1977,2025-06-02,내수 부진에 온라인 쇼핑마저 주춤… 가방 거래는 1년4개월 연속↓,https://www.chosun.com/economy/economy_general/2025/06/02/NP7AYM35FBDMHIX6A74PKMOFHQ
+LH300-195,A2374,product,product|region,9,Y,2374,2025-07-03,"국세청, ‘경영난’ 식당·편의점·커피숍 부가세 납기 2달 연장",https://www.chosun.com/economy/economy_general/2025/07/03/BIXCEKR5HBEB3KKZBDAFUBAZ5I
+LH300-196,A0494,product,product|region,9,Y,494,2025-02-08,주유소 휘발윳값 17주 만에 내림세... 다음 주도 하락 가능성,https://www.chosun.com/economy/economy_general/2025/02/08/JJQW6INGTNBB7DNI2QCSCXZI6Y
+LH300-197,A2251,product,product|region,9,Y,2251,2025-06-23,"기업, 시설 투자보다 월급 주려 대출받는다",https://www.chosun.com/economy/economy_general/2025/06/23/XMRWOM762JGDHB6OVYHOSUWCE4
+LH300-198,A1529,product,product|region,9,Y,1529,2025-04-28,놀이공원·카페… T멤버십 혜택 확대,https://www.chosun.com/economy/industry-company/2025/04/28/G2237VJJLBHG3DQ7LGC4T53IEY
+LH300-199,A1623,product,product|region,9,Y,1623,2025-05-06,"“정부 제기능 못 하는 지금이 기회”… 업체들, 가격 더 올릴 듯",https://www.chosun.com/economy/economy_general/2025/05/06/FDBK53WY6FGZROB5KDUZOV2FEM
+LH300-200,A0198,product,product|region,9,Y,198,2025-01-16,"소상공인 만난 崔대행 “내주 민생회의, 지원 방안 철저히 챙길 것”",https://www.chosun.com/economy/economy_general/2025/01/16/55FZC4IDKJDLBJTO62LPGUH6UU
+LH300-201,A1405,product,product|region,9,Y,1405,2025-04-19,휘발윳값 11주 연속 하락…”국제유가 올랐지만 당분간 약세”,https://www.chosun.com/economy/economy_general/2025/04/19/ILR6XFE7VVHW7ICHDOJM2YULOY
+LH300-202,A2523,product,product,8,Y,2523,2025-07-14,주유소 기름값 4주 만에 하락,https://www.chosun.com/economy/industry-company/2025/07/14/KOLW4ZK2IJCXZOOOOLD6E7BDTA
+LH300-203,A0527,product,product|region,5,N,527,2025-02-10,두 달째 생산 둔화로 경기 하방 위험 높아졌다는 KDI 진단...“반도체 수출만 호조세”,https://www.chosun.com/economy/economy_general/2025/02/10/Z5O7AFEVSZDZTBDMSO45A5H7O4
+LH300-204,A0773,product,product|region,5,N,773,2025-03-01,주유소 기름값 3주 연속 하락...이달 LPG 가격도 동결,https://www.chosun.com/economy/industry-company/2025/03/01/6QEHNCGCERGURHTXV4Z6WXTCPU
+LH300-205,A0397,product,product|region,5,N,397,2025-01-31,귤 한 알에 1000원… ‘프루트플레이션’ 일상 되나,https://www.chosun.com/economy/economy_general/2025/01/31/5JT3HABFHBBJPLTZRTPNYU7XCU
+LH300-206,A2322,product,product|region,5,N,2322,2025-06-29,"주유소 기름값 2주 연속 상승… 휘발유 27.7원, 경유 29원 상승",https://www.chosun.com/economy/industry-company/2025/06/29/4Z66ZA67O5CKZO6BRI6CCZTWBY
+LH300-207,A0667,product,product|region,5,N,667,2025-02-21,이상 기온으로… 지난달 딸기 가격 58% 급등,https://www.chosun.com/economy/economy_general/2025/02/21/AFCBIB3E5RC2XBWTFQQPGCPHJM
+LH300-208,A1328,product,product|region,5,N,1328,2025-04-13,산불 피해 보험금 청구 5000건 육박… 농작물 재해 최다,https://www.chosun.com/economy/money/2025/04/13/2PM6KHM3GG5NKAM5C247XVWHAQ
+LH300-209,A0190,product,product|region,5,N,190,2025-01-15,너무 오른 ‘국민 반찬’… 김 한 장에 150원,https://www.chosun.com/economy/economy_general/2025/01/15/CL265Q4QEZGRBMHGA4VSUMNTLM
+LH300-210,A2540,product,product|region,5,N,2540,2025-07-16,한국 특화 시스템 탑재… 안전 기술도 업그레이드,https://www.chosun.com/economy/auto/2025/07/16/RMSMTIGKDNEY7MCAX4F3W4V6W4
+LH300-211,A0936,product,product|region,5,N,936,2025-03-14,현대모비스 “미래 車 산업 새 패러다임 주도”,https://www.chosun.com/economy/auto/2025/03/14/LSTDBXGHSZEXVMBIY4XQZP3U3E
+LH300-212,A0749,product,product|region,5,N,749,2025-02-27,"“반도체·자동차·철강 등 한국, 향후 4년 수출 둔화… AI 인재 5만명 키워야”",https://www.chosun.com/economy/economy_general/2025/02/27/LOVOXISKTFBUTJ3IYI6D7TIPDY
+LH300-213,A0140,product,product|region,5,N,140,2025-01-11,주유소 기름값 13주 연속 오름세... 고환율·국제유가 영향,https://www.chosun.com/economy/market_trend/2025/01/11/L5AR3WGRQFGCXKI6LGZ2VENLY4
+LH300-214,A0677,product,product|region,5,N,677,2025-02-22,주유소 기름값 가격 2주 연속 하락…국제유가 상승이 다음주 변수,https://www.chosun.com/economy/economy_general/2025/02/22/VLV4A6OL3VHVJOEEZ5GYY2CC34
+LH300-215,A0956,product,product|region,5,N,956,2025-03-15,국내 휘발유값 9주만 1600원대로,https://www.chosun.com/economy/industry-company/2025/03/15/ZMO5TXY5D5EMLDMQ2KD43O6NU4
+LH300-216,A1861,product,product|region,5,N,1861,2025-05-24,주유소 기름값 2주 연속 떨어져...휘발유 1635.8원,https://www.chosun.com/economy/industry-company/2025/05/24/Z5VXBYTF2NH7XMNV54TRS7EIP4
+LH300-217,A0500,product,product,4,N,500,2025-02-08,아이스크림·과자·빵 연초부터 줄줄이 인상,https://www.chosun.com/economy/market_trend/2025/02/08/VKMD5V4GUNB7DHG7CRYUQ2DRII
+LH300-218,A0069,product,product,4,N,69,2025-01-06,"여름 폭염으로 공급 줄어… 배추 가격 59%, 무 77% 올라",https://www.chosun.com/economy/economy_general/2025/01/06/AKAFLQIYCBABRFMMXNI5JKO7EU
+LH300-219,A1248,product,product,4,N,1248,2025-04-07,스포티한 얼굴로 돌아왔다...BMW 전기차 ‘뉴 i4 eDrive40’ 출시,https://www.chosun.com/economy/auto/2025/04/07/Y6AXESM2U5A3HPVLQT6Z2M5CXE
+LH300-220,A1545,product,product,4,N,1545,2025-04-30,전기차 ‘폴스타 2′ 첫 4000만원대 모델 나왔다,https://www.chosun.com/economy/auto/2025/04/30/GCITDKE3NZEX3HSDD7SAYOG6KU
+LH300-221,A1320,product,product,4,N,1320,2025-04-12,"키움증권, ‘65억원’ 포기한 무료 수수료 이벤트… 뿔난 고객 달랠까",https://www.chosun.com/economy/money/2025/04/12/VH7IMSSJ74PD6YGKB6ZQQ7JZ7U
+LH300-222,A1805,product,product,4,N,1805,2025-05-20,날렵한 움직임… 유턴할 때도 회전 반경 크지 않아,https://www.chosun.com/economy/auto/2025/05/20/HMJUTOKP25APLNZZSPAQIUMGTM
+LH300-223,A2500,product,product,4,N,2500,2025-07-13,"‘히트플레이션’... 폭염에 수박 한 통 3만원, 배춧값 27% 뛰어",https://www.chosun.com/economy/economy_general/2025/07/13/Y53ZALIMIZFUXMQKJ7XGXBUE6A
+LH300-224,A0796,product,product,4,N,796,2025-03-03,"인터넷서도 파는 건기식, 다이소에선 왜 안 되죠",https://www.chosun.com/economy/economy_general/2025/03/03/H4MIJQSCKZCIRCGOJE44P5W5XM
+LH300-225,A2418,product,product,4,N,2418,2025-07-06,"에이비엘바이오, 1400억원 전환우선주 ‘오버행’ 우려… “주가 영향 없도록 관리”",https://www.chosun.com/economy/money/2025/07/06/DHIMQHS6QEWNVLNIM33HNJFQFA
+LH300-226,A1193,product,product,4,N,1193,2025-04-02,"현대제철 당진공장 노조, 파업 중단 후 업무 복귀",https://www.chosun.com/economy/industry-company/2025/04/02/4OEMZCYDB5BU7F4K7HKYX757Y4
+LH300-227,A1573,product,product,4,N,1573,2025-05-02,코인·K방산 열풍 거셌다… 빗썸·LIG ‘대기업’ 첫 입성,https://www.chosun.com/economy/economy_general/2025/05/02/AWDU4ZLFJRGXVNMZWSVPVQALAY
+LH300-228,A2085,product,product,4,N,2085,2025-06-10,"[기업 브리핑] 박상훈 동국씨엠 대표, 은탑산업훈장",https://www.chosun.com/economy/industry-company/2025/06/10/6IN5TIIHE5EQRAFMB7SG5JUN4Y
+LH300-229,A2685,product,product,4,N,2685,2025-11-07,"쌀 시장 격리, ‘3%·5% 룰’ 바뀌나… 양곡관리법 시행 전 제도 정비 착수",https://biz.chosun.com/policy/policy_sub/2025/11/07/UQREUYLP2JDNZAETXKF5EZVUBU/
+LH300-230,A0911,product,product,4,N,911,2025-03-12,"타스만 4000대, 무쏘 EV 2500대… 픽업트럭 잘나가네",https://www.chosun.com/economy/auto/2025/03/12/ZPFT76BKZRDVHJE3O5J5L3GUYE
+LH300-231,A0056,product,product,4,N,56,2025-01-05,고물가에 설선물 벅차다면…사전예약‧묶음판매 그나마 싸다,https://www.chosun.com/economy/market_trend/2025/01/05/GAQ4BB4HOJEWNP5GGCUHQTHY7M
+LH300-232,A1068,product,product,4,N,1068,2025-03-24,[모닝] ‘금배추’ 위에 양배추… 한 포기 6000원 넘어,https://www.chosun.com/economy/economy_general/2025/03/24/D42NUVUXYVHPHMA2DEYTGZ44ME
+LH300-233,A1305,product,product,4,N,1305,2025-04-11,"대한상의 “상속세, 자본이득세와 결합… 승계 부담 줄이자”",https://www.chosun.com/economy/industry-company/2025/04/11/HJJZ5KXGHFETTE7E4PC7TGRAVM
+LH300-234,A0923,product,product,4,N,923,2025-03-13,한 번 충전에 217km 주행… 현대차 ’2025 포터Ⅱ' 출시,https://www.chosun.com/economy/auto/2025/03/13/R62S2DCFXVA3HEA6LKONGD5WFE
+LH300-235,A0728,product,product,4,N,728,2025-02-26,어떤 환경에서도 안정적 주행 ‘뉴 레인지로버 이보크’,https://www.chosun.com/economy/auto/2025/02/26/2EJM2EODEVGBBCIC2VZONUXIBA
+LH300-236,A1094,product,product,4,N,1094,2025-03-26,4000만원 초반 소형 전기 SUV… 작지만 공간은 여유있다,https://www.chosun.com/economy/auto/2025/03/26/FNUJ4NNFHJBCZNT5LOC6H3753Y
+LH300-237,A2594,product,product,4,N,2594,2025-10-03,"쌀 31%, 소고기 29% 급등… 추석 성수품 물가 ‘비상’",https://www.chosun.com/economy/economy_general/2025/10/03/DYYFMA7NVZBVTIPXROED76W5VI/
+LH300-238,A0716,product,product,4,N,716,2025-02-25,"픽업트럭 시장, 40년 만에 다시 경쟁 시대로",https://www.chosun.com/economy/auto/2025/02/25/QM5HIV6RJFG2JDRPZYW4GIDGPQ
+LH300-239,A0548,product,product,4,N,548,2025-02-12,‘잘사니즘’ 말하며 ‘밸류업’ 막는 野... 경제 활성화법 줄줄이 뭉개,https://www.chosun.com/economy/economy_general/2025/02/12/3PQNPLREAVH4RDKBO72GS3ZVSQ
+LH300-240,A1631,product,product,4,N,1631,2025-05-06,"백종원, ‘방송활동 중단’ 승부수… 오버행 부담 덜까",https://www.chosun.com/economy/money/2025/05/06/3BM2ISQL2LODMSN4VOI4WGL5QY
+LH300-241,A1665,product,product,4,N,1665,2025-05-09,"트럼프, 금리 동결한 파월 연준 의장에 “아무 것도 모르는 바보”",https://www.chosun.com/economy/economy_general/2025/05/09/AWDMPB4NUZHSFBCTSLS56BRK3M
+LH300-242,A2294,product,product,4,N,2294,2025-06-26,"“사우디 진출할 中企, 한국에 직접 방문해 선발”",https://www.chosun.com/economy/industry-company/2025/06/26/GWQLWJG5NRDIRAKKY62WBGV76I
+LH300-243,A0946,general,general,8,Y,946,2025-03-14,"가계 대출, 저금리 때 2.7배 더 늘었다",https://www.chosun.com/economy/economy_general/2025/03/14/PYBXVRUSTZAQTOSMMAXAFLIIFI
+LH300-244,A2339,general,general,8,Y,2339,2025-06-30,이자 싸고 DSR 적용도 안 받아… ‘정책 대출’로 쏠릴 가능성,https://www.chosun.com/economy/economy_general/2025/06/30/UFR2TH6ADZAB3AEJWEJMMK7B3U
+LH300-245,A1341,general,general,8,Y,1341,2025-04-14,고물가·관세 전쟁… 숙박·음식점업 22개월째 역대 최장 불황,https://www.chosun.com/economy/economy_general/2025/04/14/WW7RNH5ORBEYPOK2PSGO5P6PBQ
+LH300-246,A0912,general,general,8,Y,912,2025-03-12,"죽어야 받는 종신보험, 살아서 연금으로 받는다",https://www.chosun.com/economy/economy_general/2025/03/12/32Q7YGKIPBCYDEMNFI43L3Z3LU
+LH300-247,A2673,general,general,8,Y,2673,2025-11-05,"“비흡연자 폐암 급증… 국산 항암제, 뇌 전이 치료 효과 좋아”",https://www.chosun.com/economy/science/2025/11/05/OXSES7ZIWZHX7CKXNJGOGDPXVU/
+LH300-248,A2618,general,general,8,Y,2618,2025-10-16,"서민들 체감 물가는 더 뛰었다... 의식주, 5년간 연평균 4.6% 올라",https://www.chosun.com/economy/economy_general/2025/10/16/GL5BGH5UVBCX5PU3GKLB6VRBTQ/
+LH300-249,A0632,general,general,8,Y,632,2025-02-18,작년 가계빚 41조 늘어난 1927조원...역대 최고치,https://www.chosun.com/economy/economy_general/2025/02/18/R2YC75IKMRBWVONVGQIRQ7TKYI
+LH300-250,A0050,general,general,8,Y,50,2025-01-04,"""직장 하나론 소득 빠듯"" 너도나도 N잡러 시대, 직장인 부업 성공하려면",https://www.chosun.com/economy/realty/investment_trends/2025/01/04/DKW3MEMILT2EXU3BFRNPMHNPWE
+LH300-251,A2684,general,general,8,Y,2684,2025-11-07,[카드뉴스] 센서스 100년 ‘2025 인구주택총조사’ 7문 7답,https://biz.chosun.com/industry/business_info/2025/11/07/I47QCSAFRNGLPG4VX4HKOFMTGI/
+LH300-252,A0904,general,general,8,Y,904,2025-03-11,내수 부진에… 자영업자 석달간 27만명 줄어,https://www.chosun.com/economy/economy_general/2025/03/11/L2IHXUIB2JCKTHKYRWY6F3LLDQ
+LH300-253,A1940,general,general,8,Y,1940,2025-05-30,1분기 가구당 月 소득 1년 새 4.5% 늘었지만 저소득층은 1.5% 줄어,https://www.chosun.com/economy/economy_general/2025/05/30/PVQ5FXMBSFCETC4MIINOSK535M
+LH300-254,A2631,general,general,8,Y,2631,2025-10-21,"데이터처장 ""결과에 비해 오랜 감사… 통계 신뢰성 낮아졌다""",https://biz.chosun.com/policy/policy_sub/2025/10/21/6LJHX2CGYJEINIGESY4ZRLNWBU/
+LH300-255,A0096,general,general,8,Y,96,2025-01-08,"작년 3분기 가계 여유자금, 전분기 대비 3.5조원 줄어",https://www.chosun.com/economy/economy_general/2025/01/08/7BSTYTMU2FBLNCLOUTBUKTCYQY
+LH300-256,A1070,general,general,8,Y,1070,2025-03-24,"집 대출 이자·교육비에 등골 휜다...중산층, 여윳돈 70만원 붕괴",https://www.chosun.com/economy/economy_general/2025/03/24/IIPI6BS4HFCLHJXQFYVTDSGCIM
+LH300-257,A1119,general,general,8,Y,1119,2025-03-28,소득 적고 대출 많은 ‘취약 자영업자’ 40만명 넘어,https://www.chosun.com/economy/economy_general/2025/03/28/57AJHECJ6FAVHERQLFRC6YFWKI
+LH300-258,A2285,general,general,8,Y,2285,2025-06-26,저출생의 역설… 분유값·산후조리비 줄줄이 치솟아,https://www.chosun.com/economy/economy_general/2025/06/26/B2U43WGAN5CQRG7H44VMNIAQFM
+LH300-259,A2550,general,general,6,Y,2550,2025-07-17,"네이버페이, 소비 쿠폰 등에 업고 ‘오프라인 결제 확장’ 노려",https://www.chosun.com/economy/economy_general/2025/07/17/2TFBYNLHB5AJFEOUR7VTNJBOSM
+LH300-260,A2123,general,general,6,Y,2123,2025-06-13,이스라엘 공습에 불붙은 기름통... 국제 유가 한때 10% 넘게 급등,https://www.chosun.com/economy/industry-company/2025/06/13/NPFQ3IQQMBD3DI2KTWVGMFEQC4
+LH300-261,A2427,general,general,6,Y,2427,2025-07-07,21일부터 소비 쿠폰 지급… 카드사 홈피 등서 신청해야,https://www.chosun.com/economy/economy_general/2025/07/07/SUSO2C6MLRDELBXAUEKWDFWVL4
+LH300-262,A2091,general,general,6,Y,2091,2025-06-11,"“내년 말까지 요금 동결” 티빙·웨이브 합병 공정위, 조건부 승인",https://www.chosun.com/economy/economy_general/2025/06/11/AQQKCVFRLJFQNAON5XGYVJKOGU
+LH300-263,A0964,general,general,6,Y,964,2025-03-16,"작년 300인 이상 기업 직원 평균연봉, 처음으로 7000만원 돌파",https://www.chosun.com/economy/industry-company/2025/03/16/73DYMLAQCVF2XC4EFAYPF2YXPA
+LH300-264,A2402,general,general,6,Y,2402,2025-07-05,스타벅스 안 되고 다이소는 된다… 15만~55만원 소비쿠폰 사용처 일문일답,https://www.chosun.com/economy/economy_general/2025/07/05/MVU73TM4KVHPZPUPAU5OY4XWWQ
+LH300-265,A0618,general,general,2,N,618,2025-02-17,"“편법 증여부터 저가·가장 매매까지” 국세청, 부동산 탈세 156명 조사",https://www.chosun.com/economy/economy_general/2025/02/17/QEQJJELROJFBBI3EBKSZHIPCSA
+LH300-266,A1462,general,general,2,N,1462,2025-04-23,공정위 “LTV 담합”… 4대 시중은행에 과징금 1조원 추진,https://www.chosun.com/economy/economy_general/2025/04/23/FX3JFTFEZJEQRFK7K4JVOPH7XE
+LH300-267,A1818,general,general,2,N,1818,2025-05-21,"렉서스, ‘LX 700h’로 수입 SUV시장 공략",https://www.chosun.com/economy/auto/2025/05/21/MSBTTOYT75CJFOAAYHUI2OECRE
+LH300-268,A2226,general,general,2,N,2226,2025-06-21,통신 3사 과열 경쟁에 ‘최신폰 20만원’… 소비자는 신났다,https://www.chosun.com/economy/industry-company/2025/06/21/VRXREGUKKRBTVCBOAABAP4TD3I
+LH300-269,A2645,general,general,2,N,2645,2025-10-27,"갈수록 줄어드는 개천용… 소득 상향 이동 비율, 17.3%로 하락",https://biz.chosun.com/policy/policy_sub/2025/10/27/EEFK3FHI7NGGBK35NXLJ5TPTJI/
+LH300-270,A0376,general,general,2,N,376,2025-01-29,“설 명절 효도보험 선물 어떠세요”… 치매·간병 보장에 생활비도 보조,https://www.chosun.com/economy/money/2025/01/29/QVNKWMBIKES4ZBF7CME7ZGX7Z4
+LH300-271,A1659,general,general,2,N,1659,2025-05-08,"이재명, 경제5단체 간담회...“민생, 경제 살리기의 중심은 기업”",https://www.chosun.com/economy/industry-company/2025/05/08/4IBLYDSMDNEZDILCVFNENFA5KE
+LH300-272,A2517,general,general,2,N,2517,2025-07-14,"李정부 첫 세법 개정, 종부세는 안 건드린다",https://www.chosun.com/economy/economy_general/2025/07/14/ZC34ESUNPFGUPFJH73AZI3BIGM
+LH300-273,A1282,general,general,2,N,1282,2025-04-09,"한국, 세계국채지수 편입 최종 확정... 시행은 내년 4월로 늦춰져",https://www.chosun.com/economy/economy_general/2025/04/09/VWP46L74KFE6DC2IRSZXBOWY2A
+LH300-274,A2426,general,general,2,N,2426,2025-07-07,[단독] 10월생 신생아까지 소비쿠폰 받는다... 9만6000명 추가 혜택,https://www.chosun.com/economy/economy_general/2025/07/07/P3D2NYW3WZFE3E4FQWO423UH6A
+LH300-275,A2073,general,general,2,N,2073,2025-06-09,금·은 매출이 46%… 고려아연 이름 바꿀 판,https://www.chosun.com/economy/industry-company/2025/06/09/2KB7CQF5MBDDDD6OOVWUEDK4W4
+LH300-276,A2679,general,general,2,N,2679,2025-11-06,결혼 10건 중 1건은 다문화 혼인… 다문화 출생 10% 증가,https://biz.chosun.com/policy/policy_sub/2025/11/06/6YI7DZ7ILZDNTIHQOYRRYF6X4M/
+LH300-277,A2081,general,general,2,N,2081,2025-06-10,李 정부선 ‘배달앱 수수료 상한제’ 도입될까,https://www.chosun.com/economy/economy_general/2025/06/10/SY7VVDU7CVDLLGFPTF2BGPZWZM
+LH300-278,A0393,general,general,2,N,393,2025-01-31,볼보 순수 전기 SUV ‘EX30′ 1분기 국내 출시,https://www.chosun.com/economy/auto/2025/01/31/IRFXHQ5WEVHDXB5EIF5BQC3UTA
+LH300-279,A0361,general,general,2,N,361,2025-01-28,개팔자가 상팔자?... 이런 금융 상품까지 나왔다,https://www.chosun.com/economy/money/2025/01/28/BAPA2QHTEJB5FJR7I65CC7YVDU
+LH300-280,A2619,general,general,2,N,2619,2025-10-17,9월 취업자 31.2만명↑… ‘소비쿠폰 효과’에 1년 7개월 만에 최대 증가(종합),https://biz.chosun.com/policy/policy_sub/2025/10/17/N4D6G75O25DILNJPSPUDYJA36Y/
+LH300-281,A1883,general,general,2,N,1883,2025-05-26,"국민이 뽑은 국가 난제, 인구 구조 변화·사회 불안 順",https://www.chosun.com/economy/economy_general/2025/05/26/4CZKI2P6NREXHHYFYHSUXRLF4Q
+LH300-282,A0635,general,general,2,N,635,2025-02-18,"중동 주목하는 ‘K-대공망’…UAE 대통령, LIG넥스원 부스 직접 찾아",https://www.chosun.com/economy/industry-company/2025/02/18/3QCJBJ2Q4FCWJI3WIYPO5OU5G4
+LH300-283,A1694,general,general,2,N,1694,2025-05-11,폭등하는 알트코인… 이더리움 10%↑·도지코인 22%↑,https://www.chosun.com/economy/money/2025/05/11/5BZY33UUKPYW46B3VL332JKUMA
+LH300-284,A1024,general,general,2,N,1024,2025-03-20,﻿“일 안 해도 실업급여 주니까”… 액수 올린 뒤 비정규직 늘었다,https://www.chosun.com/economy/economy_general/2025/03/20/X5ODCQDR5RGMHN7KYFNE34W3BM
+LH300-285,A0197,general,general,2,N,197,2025-01-16,6년만에 새롭게 돌아온 ‘팰리세이드’,https://www.chosun.com/economy/auto/2025/01/16/DCOGYNMBXFFRJJIY23766A2UXU
+LH300-286,A1867,general,general,2,N,1867,2025-05-25,"공수처, 신임 검사 자체 교육 실시... 2021년 출범 후 처음",https://www.chosun.com/national/court_law/2025/05/25/XOCA3YPWP5EHRAHAKIAOFMEYMA
+LH300-287,A1160,general,general,2,N,1160,2025-03-31,“필라테스 먹튀 주의보… 이용료 카드 할부결제를”,https://www.chosun.com/economy/economy_general/2025/03/31/6VYTVHCS5FELBDG6SCFXHJMJXY
+LH300-288,A0899,general,general,2,N,899,2025-03-11,"종신보험 사망보험금, 살아있을 때 매월 20만원씩 연금으로 받는다",https://www.chosun.com/economy/economy_general/2025/03/11/2VF5F2UYDVHL7PY3CB7OSJ7HD4
+LH300-289,A1012,general,general,2,N,1012,2025-03-20,"한노총·민노총, 연금 개혁 놓고 “국정 공백 틈탄 정치 야합”",https://www.chosun.com/national/labor/2025/03/20/H7WLJEHIZ5G53A6WZ34NLLDI7A
+LH300-290,A1962,general,general,2,N,1962,2025-06-01,하나증권 “중고차 시장 호조에 렌터카 기업도 수혜”,https://www.chosun.com/economy/money/2025/06/01/7EPHL77GTDGYVQ3JO26NURCHV4
+LH300-291,A1230,general,general,2,N,1230,2025-04-05,WP “관세율 계산법 트럼프가 선택한 것”,https://www.chosun.com/economy/int_economy/2025/04/05/H7RV4OXHINAWZMNNUTHKXSVL7M
+LH300-292,A1073,general,general,2,N,1073,2025-03-24,최상목 ‘대대행’ 체제 종료... “경제 총괄에 집중”,https://www.chosun.com/economy/economy_general/2025/03/24/SBHTCUHBE5AO3KREQ7E6XP4LHM
+LH300-293,A0121,general,general,2,N,121,2025-01-10,작년 1~11월 나라 살림 적자 규모 80조원 넘어,https://www.chosun.com/economy/economy_general/2025/01/10/5XD3RXZW4FET7FGHIGJESJPBAA
+LH300-294,A0412,general,general,2,N,412,2025-02-01,"1억원 빨리 모은 사람, 평범하지만 이게 달랐다",https://www.chosun.com/economy/money/2025/02/01/FB7GP74K3ZARVDWKW4BZMML6KQ
+LH300-295,A0143,general,general,2,N,143,2025-01-11,[코린이탈출] 은행 예금 이자와 같은 가상자산 ‘스테이킹 이자’,https://www.chosun.com/economy/money/2025/01/11/MYQK7UR426QDMHYX5OIO6VV6RE
+LH300-296,A2658,general,general,2,N,2658,2025-10-31,9월 생산·투자 늘었지만 소비 주춤… 3분기로 보면 소매판매 1.5% 증가(종합),https://biz.chosun.com/policy/policy_sub/2025/10/31/R7S3HFKR2JAWZJE2LTIJ7WGS2A/
+LH300-297,A0482,general,general,2,N,482,2025-02-07,금값 연일 사상 최고치. 금거래소 이틀째 접속 지연,https://www.chosun.com/economy/economy_general/2025/02/07/4VFXY3IEBJBRBHBJQZCB5WAFPA
+LH300-298,A1606,general,general,2,N,1606,2025-05-04,"김영철이 청담동 20억 아파트 , 6억에 구입했던 비결?..""아는 형 말 듣고 경매""",https://www.chosun.com/economy/realty/realestate_news/2025/05/04/LGR6OW2ADGUWVZDXJR6Y7ZDDUA
+LH300-299,A2198,general,general,2,N,2198,2025-06-19,‘7년 이상 연체된 5000만원 이하’ 취약계층 빚 전액 탕감,https://www.chosun.com/economy/economy_general/2025/06/19/KSFGJC4525CKLERWV5TUQLROGQ
+LH300-300,A2349,general,general,2,N,2349,2025-07-01,“내가 상위 10%라고?”… 맞벌이 역차별 논란 또 불거지나,https://www.chosun.com/economy/economy_general/2025/07/01/AKPER45HCBHNBKTV22JGYSNY7U

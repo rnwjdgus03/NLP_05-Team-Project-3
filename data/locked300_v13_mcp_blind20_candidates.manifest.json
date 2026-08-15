@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-08-13T12:06:38.283525+00:00",
+  "status": "FROZEN_UNLABELED",
+  "selection_version": "locked300_v13_mcp_blind20",
+  "selection_basis": "claim text + HCX structured period/axis + source diversity only",
+  "forbidden_at_selection": [
+    "v13 table predictions",
+    "SQLite coordinate predictions",
+    "KOSIS API values",
+    "KOSIS gold coordinates"
+  ],
+  "source_path": "outputs\\locked_holdout_300_v10_sqlite\\gpu_results\\07_mapping_sqlite\\05_hcx_measurements_kosis_ready.csv",
+  "source_sha256": "174c1c28497fa7307ceccb01da2378315bbe1fbcb08b5f478f09d8506268f8bd",
+  "output_path": "data\\locked300_v13_mcp_blind20_candidates.csv",
+  "output_sha256": "416388c2e560d54ce94e10e1bbf38fdd7bf573a71a982a22704cb4c62c92d559",
+  "rows": 20,
+  "unique_articles": 20,
+  "claim_measurement_ids": [
+    "A2681-SP30B42ECECF-m1",
+    "A0673-SPFFFDAEF95A-m1",
+    "A1411-SP5F8BCC33E4-m2",
+    "A2648-SP179F478D32-m6",
+    "A2657-SP7761543E77-m1",
+    "A1381-SP5C0FA03C99-m1",
+    "A1940-SPF9ECF92995-m1",
+    "A2195-SP58D2B7A6CE-m1",
+    "A2386-SP476B05C816-m3",
+    "A2284-SPCBEB52F561-m1",
+    "A1019-SP67B37A8EED-m1",
+    "A0964-SP596B552885-m1",
+    "A0148-SP4A2E2CE320-m1",
+    "A2015-SP474A13E300-m1",
+    "A0834-SPE8364569CF-m3",
+    "A2335-SP264A54BFC4-m1",
+    "A2666-SP91F468293F-m1",
+    "A2691-SP1ADEC33A36-m2",
+    "A1121-SP787A049679-m2",
+    "A1960-SP54F638689B-m1"
+  ],
+  "label_status": "UNLABELED_DO_NOT_SCORE"
+}

@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-08-13T11:27:39.925983+00:00",
+  "status": "PASS",
+  "method": "KOSIS_MCP_SEARCH_VALIDATE_GET_DATA",
+  "source_path": "outputs\\mcp_gold_200_v11_metadata_reranker\\semantic_trusted_v2.csv",
+  "source_sha256": "4732590e13174e947bb7c47db192e6922b88c82a16a1fb4a0b0d164f420acd1b",
+  "evidence_path": "data\\gold\\mcp_actual_coordinate_evidence_20260813.jsonl",
+  "evidence_sha256": "70aeceed1e485a85c5d6723422977782ce75c410a9c168a0e9921cde6f926bce",
+  "output_path": "data\\gold\\mcp_actual_verified_23.csv",
+  "output_sha256": "c311674200bd94a9c95fe76eb798940ebdc657692ccc14a20c1d53effb224b07",
+  "gold_rows": 23,
+  "verified_rows": 23,
+  "unique_verified_coordinates": 12,
+  "coordinate_confirmed_rows": 23,
+  "value_confirmed_rows": 23,
+  "limitations": [
+    "This is an independently queried subset of the existing development gold, not a disjoint article holdout.",
+    "MCP responses were transcribed into the immutable evidence JSONL and then machine-checked against the gold."
+  ]
+}

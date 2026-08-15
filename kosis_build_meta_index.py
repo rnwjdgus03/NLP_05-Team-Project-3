@@ -26,12 +26,18 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
-from kosis_api_test import get_meta  # noqa: E402
 from kosis_meta_coordinates import normalize_periodicity  # noqa: E402
 
 
 DEFAULT_TABLE_INDEX = PROJECT_DIR / "data/claims/kosis_table_index.csv"
 DEFAULT_OUT = PROJECT_DIR / "data/claims/kosis_meta_index.csv"
+
+
+def get_meta(org_id, tbl_id, meta_type="ITM"):
+    """Load the optional HTTP client only when an API request is made."""
+    from kosis_api_test import get_meta as api_get_meta
+
+    return api_get_meta(org_id, tbl_id, meta_type)
 
 
 def read_csv(path: Path):

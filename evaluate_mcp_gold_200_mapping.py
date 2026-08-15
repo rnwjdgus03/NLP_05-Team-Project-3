@@ -32,7 +32,10 @@ FIELD_COLUMNS = {
     "obj_l1": ("predicted_obj_l1", "auto_obj_l1", "kosis_obj_l1", "selected_obj_l1", "obj_l1", "gold_obj_l1"),
     "obj_l2": ("predicted_obj_l2", "auto_obj_l2", "kosis_obj_l2", "selected_obj_l2", "obj_l2", "gold_obj_l2"),
     "itm_id": ("predicted_itm_id", "auto_itm_id", "kosis_itm_id", "selected_itm_id", "itm_id", "item_id", "gold_itm_id"),
-    "prd_se": ("predicted_prd_se", "auto_prd_se", "kosis_prd_se", "coordinate_prd_se", "prd_se", "gold_prd_se"),
+    # ``coordinate_prd_se`` is a capability set such as ``M|Q|Y`` rather
+    # than the period selected for this claim.  Prefer the claim/prediction
+    # value and use the capability only as a legacy last resort.
+    "prd_se": ("predicted_prd_se", "auto_prd_se", "kosis_prd_se", "prd_se", "coordinate_prd_se", "gold_prd_se"),
     "period": ("predicted_period", "auto_period", "kosis_period", "period", "target_period", "gold_period"),
     "previous_period": (
         "predicted_previous_period",
@@ -44,7 +47,13 @@ FIELD_COLUMNS = {
         "gold_previous_period",
     ),
 }
-OUTPUT_FIELDS = (
+for _level in range(3, 9):
+    FIELD_COLUMNS[f"obj_l{_level}"] = (
+        f"predicted_obj_l{_level}", f"auto_obj_l{_level}", f"kosis_obj_l{_level}",
+        f"selected_obj_l{_level}", f"obj_l{_level}", f"gold_obj_l{_level}",
+    )
+
+_OUTPUT_PREFIX = (
     "gold_id",
     "claim_id",
     "title",
@@ -61,6 +70,13 @@ OUTPUT_FIELDS = (
     "gold_obj_l2",
     "pred_obj_l2",
     "obj_l2_correct",
+)
+_OUTPUT_OBJ_EXTRA = tuple(
+    field
+    for level in range(3, 9)
+    for field in (f"gold_obj_l{level}", f"pred_obj_l{level}", f"obj_l{level}_correct")
+)
+OUTPUT_FIELDS = _OUTPUT_PREFIX + _OUTPUT_OBJ_EXTRA + (
     "gold_itm_id",
     "pred_itm_id",
     "itm_id_correct",
@@ -242,6 +258,56 @@ def retrieval_metrics(
     return metrics, misses_by_k.get(largest_k, [])
 
 
+def coordinate_matches(gold: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
+    """Exact table + ITEM + every gold-specified OBJ code match."""
+    if not table_matches(gold, candidate):
+        return False
+    gold_item = clean(gold.get("gold_itm_id"))
+    pred_item, _ = choose_value(candidate, FIELD_COLUMNS["itm_id"])
+    if not gold_item or not pred_item or gold_item != pred_item:
+        return False
+    for level in range(1, 9):
+        suffix = f"obj_l{level}"
+        gold_value = clean(gold.get(f"gold_{suffix}"))
+        if not gold_value:
+            continue
+        pred_value, _ = choose_value(candidate, FIELD_COLUMNS[suffix])
+        if pred_value != gold_value:
+            return False
+    return True
+
+
+def coordinate_recall_metrics(
+    gold_rows: list[dict[str, str]],
+    candidate_rows: list[dict[str, str]],
+    ks: Iterable[int],
+) -> list[dict[str, Any]]:
+    maps = build_key_maps(candidate_rows)
+    denominator = sum(
+        bool(clean(row.get("gold_tbl_id")) and clean(row.get("gold_itm_id")))
+        for row in gold_rows
+    )
+    metrics = []
+    for k in sorted(set(ks)):
+        hits = covered = 0
+        for gold in gold_rows:
+            rows, _, _ = rows_for_gold(gold, maps)
+            rows_at_k = [row for row in rows if candidate_rank(row) <= k]
+            if rows_at_k:
+                covered += 1
+            if any(coordinate_matches(gold, row) for row in rows_at_k):
+                hits += 1
+        metrics.append({
+            "top_k": k,
+            "gold_labeled": denominator,
+            "candidate_covered": covered,
+            "hits": hits,
+            "coordinate_recall": rate(hits, denominator),
+            "candidate_coverage": rate(covered, denominator),
+        })
+    return metrics
+
+
 def mapping_priority(row: Mapping[str, Any]) -> tuple[int, int]:
     status = clean(row.get("mapping_status")).upper()
     status_score = 0 if status == "READY" else 1
@@ -276,7 +342,7 @@ def compare_field(gold: Mapping[str, Any], pred: Mapping[str, Any] | None, suffi
     pred_value, _ = choose_value(pred, FIELD_COLUMNS[suffix])
     # N/A means the gold coordinate does not require a comparison period.
     # A pipeline may still preserve that contextual period for auditing.
-    if suffix == "previous_period" and not gold_value:
+    if (suffix == "previous_period" or suffix.startswith("obj_l")) and not gold_value:
         return gold_value, pred_value, "Y"
     return gold_value, pred_value, "Y" if gold_value == pred_value else "N"
 
@@ -308,7 +374,8 @@ def evaluate_mapping(
             row[f"{suffix}_correct"] = correct
         row["table_correct"] = "Y" if row["org_id_correct"] == "Y" and row["tbl_id_correct"] == "Y" else "N"
         row["item_correct"] = "Y" if all(
-            row[f"{field}_correct"] == "Y" for field in ("obj_l1", "obj_l2", "itm_id")
+            row[f"{field}_correct"] == "Y"
+            for field in (*[f"obj_l{level}" for level in range(1, 9)], "itm_id")
         ) else "N"
         row["period_group_correct"] = "Y" if all(
             row[f"{field}_correct"] == "Y" for field in ("prd_se", "period", "previous_period")
@@ -334,7 +401,10 @@ def evaluate_mapping(
     denominator = len(evaluated)
     mapped_count = sum(bool(row["matched_by"]) for row in evaluated)
     add("mapping_coverage", mapped_count, denominator, "gold rows with a final mapped row")
-    for field in ("org_id", "tbl_id", "obj_l1", "obj_l2", "itm_id", "prd_se", "period", "previous_period"):
+    for field in (
+        "org_id", "tbl_id", *[f"obj_l{level}" for level in range(1, 9)],
+        "itm_id", "prd_se", "period", "previous_period",
+    ):
         add(
             f"{field}_accuracy",
             sum(row[f"{field}_correct"] == "Y" for row in evaluated),
@@ -342,7 +412,7 @@ def evaluate_mapping(
             f"strict {field} exact match over all gold rows",
         )
     add("table_accuracy", sum(row["table_correct"] == "Y" for row in evaluated), denominator, "org_id + tbl_id exact")
-    add("item_accuracy", sum(row["item_correct"] == "Y" for row in evaluated), denominator, "obj_l1 + obj_l2 + itm_id exact")
+    add("item_accuracy", sum(row["item_correct"] == "Y" for row in evaluated), denominator, "all gold-specified OBJ axes + itm_id exact")
     add("period_accuracy", sum(row["period_group_correct"] == "Y" for row in evaluated), denominator, "prd_se + period + previous_period exact")
     add("full_mapping_accuracy", sum(row["full_mapping_correct"] == "Y" for row in evaluated), denominator, "table + item + period exact")
     failures = [row for row in evaluated if row["full_mapping_correct"] != "Y"]
@@ -442,8 +512,10 @@ def main() -> None:
 
     retrieval_rows: list[dict[str, Any]] = []
     retrieval_misses: list[dict[str, Any]] = []
+    coordinate_rows: list[dict[str, Any]] = []
     if candidate_rows:
         retrieval_rows, retrieval_misses = retrieval_metrics(gold_rows, candidate_rows, args.ks)
+        coordinate_rows = coordinate_recall_metrics(gold_rows, candidate_rows, args.ks)
 
     evaluated_mapping: list[dict[str, Any]] = []
     mapping_rows: list[dict[str, Any]] = []
@@ -459,6 +531,7 @@ def main() -> None:
         _, scorable_mapping_rows, _ = evaluate_mapping(scorable_gold, mapped_rows)
 
     retrieval_by_k = {int(row["top_k"]): row for row in retrieval_rows}
+    coordinate_by_k = {int(row["top_k"]): row for row in coordinate_rows}
     mapping_by_name = {row["metric"]: row for row in mapping_rows}
     scorable_retrieval_by_k = {int(row["top_k"]): row for row in scorable_retrieval_rows}
     scorable_mapping_by_name = {row["metric"]: row for row in scorable_mapping_rows}
@@ -473,6 +546,8 @@ def main() -> None:
         "table_recall_at_3": retrieval_by_k.get(3, {}).get("table_recall"),
         "table_recall_at_5": retrieval_by_k.get(5, {}).get("table_recall"),
         "table_recall_at_20": retrieval_by_k.get(20, {}).get("table_recall"),
+        "coordinate_recall_at_5": coordinate_by_k.get(5, {}).get("coordinate_recall"),
+        "coordinate_recall_at_10": coordinate_by_k.get(10, {}).get("coordinate_recall"),
         "mapping_coverage": mapping_by_name.get("mapping_coverage", {}).get("rate"),
         "table_accuracy": mapping_by_name.get("table_accuracy", {}).get("rate"),
         "item_accuracy": mapping_by_name.get("item_accuracy", {}).get("rate"),
@@ -511,6 +586,10 @@ def main() -> None:
         "matched_key",
         "candidate_count_at_k",
         "top_candidate_tbl_id",
+    ))
+    write_csv(output_dir / "coordinate_recall_metrics.csv", coordinate_rows, (
+        "top_k", "gold_labeled", "candidate_covered", "hits",
+        "coordinate_recall", "candidate_coverage",
     ))
     write_csv(output_dir / "mapping_metrics.csv", mapping_rows, ("metric", "correct", "denominator", "rate", "definition"))
     write_csv(output_dir / "scorable_retrieval_metrics.csv", scorable_retrieval_rows, (

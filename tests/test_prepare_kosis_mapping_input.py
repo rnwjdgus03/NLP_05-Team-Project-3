@@ -1,4 +1,5 @@
 import csv
+from datetime import date
 
 from prepare_kosis_mapping_input import (
     align_change_period,
@@ -6,6 +7,9 @@ from prepare_kosis_mapping_input import (
     canonicalize_unit,
     expected_base_period,
     normalize_row,
+    half_year_target,
+    parse_publication_date,
+    relative_annual_target,
     prepare,
     unit_dimension,
 )
@@ -48,6 +52,100 @@ def test_unit_normalization_preserves_meaning():
 def test_period_labels_are_canonicalized_for_kosis():
     assert canonicalize_period("2023년말", "Y") == "2023"
     assert canonicalize_period("2024년 12월", "M") == "202412"
+
+
+def test_publication_date_accepts_excel_serial():
+    assert parse_publication_date("45967.0") == date(2025, 11, 6)
+
+
+def test_relative_context_repairs_comparison_year_bound_as_current_value():
+    row = measurement_row(
+        date="45967.0",
+        claim_text="다문화 출생(1만3416명)은 전년 대비 10.4%(1266명) 증가했다.",
+        next_sentence=(
+            "2014년 이후 해마다 감소하며 2023년 1만2200명까지 줄었다가 "
+            "지난해에 다시 반등했다."
+        ),
+        measurement_indicator="다문화 출생",
+        measurement_item="-",
+        measurement_period="2023",
+        period="2023",
+        measurement_prd_se="Y",
+        prd_se="Y",
+        measurement_role="현재값",
+        value="13416",
+        unit="명",
+    )
+    assert relative_annual_target(row) == (
+        "2024", "RELATIVE_CONTEXT_TO_PUBLICATION_YEAR"
+    )
+    out = normalize_row(row)
+    assert out["raw_measurement_period"] == "2023"
+    assert out["period"] == "2024"
+    assert out["period_alignment_status"] == "RELATIVE_CONTEXT_TO_PUBLICATION_YEAR"
+    assert out["comparison_period"] == ""
+
+
+def test_relative_claim_repairs_previous_year_binding():
+    row = measurement_row(
+        date="2025-03-20",
+        claim_text="지난해 전체 혼인 건수는 22만2400건이었다.",
+        measurement_period="2023",
+        period="2023",
+        measurement_prd_se="Y",
+        prd_se="Y",
+    )
+    assert align_change_period(row) == (
+        "2024", "RELATIVE_CLAIM_TO_PUBLICATION_YEAR"
+    )
+
+
+def test_explicit_historical_year_is_never_rewritten():
+    row = measurement_row(
+        date="2025-03-20",
+        claim_text="2023년 전체 혼인 건수는 전년보다 증가했다.",
+        measurement_period="2023",
+        period="2023",
+        measurement_prd_se="Y",
+        prd_se="Y",
+    )
+    assert relative_annual_target(row) == ("", "")
+    assert align_change_period(row) == ("2023", "")
+
+
+def test_half_year_scoping_indicator_is_preserved_as_half_year():
+    row = measurement_row(
+        date="2025-02-21",
+        claim_text=(
+            "2024년 하반기 지역별 고용조사에서 지난해 하반기 "
+            "울릉군의 고용률은 83.5%였다."
+        ),
+        measurement_indicator="고용률",
+        measurement_item="울릉군",
+        measurement_period="2024Q2",
+        measurement_prd_se="Q",
+        period="2024",
+        prd_se="Q",
+        value="83.5",
+        unit="%",
+    )
+    assert half_year_target(row) == ("202402", "HALF_YEAR_TARGET_FROM_CLAIM")
+    out = normalize_row(row)
+    assert (out["prd_se"], out["period"]) == ("H", "202402")
+
+
+def test_half_year_causal_context_does_not_change_annual_target():
+    row = measurement_row(
+        date="2025-01-10",
+        claim_text="자동차 수출은 하반기 파업 영향으로 2024년 708억달러를 기록했다.",
+        measurement_indicator="자동차 수출",
+        measurement_period="2024",
+        measurement_prd_se="Y",
+        period="2024",
+        prd_se="Y",
+    )
+    assert half_year_target(row) == ("", "")
+    assert align_change_period(row) == ("2024", "")
 
 
 def test_normalize_row_uses_measurement_level_aliases():

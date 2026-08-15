@@ -4,15 +4,21 @@ import { fileURLToPath } from "node:url";
 import { SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const inputPath = path.join(repoRoot, "data/gold/mcp_full_gold_200.csv");
+const targetCount = Number.parseInt(process.argv[2] ?? "200", 10);
+if (!Number.isInteger(targetCount) || targetCount < 1) {
+  throw new Error(`invalid target row count: ${process.argv[2]}`);
+}
+const lastRow = targetCount + 1;
+const sheetName = `Gold ${targetCount}`;
+const inputPath = path.join(repoRoot, `data/gold/mcp_full_gold_${targetCount}.csv`);
 const outputDir = path.join(repoRoot, "outputs/gold");
-const outputPath = `${outputDir}/mcp_full_gold_200.xlsx`;
-const summaryPreviewPath = `${outputDir}/mcp_full_gold_200_summary_preview.png`;
-const dataPreviewPath = `${outputDir}/mcp_full_gold_200_data_preview.png`;
+const outputPath = `${outputDir}/mcp_full_gold_${targetCount}.xlsx`;
+const summaryPreviewPath = `${outputDir}/mcp_full_gold_${targetCount}_summary_preview.png`;
+const dataPreviewPath = `${outputDir}/mcp_full_gold_${targetCount}_data_preview.png`;
 
 const csvText = (await fs.readFile(inputPath, "utf8")).replace(/^\uFEFF/, "");
-const workbook = await Workbook.fromCSV(csvText, { sheetName: "Gold 200" });
-const data = workbook.worksheets.getItem("Gold 200");
+const workbook = await Workbook.fromCSV(csvText, { sheetName });
+const data = workbook.worksheets.getItem(sheetName);
 const summary = workbook.worksheets.add("Summary");
 
 data.showGridLines = false;
@@ -37,25 +43,26 @@ data.getRange("H:O").format.columnWidth = 15;
 data.getRange("P:W").format.columnWidth = 20;
 data.getRange("X:AF").format.columnWidth = 18;
 data.getRange("AG:AJ").format.columnWidth = 30;
-data.getRange("D2:G201").format.wrapText = true;
-data.getRange("AE2:AH201").format.wrapText = true;
-data.getRange("I2:I201").format.numberFormat = "0.##########";
-data.getRange("AA2:AD201").format.numberFormat = "#,##0.##########";
-data.getRange("A2:AJ201").format.borders = {
+data.getRange(`D2:G${lastRow}`).format.wrapText = true;
+data.getRange(`AE2:AH${lastRow}`).format.wrapText = true;
+data.getRange(`I2:I${lastRow}`).format.numberFormat = "0.##########";
+data.getRange(`C2:C${lastRow}`).format.numberFormat = "@";
+data.getRange(`AA2:AD${lastRow}`).format.numberFormat = "#,##0.##########";
+data.getRange(`A2:AJ${lastRow}`).format.borders = {
   insideHorizontal: { style: "thin", color: "#E5EAF0" },
 };
-const table = data.tables.add("A1:AJ201", true, "McpFullGold200Table");
+const table = data.tables.add(`A1:AJ${lastRow}`, true, `McpFullGold${targetCount}Table`);
 table.style = "TableStyleMedium2";
 table.showFilterButton = true;
-data.getRange("K2:K201").conditionalFormats.add("containsText", {
+data.getRange(`K2:K${lastRow}`).conditionalFormats.add("containsText", {
   text: "SUPPORTS",
   format: { fill: "#DCFCE7", font: { color: "#166534", bold: true } },
 });
-data.getRange("K2:K201").conditionalFormats.add("containsText", {
+data.getRange(`K2:K${lastRow}`).conditionalFormats.add("containsText", {
   text: "REFUTES",
   format: { fill: "#FEE2E2", font: { color: "#991B1B", bold: true } },
 });
-data.getRange("L2:L201").conditionalFormats.add("containsText", {
+data.getRange(`L2:L${lastRow}`).conditionalFormats.add("containsText", {
   text: "FULL_KOSIS_MCP",
   format: { fill: "#DBEAFE", font: { color: "#1E40AF", bold: true } },
 });
@@ -63,7 +70,7 @@ data.getRange("L2:L201").conditionalFormats.add("containsText", {
 summary.showGridLines = false;
 summary.freezePanes.freezeRows(1);
 summary.getRange("A1:F1").merge();
-summary.getRange("A1").values = [["KOSIS MCP 실제조회 골드셋 200"]];
+summary.getRange("A1").values = [[`KOSIS MCP 실제조회 골드셋 ${targetCount}`]];
 summary.getRange("A1:F1").format = {
   fill: "#17365D",
   font: { name: "Aptos Display", size: 18, bold: true, color: "#FFFFFF" },
@@ -82,15 +89,15 @@ summary.getRange("A3:B12").values = [
   ["실제값·증빙URL 공란", null],
   ["고유 claim 수", null],
 ];
-summary.getRange("B4").formulas = [["=COUNTA('Gold 200'!A2:A201)"]];
-summary.getRange("B5").formulas = [["=COUNTIF('Gold 200'!K2:K201,\"SUPPORTS\")"]];
-summary.getRange("B6").formulas = [["=COUNTIF('Gold 200'!K2:K201,\"REFUTES\")"]];
-summary.getRange("B7").formulas = [["=COUNTIF('Gold 200'!L2:L201,\"FULL_KOSIS_MCP\")"]];
-summary.getRange("B8").formulas = [["=COUNTIF('Gold 200'!N2:N201,\"Y\")"]];
-summary.getRange("B9").formulas = [["=COUNTIF('Gold 200'!O2:O201,\"N\")"]];
-summary.getRange("B10").formulas = [["=COUNTBLANK('Gold 200'!D2:D201)+COUNTBLANK('Gold 200'!F2:F201)"]];
-summary.getRange("B11").formulas = [["=COUNTBLANK('Gold 200'!AD2:AD201)+COUNTBLANK('Gold 200'!AH2:AH201)"]];
-summary.getRange("B12").formulas = [["=COUNTA('Gold 200'!B2:B201)"]];
+summary.getRange("B4").formulas = [[`=COUNTA('${sheetName}'!A2:A${lastRow})`]];
+summary.getRange("B5").formulas = [[`=COUNTIF('${sheetName}'!K2:K${lastRow},\"SUPPORTS\")`]];
+summary.getRange("B6").formulas = [[`=COUNTIF('${sheetName}'!K2:K${lastRow},\"REFUTES\")`]];
+summary.getRange("B7").formulas = [[`=COUNTIF('${sheetName}'!L2:L${lastRow},\"FULL_KOSIS_MCP\")`]];
+summary.getRange("B8").formulas = [[`=COUNTIF('${sheetName}'!N2:N${lastRow},\"Y\")`]];
+summary.getRange("B9").formulas = [[`=COUNTIF('${sheetName}'!O2:O${lastRow},\"N\")`]];
+summary.getRange("B10").formulas = [[`=COUNTBLANK('${sheetName}'!D2:D${lastRow})+COUNTBLANK('${sheetName}'!F2:F${lastRow})`]];
+summary.getRange("B11").formulas = [[`=COUNTBLANK('${sheetName}'!AD2:AD${lastRow})+COUNTBLANK('${sheetName}'!AH2:AH${lastRow})`]];
+summary.getRange("B12").formulas = [[`=COUNTA('${sheetName}'!B2:B${lastRow})`]];
 summary.getRange("A3:B3").format = {
   fill: "#DCE6F1",
   font: { bold: true, color: "#17365D" },
@@ -111,7 +118,7 @@ summary.getRange("D4:D13").values = [
   ["DT_1DA7001S"], ["DT_1DA7002S"], ["INH_1B8000F_01"], ["DT_1K41012"],
   ["DT_1KC2020"], ["DT_1EA1011"],
 ];
-summary.getRange("E4").formulas = [["=COUNTIF('Gold 200'!Q2:Q201,D4)"]];
+summary.getRange("E4").formulas = [[`=COUNTIF('${sheetName}'!Q2:Q${lastRow},D4)`]];
 summary.getRange("E4:E13").fillDown();
 summary.getRange("D3:E3").format = {
   fill: "#DCE6F1",
@@ -143,7 +150,7 @@ const summaryCheck = await workbook.inspect({
 console.log(summaryCheck.ndjson);
 const dataCheck = await workbook.inspect({
   kind: "table",
-  range: "Gold 200!A1:L8",
+  range: `${sheetName}!A1:L8`,
   include: "values,formulas",
   tableMaxRows: 8,
   tableMaxCols: 12,
@@ -162,7 +169,7 @@ console.log(formulaErrors.ndjson);
 await fs.mkdir(outputDir, { recursive: true });
 const summaryPreview = await workbook.render({ sheetName: "Summary", range: "A1:F16", scale: 1.4, format: "png" });
 await fs.writeFile(summaryPreviewPath, new Uint8Array(await summaryPreview.arrayBuffer()));
-const dataPreview = await workbook.render({ sheetName: "Gold 200", range: "A1:L12", scale: 1, format: "png" });
+const dataPreview = await workbook.render({ sheetName, range: "A1:L12", scale: 1, format: "png" });
 await fs.writeFile(dataPreviewPath, new Uint8Array(await dataPreview.arrayBuffer()));
 const output = await SpreadsheetFile.exportXlsx(workbook);
 await output.save(outputPath);

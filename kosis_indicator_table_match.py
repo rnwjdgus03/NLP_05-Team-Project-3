@@ -64,6 +64,9 @@ _PERCEPTION = ("인식", "구입경험", "이용경험", "만족도", "애로", 
 _STOP_BIGRAMS = frozenset({
     "현황", "총괄", "지수", "통계", "조사", "전체", "기타", "합계", "구성",
     "별로", "에서", "하는", "이상", "미만", "관련", "부문", "규모",
+    # 지표 개념이 아니라 집계·표현 방식이다. 이것 하나만 겹쳐
+    # ``1인당 국민소득 → 1인당 급여비용`` 같은 오매핑이 통과하면 안 된다.
+    "인당", "평균", "연간", "가구",
 })
 
 _TOKEN = re.compile(r"[가-힣]{2,}|[A-Za-z]{2,}|\d+")
@@ -196,6 +199,21 @@ def indicator_table_mismatch(
     if price_reason:
         return price_reason
 
+    claim_compact = re.sub(r"\s+", "", indicator_text)
+    mapped_compact = re.sub(r"\s+", "", mapped_context)
+    # 단순 어휘 겹침으로 구분할 수 없는 단위·범위 개념 충돌. 특정 표 ID가
+    # 아니라 통계 개념의 포함관계를 검사한다.
+    if "밀도" in mapped_compact and "밀도" not in claim_compact:
+        return "DENSITY_CONCEPT_MISMATCH: 수준·개수 주장을 밀도 통계로 답할 수 없다"
+    if "다문화" in mapped_compact and "다문화" not in claim_compact:
+        return "MULTICULTURAL_SCOPE_MISMATCH: 선택 통계의 다문화 범위가 주장에 없다"
+    if "부동산" in claim_compact and not any(
+        term in mapped_compact for term in ("부동산", "주택", "토지", "건물")
+    ):
+        return "REAL_ESTATE_SCOPE_MISMATCH: 부동산 자산 대상이 선택 통계에 없다"
+    if "자산" in claim_compact and "소득" in mapped_compact and "자산" not in mapped_compact:
+        return "ASSET_INCOME_CONCEPT_MISMATCH: 자산 주장을 소득 통계로 답할 수 없다"
+
     # **표 이름만으로는 판단하지 않는다.** 지표어를 항목·분류축이 담는 경우가 많다 —
     #   취업자수   ↔  '성별 경제활동인구 총괄'  + 항목 '취업자'
     #   출생아 수  ↔  '월.분기.연간 인구동향'   + 분류2 '출생아수(명)'
@@ -205,10 +223,15 @@ def indicator_table_mismatch(
     if not detail:
         return ""
 
-    want = bigrams(indicator_text)
+    # 숫자는 연령·기간 범위 검사에서는 중요하지만 표 개념의 근거는 아니다.
+    # 여기서만 제외해 '1인당'의 1 하나로 국민소득과 급여비용이 이어지는 것을 막는다.
+    want = {token for token in bigrams(indicator_text) if not token.isdigit()}
     if not want:
         return ""
-    if want & bigrams(f"{table_text} {detail}"):
+    mapped_bigrams = {
+        token for token in bigrams(f"{table_text} {detail}") if not token.isdigit()
+    }
+    if want & mapped_bigrams:
         return ""
     return (f"지표 '{indicator_text[:24]}' 가 표 '{table_text[:28]}' ·"
             f" 항목 '{detail[:24]}' 와 어휘를 하나도 공유하지 않는다")

@@ -120,6 +120,17 @@ def main():
     parser.add_argument("--item-top-k", type=int, default=3)
     parser.add_argument("--obj-top-k", type=int, default=2)
     parser.add_argument("--max-combinations", type=int, default=20)
+    parser.add_argument(
+        "--coordinate-backend",
+        choices=["legacy", "sqlite"],
+        default="legacy",
+        help="legacy는 CSV 후보 조합, sqlite는 표 검색 뒤 ITEM/OBJ exact resolver 사용",
+    )
+    parser.add_argument(
+        "--metadata-db",
+        default="data/indexes/kosis_metadata.sqlite",
+        help="--coordinate-backend sqlite에서 누적 사용할 KOSIS 메타데이터 DB",
+    )
     parser.add_argument("--skip-meta", action="store_true", help="table-only offline run")
     parser.add_argument(
         "--reuse-table-candidates",
@@ -215,6 +226,33 @@ def main():
             "--with-periodicity",
         ]
     )
+    if args.coordinate_backend == "sqlite":
+        sqlite_command = [
+            sys.executable,
+            SCRIPT_DIR / "run_kosis_sqlite_exact_pipeline.py",
+            "--claims",
+            ready,
+            "--table-candidates",
+            table_candidates,
+            "--meta-index",
+            meta_index,
+            "--table-index",
+            args.table_index,
+            "--metadata-db",
+            args.metadata_db,
+            "--out-dir",
+            out_dir / "sqlite_exact",
+            "--table-top-k",
+            args.top_tables,
+            "--item-top-k",
+            args.item_top_k,
+        ]
+        if args.verify:
+            sqlite_command.extend(["--validate-api", "--verify-values"])
+        run(sqlite_command)
+        print(f"coordinate_backend=sqlite metadata_db={args.metadata_db}")
+        print(f"sqlite_outputs={out_dir / 'sqlite_exact'}")
+        return
     run(
         [
             sys.executable,

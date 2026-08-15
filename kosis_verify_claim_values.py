@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import re
 import sys
@@ -405,7 +406,9 @@ def unit_spec(unit):
             family = 'EUR'
         else:
             family = 'KRW'
-        scales = [('조', 1e12), ('억', 1e8), ('백만', 1e6), ('천', 1e3)]
+        # 긴 접두어부터 검사한다. ``백만`` 안에도 ``만``이 들어 있으므로 순서가
+        # 바뀌면 백만원이 만원으로 축소된다.
+        scales = [('조', 1e12), ('억', 1e8), ('백만', 1e6), ('만', 1e4), ('천', 1e3)]
         scale = next((factor for token, factor in scales if token in value), 1.0)
         return dimension, family, scale
     if dimension == 'person_count':
@@ -468,6 +471,49 @@ def clean_data_rows(data):
             continue
         rows.append(r)
     return rows
+
+
+def validated_matching_rows(row):
+    """API validation 단계가 이미 확인한 공식 응답 행을 안전하게 복구한다.
+
+    예전 verifier는 ``selected_combination.matching_rows``를 버리고 같은 좌표를
+    다시 API에 요청했다. 그 결과 validation에서는 행이 있었는데 verifier에서는
+    ``조회 데이터 없음``이 되는 비결정적 실패가 생겼다. READY이며 코드 검증을
+    통과한 행만 재사용하고, 선택 ITEM/OBJ와 다른 응답은 제거한다.
+    """
+    if str(row.get('mapping_status', '')).strip() != 'READY':
+        return []
+    required_flags = ('item_meta_valid', 'obj_meta_valid', 'response_code_valid')
+    if not all(str(row.get(flag, '')).strip().lower() in TRUTHY for flag in required_flags):
+        return []
+    selected = row.get('selected_combination')
+    if isinstance(selected, str):
+        try:
+            selected = json.loads(selected)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+    if not isinstance(selected, dict):
+        return []
+    rows = selected.get('matching_rows')
+    if not isinstance(rows, list):
+        return []
+    itm_id = str(row.get('selected_itm_id', '')).strip()
+    obj_codes = {
+        level: str(row.get(f'selected_obj_l{level}', '')).strip()
+        for level in range(1, 9)
+        if str(row.get(f'selected_obj_l{level}', '')).strip()
+    }
+    matched = []
+    for candidate in rows:
+        if not isinstance(candidate, dict):
+            continue
+        if itm_id and str(candidate.get('ITM_ID', '')).strip() != itm_id:
+            continue
+        if any(str(candidate.get(f'C{level}', '')).strip() != code
+               for level, code in obj_codes.items()):
+            continue
+        matched.append(candidate)
+    return clean_data_rows(matched)
 
 
 def aggregation_method(row):
@@ -901,6 +947,18 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     if not parse_period(row.get('period')):
         return mark_unverifiable(out, 'PERIOD_MISSING', 'input', 'measurement period가 없음')
     mapping_type = str(row.get('mapping_type', '')).strip()
+    semantic = str(row.get('semantic_type', '')).strip()
+    value_type = str(row.get('value_type', '')).strip()
+    # API validation은 빈 mapping_type을 direct로 실행해 READY를 만들었다. 같은
+    # 행을 verifier가 다시 UNSUPPORTED로 내리는 불일치를 없앤다. 파생값은 direct로
+    # 추정하지 않는다.
+    if (not mapping_type
+            and semantic not in {'rate_change', 'absolute_change'}
+            and value_type not in {'증감률', '증감량'}):
+        mapping_type = 'direct'
+        row = {**row, 'mapping_type': mapping_type}
+        out['mapping_type'] = mapping_type
+        out['mapping_type_recovery_reason'] = '검증된 수준값 좌표의 빈 mapping_type을 direct로 복구'
     if mapping_type not in {'direct', 'rate_from_level', 'difference_from_level'}:
         return mark_unverifiable(
             out,
@@ -959,30 +1017,32 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
     prd_params, period_note = period_range(row.get('period'), prd_se, comparison,
                                           claim_period_span(row))
 
-    try:
-        data = get_stat_data(
-            org_id=org_id,
-            tbl_id=tbl_id,
-            obj_l1=obj_l1,
-            itm_id=item.get('ITM_ID', ''),
-            prd_se=prd_se,
-            new_est_prd_cnt=60 if prd_se == 'M' and comparison else (12 if prd_se == 'M' else 8),
-            **prd_params,
-        )
-        time.sleep(delay)
-    except Exception as exc:
-        return mark_unverifiable(
-            out,
-            'KOSIS_API_ERROR',
-            'api',
-            f'KOSIS data API 오류: {exc}',
-            kosis_obj_l1=obj_l1,
-            kosis_itm_id=item.get('ITM_ID', ''),
-            kosis_itm_name=item.get('ITM_NM', ''),
-            kosis_prd_se=prd_se,
-        )
-
-    data_rows = clean_data_rows(data)
+    data_rows = validated_matching_rows(row)
+    value_data_source = 'validated_api_response' if data_rows else 'verifier_api_requery'
+    if not data_rows:
+        try:
+            data = get_stat_data(
+                org_id=org_id,
+                tbl_id=tbl_id,
+                obj_l1=obj_l1,
+                itm_id=item.get('ITM_ID', ''),
+                prd_se=prd_se,
+                new_est_prd_cnt=60 if prd_se == 'M' and comparison else (12 if prd_se == 'M' else 8),
+                **prd_params,
+            )
+            time.sleep(delay)
+        except Exception as exc:
+            return mark_unverifiable(
+                out,
+                'KOSIS_API_ERROR',
+                'api',
+                f'KOSIS data API 오류: {exc}',
+                kosis_obj_l1=obj_l1,
+                kosis_itm_id=item.get('ITM_ID', ''),
+                kosis_itm_name=item.get('ITM_NM', ''),
+                kosis_prd_se=prd_se,
+            )
+        data_rows = clean_data_rows(data)
     actual_raw, actual_period, previous_period, agg_reason = derive_actual(
         data_rows, prd_se, row.get('period'), row
     )
@@ -1060,6 +1120,7 @@ def verify_row(row, meta_cache, delay, use_pinned_item=False):
         'kosis_actual_raw': actual_raw if actual_raw is not None else '',
         'kosis_actual_value': actual_converted if actual_converted is not None else '',
         'kosis_rows_used': len(data_rows),
+        'value_data_source': value_data_source,
         'value_diff': (actual_converted - compare_value) if actual_converted is not None and compare_value is not None else '',
         'verdict': verdict,
         'verdict_code': verdict_code,
@@ -1077,6 +1138,9 @@ def main():
     parser.add_argument('--skip-empty-value', action='store_true', help='value가 비어 있는 행은 테스트/검증에서 제외')
     parser.add_argument('--rank', default='1', help='검증할 candidate_rank. 기본 1')
     parser.add_argument('--delay', type=float, default=0.12)
+    parser.add_argument(
+        '--use-pinned-item', action='store_true',
+        help='selected_itm_id를 다시 선택하지 않고 검증한다. exact resolver 출력에 사용.')
     parser.add_argument(
         '--allow-unconfirmed', action='store_true',
         help='확정되지 않은 매핑(NEEDS_CONFIRMATION 등)도 조회한다. **진단 전용**이다. '
@@ -1124,7 +1188,9 @@ def main():
     out_rows = []
     for i, row in enumerate(rows, 1):
         try:
-            verified = verify_row(row, meta_cache, args.delay)
+            verified = verify_row(
+                row, meta_cache, args.delay, use_pinned_item=args.use_pinned_item
+            )
         except Exception as exc:
             # verdict_code 를 비워두면 집계에서 빈 문자열 버킷이 생겨 원인 추적이 끊긴다.
             # 네트워크 계열은 재시도 후에도 실패한 것이므로 별도 코드로 구분한다.
@@ -1144,6 +1210,7 @@ def main():
         'claim_value_numeric', 'kosis_obj_l1', 'kosis_obj_l1_name', 'kosis_itm_id', 'kosis_itm_name',
         'kosis_unit', 'kosis_prd_se', 'kosis_period_used', 'kosis_previous_period_used',
         'kosis_actual_raw', 'kosis_actual_value', 'kosis_rows_used', 'value_diff',
+        'value_data_source',
         'default_applied', 'default_reason', 'kosis_lst_chn_de',
         'verdict', 'verdict_code', 'verdict_stage', 'verdict_reason',
     ]

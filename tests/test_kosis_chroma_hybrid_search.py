@@ -9,6 +9,7 @@ from kosis_chroma_hybrid_search import (
     search_measurement,
 )
 from kosis_meta_coordinates import (
+    axis_target_alignment,
     build_chroma_where,
     build_coordinate_query,
     passes_hard_filter,
@@ -172,3 +173,31 @@ def test_load_table_candidates_orders_and_truncates(tmp_path):
         encoding="utf-8-sig")
     tables = load_table_candidates(str(path), top_k=2)
     assert [t["tbl_id"] for t in tables["M1"]] == ["A", "B"]
+
+
+def test_table_periodicity_is_filtered_before_top_k(tmp_path):
+    path = tmp_path / "period.csv"
+    path.write_text(
+        "claim_measurement_id,candidate_rank,org_id,tbl_id,prd_se,table_prd_se_list\n"
+        "M1,1,101,Y_ONLY,M,Y\n"
+        "M1,2,101,MONTHLY,M,Y|M\n"
+        "M1,3,101,UNKNOWN,M,\n",
+        encoding="utf-8-sig",
+    )
+    tables = load_table_candidates(str(path), top_k=2)
+    assert [row["tbl_id"] for row in tables["M1"]] == ["MONTHLY", "UNKNOWN"]
+
+
+def test_axis_alignment_requires_gender_and_region_on_their_real_axes():
+    claim = {"gender": "여자", "region": "대전"}
+    correct = {
+        "obj_l1_axis_name": "행정구역별", "obj_l1_name": "대전광역시",
+        "obj_l2_axis_name": "성별", "obj_l2_name": "여자",
+    }
+    swapped = {
+        "obj_l1_axis_name": "성별", "obj_l1_name": "대전광역시",
+        "obj_l2_axis_name": "행정구역별", "obj_l2_name": "여자",
+    }
+    assert axis_target_alignment(claim, correct)["strict_match"]
+    bad = axis_target_alignment(claim, swapped)
+    assert not bad["strict_match"] and bad["matched_count"] == 0

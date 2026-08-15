@@ -224,6 +224,7 @@ def normalized_claim_row(row):
         "region": get_first(row, "region", "지역"),
         "age_group": get_first(row, "age_group", "연령"),
         "gender": get_first(row, "gender", "성별"),
+        "education_level": get_first(row, "education_level", "학력", "교육정도"),
         "value": get_first(row, "value", "값", "수치"),
         "unit": get_first(row, "canonical_unit", "unit", "단위"),
         "raw_unit": get_first(row, "raw_unit", "unit", "단위"),
@@ -397,14 +398,17 @@ def table_year_penalty(table_text, period):
 
 
 def table_scope_adjustment(row, claim):
-    """Prefer tables whose explicit axes match the claim's target scope."""
+    """Prefer the correct survey family and tables exposing required axes."""
     norm_claim = normalized_claim_row(claim)
     table_name = compact(row.get("tbl_name", ""))
+    table_path = compact(row.get("category_path", ""))
+    table_text = f"{table_name}{table_path}"
     focused = compact(
         " ".join(
             str(norm_claim.get(field, ""))
             for field in (
                 "indicator", "industry_or_item", "region", "age_group", "gender",
+                "education_level",
                 "origin_country", "destination_country", "claim_text",
             )
         )
@@ -425,15 +429,70 @@ def table_scope_adjustment(row, claim):
         token in focused for token in ("교육정도", "학력", "고졸", "대졸", "중졸", "초졸")
     )
 
-    if not has_country and any(token in table_name for token in ("국가별", "주요국가", "교역상대국")):
+    survey_hints = tuple(survey_hints_from_claim(norm_claim))
+    survey_matches = [
+        hint for hint in survey_hints if compact(hint) in table_text
+    ]
+    if survey_matches:
+        score += 300 + 40 * (len(survey_matches) - 1)
+    elif survey_hints and "조사" in table_path:
+        # A different named survey can be topically similar but cover a different
+        # population (e.g. 장애인·사업체 panels versus the labour-force series).
         score -= 180
-    if not has_region and any(token in table_name for token in ("지역별", "시도", "시군구", "읍면동")):
+
+    gender_axis = bool(
+        re.search(r"(?<!특)성별|(?:^|[/·ㆍ])성(?:[/·ㆍ]|$)|남녀", table_name)
+    )
+    age_axis = any(token in table_name for token in ("연령", "나이"))
+    education_axis = any(token in table_name for token in ("교육정도", "학력"))
+    region_axis = any(token in table_name for token in ("지역별", "시도", "시군구", "읍면동"))
+    country_axis = any(token in table_name for token in ("국가별", "주요국가", "교역상대국"))
+
+    if has_gender:
+        score += 240 if gender_axis else -120
+    if has_age:
+        score += 180 if age_axis else -90
+    if has_education:
+        score += 180 if education_axis else -90
+    if has_region:
+        score += 160 if region_axis else -80
+    if has_country:
+        score += 160 if country_axis else -80
+
+    # Match the measurement shape before semantic similarity can promote a
+    # nearby but different statistic.  Person-count claims must prefer 규모/
+    # 인원 tables over wage or working-time tables, even when both expose the
+    # requested gender axis and belong to the same survey.
+    claim_unit = compact(norm_claim.get("unit") or norm_claim.get("claim_unit"))
+    is_person_count = claim_unit in {"명", "천명", "만명", "백만명"} or any(
+        token in focused
+        for token in ("근로자수", "취업자수", "실업자수", "인원수")
+    )
+    if is_person_count:
+        if any(token in table_name for token in ("규모", "인원", "근로자수", "취업자수")):
+            score += 180
+        if any(token in table_name for token in ("월평균임금", "평균임금", "취업시간", "근로시간")):
+            score -= 240
+
+    # 비정규직 is the umbrella population; 시간제/한시적 are narrower
+    # subtypes.  Do not let a subtype table outrank the 근로형태 총괄 table
+    # unless that subtype is explicit in the measurement itself.
+    if "비정규직" in focused:
+        if "근로형태" in table_name:
+            score += 120
+        for subtype in ("시간제", "한시적", "비전형"):
+            if subtype in table_name and subtype not in focused:
+                score -= 180
+
+    if not has_country and country_axis:
+        score -= 180
+    if not has_region and region_axis:
         score -= 160
-    if not has_age and "연령" in table_name:
+    if not has_age and age_axis:
         score -= 120
-    if not has_gender and "성별" in table_name:
+    if not has_gender and gender_axis:
         score -= 120
-    if not has_education and any(token in table_name for token in ("교육정도", "학력")):
+    if not has_education and education_axis:
         score -= 120
     if "계절조정" in table_name and "계절조정" not in focused:
         score -= 180
@@ -599,8 +658,10 @@ def score_table(row, tokens, claim):
         if any(token in table_text for token in ("수상여객", "철도여객", "도로여객")):
             return -10**9, []
     score += table_year_penalty(f"{row['tbl_name']} {row['category_path']}", norm_claim.get("period"))
-    score += table_scope_adjustment(row, norm_claim)
-    return score, list(dict.fromkeys(hits_name + hits_path))
+    scope_score = table_scope_adjustment(row, norm_claim)
+    score += scope_score
+    scope_hits = [f"survey_axis_scope:{scope_score}"] if scope_score else []
+    return score, list(dict.fromkeys(hits_name + hits_path + scope_hits))
 
 
 def domain_filter_terms(claim):

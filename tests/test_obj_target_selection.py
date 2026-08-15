@@ -178,6 +178,8 @@ def test_matching_country_axis_can_still_confirm():
         "mapping_status": "READY",
         "tbl_name": "국가별 수출액, 수입액",
         "selected_itm_name": "수출액",
+        "selected_obj_l1_axis_id": "OBJ_L1",
+        "selected_obj_l1_axis_name": "국가별",
         "selected_obj_l1_name": "중국",
     }
     gate = semantic_ready_gate(row, result)

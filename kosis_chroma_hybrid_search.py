@@ -32,6 +32,7 @@ from kosis_meta_coordinates import (
     build_chroma_where,
     build_coordinate_query,
     build_coordinates,
+    axis_target_alignment,
     claim_target_terms,
     claim_prd_se,
     coordinate_document,
@@ -39,6 +40,8 @@ from kosis_meta_coordinates import (
     metadata_is_aggregate,
     passes_hard_filter,
     prd_se_compatible,
+    normalize_periodicity,
+    periodicity_satisfied,
     read_csv_rows,
     target_terms_match_text,
 )
@@ -60,8 +63,22 @@ def measurement_key(row: Mapping[str, Any]) -> str:
     return _text(row.get("claim_measurement_id") or row.get("claim_id"))
 
 
+def _table_periodicity_compatible(row: Mapping[str, Any]) -> tuple[bool, bool]:
+    """Return (compatible, known); unknown table periodicity is not rejected."""
+    wanted = normalize_periodicity(_text(
+        row.get("measurement_prd_se") or row.get("prd_se")
+    ))
+    available = {
+        normalize_periodicity(token)
+        for token in _text(row.get("table_prd_se_list")).split("|")
+    } - {""}
+    if not wanted or not available:
+        return True, False
+    return periodicity_satisfied(wanted, available), True
+
+
 def load_table_candidates(path: str, top_k: int) -> dict[str, list[dict]]:
-    """measurement 별 상류 통계표 Top-K (rank 오름차순)."""
+    """measurement별 주기 호환 표만 남긴 뒤 Top-K를 자른다."""
     by_measurement: dict[str, list[dict]] = defaultdict(list)
     for row in read_csv_rows(path):
         key = measurement_key(row)
@@ -71,6 +88,7 @@ def load_table_candidates(path: str, top_k: int) -> dict[str, list[dict]]:
             rank = int(float(_text(row.get("candidate_rank")) or "999"))
         except ValueError:
             rank = 999
+        periodicity_compatible, periodicity_known = _table_periodicity_compatible(row)
         by_measurement[key].append({
             "rank": rank,
             "org_id": _text(row.get("org_id")),
@@ -79,9 +97,15 @@ def load_table_candidates(path: str, top_k: int) -> dict[str, list[dict]]:
             "candidate_status": _text(row.get("candidate_status")),
             "candidate_score": _text(row.get("candidate_score")),
             "candidate_runner_up_score": _text(row.get("candidate_runner_up_score")),
+            "table_prd_se_list": _text(row.get("table_prd_se_list")),
+            "periodicity_compatible": periodicity_compatible,
+            "periodicity_known": periodicity_known,
         })
     return {
-        key: sorted(rows, key=lambda r: r["rank"])[:top_k]
+        key: sorted(
+            (row for row in rows if row["periodicity_compatible"]),
+            key=lambda r: r["rank"],
+        )[:top_k]
         for key, rows in by_measurement.items()
     }
 
@@ -287,11 +311,15 @@ def build_output_row(claim: Mapping[str, Any], table: Mapping[str, Any],
         "coordinate_prd_se": meta.get("prd_se", ""),
         "claim_target_terms": candidate.get("claim_target_terms", ""),
         "obj_target_match": candidate.get("obj_target_match", ""),
+        "axis_target_alignment": candidate.get("axis_target_alignment", ""),
+        "axis_target_matched": candidate.get("axis_target_matched", ""),
+        "axis_target_missing": candidate.get("axis_target_missing", ""),
     })
     for level in range(1, MAX_AXIS + 1):
         row[f"selected_obj_l{level}"] = meta.get(f"obj_l{level}", "")
         row[f"selected_obj_l{level}_name"] = meta.get(f"obj_l{level}_name", "")
         row[f"selected_obj_l{level}_axis_id"] = meta.get(f"obj_l{level}_axis_id", "")
+        row[f"selected_obj_l{level}_axis_name"] = meta.get(f"obj_l{level}_axis_name", "")
     return row
 
 
@@ -555,9 +583,19 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         candidate["obj_aggregate"] = metadata_is_aggregate(metadata)
         candidate["obj_target_match"] = target_match(candidate)
         candidate["claim_target_terms"] = "|".join(target_terms)
+        alignment = axis_target_alignment(claim, metadata)
+        candidate["axis_target_alignment"] = alignment["score"]
+        candidate["axis_target_matched"] = "|".join(alignment["matched"])
+        candidate["axis_target_missing"] = "|".join(
+            (*alignment["missing_axis"], *alignment["mismatched"])
+        )
+        candidate["axis_target_enforceable"] = alignment["enforceable"]
+        candidate["axis_target_strict_match"] = alignment["strict_match"]
     fused.sort(key=lambda c: (
         0 if c["prd_se_match"] else 1,
         c.get("mapping_priority", 2),
+        0 if (not c["axis_target_enforceable"] or c["axis_target_strict_match"]) else 1,
+        -float(c.get("axis_target_alignment") or 0.0),
         0 if (not target_terms or c["obj_target_match"]) else 1,
         0 if (not prefer_aggregate or c["obj_aggregate"]) else 1,
         -c["final_rank_score"],
@@ -576,6 +614,9 @@ def search_measurement(claim: Mapping[str, Any], tables: Sequence[Mapping[str, A
         "prefer_aggregate": prefer_aggregate,
         "claim_target_terms": "|".join(target_terms),
         "target_matched_candidates": sum(1 for c in fused if c["obj_target_match"]),
+        "axis_strict_matched_candidates": sum(
+            1 for c in fused if c.get("axis_target_strict_match")
+        ),
         "aggregate_promoted": (sum(1 for c in fused if not c["obj_aggregate"])
                                if prefer_aggregate else 0),
         "search_seconds": search_seconds,

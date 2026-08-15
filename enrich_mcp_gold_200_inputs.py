@@ -50,6 +50,12 @@ INDICATOR_ALIASES = (
     ("소매판매액지수", "소매판매액지수"), ("서비스업생산지수", "서비스업생산지수"),
     ("수입액", "수입액"), ("수입", "수입액"), ("수출액", "수출액"), ("수출", "수출액"),
 )
+EDUCATION_ALIASES = (
+    ("대학원졸", "대학원졸"), ("대학원", "대학원졸"),
+    ("대졸 이상", "대졸"), ("대졸이상", "대졸"), ("대졸", "대졸"),
+    ("전문대졸", "전문대졸"), ("고졸", "고졸"),
+    ("중졸", "중졸"), ("초졸", "초졸"),
+)
 
 
 @dataclass(frozen=True)
@@ -215,9 +221,32 @@ def extract_structured_targets(claim: dict[str, str]) -> dict[str, str]:
 
     text = str(claim.get("claim_text", "") or "")
     value = str(claim.get("claim_value", "") or "")
-    country = _nearest_named_term(text, value, COUNTRY_ALIASES)
-    product = _nearest_named_term(text, value, PRODUCT_ALIASES)
-    indicator = _nearest_named_term(text, value, INDICATOR_ALIASES)
+
+    def measurement_local_term(aliases: dict[str, str] | Iterable[tuple[str, str]]) -> str:
+        """Prefer the current measurement's fields over shared claim context.
+
+        One claim sentence can contain several measurements.  A Korean compact value
+        such as ``491만8000명`` cannot be located from the normalized value ``4918000``;
+        falling back to the first word in the sentence then assigns both measurements
+        to ``남자``.  The measurement indicator is already value-bound by HCX, so it is
+        the authoritative local scope signal.
+        """
+        stable_aliases = aliases if isinstance(aliases, dict) else tuple(aliases)
+        for field in (
+            "measurement_indicator", "indicator", "measurement_item",
+            "measurement_text",
+        ):
+            local = str(claim.get(field, "") or "").strip()
+            if not local or local == "-":
+                continue
+            found = _nearest_named_term(local, value, stable_aliases)
+            if found:
+                return found
+        return _nearest_named_term(text, value, stable_aliases)
+
+    country = measurement_local_term(COUNTRY_ALIASES)
+    product = measurement_local_term(PRODUCT_ALIASES)
+    indicator = measurement_local_term(INDICATOR_ALIASES)
 
     age = ""
     age_patterns = (
@@ -235,18 +264,17 @@ def extract_structured_targets(claim: dict[str, str]) -> dict[str, str]:
     if age_matches:
         age = min(age_matches)[1]
 
-    gender = _nearest_named_term(
-        text,
-        value,
+    gender = measurement_local_term(
         (("여성", "여자"), ("여자", "여자"), ("남성", "남자"), ("남자", "남자")),
     )
-    region = _nearest_named_term(text, value, ((term, term) for term in REGION_TERMS))
+    education = measurement_local_term(EDUCATION_ALIASES)
+    region = measurement_local_term(((term, term) for term in REGION_TERMS))
     if region == "경기도":
         region = "경기"
 
     is_export = "수출" in text
     is_import = "수입" in text and not is_export
-    obj_terms = [term for term in (country, age, gender, region) if term]
+    obj_terms = [term for term in (country, age, gender, education, region) if term]
     # Country tables and product tables are alternative coordinate spaces.
     # When a country is explicit, keep the product only as an audit field.
     if not country and product:
@@ -260,6 +288,7 @@ def extract_structured_targets(claim: dict[str, str]) -> dict[str, str]:
         "region": region,
         "age_group": age,
         "gender": gender,
+        "education_level": education,
         "origin_country": country if is_import else "",
         "destination_country": country if is_export or not is_import else "",
         "obj_target_terms": "|".join(dict.fromkeys(obj_terms)),
@@ -296,7 +325,7 @@ def choose_period(claim: dict[str, str]) -> tuple[str, str, str, str]:
         return "", "", "", "no_period_mention"
     positions = value_positions(text, claim.get("claim_value", ""))
 
-    def score(mention: PeriodMention) -> tuple[float, int, int]:
+    def score(mention: PeriodMention) -> tuple[int, float, int, int]:
         if not positions:
             distance = mention.start
         else:
@@ -304,9 +333,40 @@ def choose_period(claim: dict[str, str]) -> tuple[str, str, str, str]:
                 min(abs(position - mention.end), abs(mention.start - position))
                 for position in positions
             )
-        return distance, -mention.priority, -mention.start
+        # ``6.7% ... 2021년 1월 이후`` uses the explicit date as a
+        # historical benchmark, not as the period of 6.7.  When the measured
+        # value already appears before a date followed by 이후/이래, prefer a
+        # non-historical month mention even if the benchmark is slightly
+        # closer in characters.  A value actually bound to the historical
+        # date (``2022년 1월에는 15.8%``) is unaffected.
+        suffix = text[mention.end : mention.end + 12]
+        historical_after_value = int(
+            bool(positions)
+            and any(position < mention.start for position in positions)
+            and bool(re.match(r"\s*(?:이후|이래|만에)", suffix))
+        )
+        return historical_after_value, distance, -mention.priority, -mention.start
 
-    selected = min(mentions, key=score)
+    selected = None
+    if not positions:
+        existing = re.sub(
+            r"[^0-9]", "",
+            str(claim.get("measurement_period") or claim.get("period") or ""),
+        )
+        # Korean compact numbers (36조9000억원) do not always round-trip to
+        # the normalized numeric value (36900000000000), so a sentence with
+        # several explicit years has no usable value anchor.  Preserve HCX's
+        # value-bound period only when that exact period is also an extracted
+        # mention; stale or hallucinated periods still get replaced.
+        existing_matches = [mention for mention in mentions if mention.period == existing]
+        existing_is_annual = bool(re.fullmatch(r"(?:19|20)\d{2}", existing))
+        has_finer_mention = any(
+            mention.prd_se in {"M", "Q", "H"} for mention in mentions
+        )
+        if existing_matches and not (existing_is_annual and has_finer_mention):
+            selected = min(existing_matches, key=lambda mention: (-mention.priority, mention.start))
+    if selected is None:
+        selected = min(mentions, key=score)
     # "지난 2월 ... 지난해 같은 달보다 14.3%"에서 값 근처의 '지난해'는
     # 비교 시점이다. 같은 문장에 있는 월을 대상 시점으로 보존한다.
     if selected.source == "relative_year":

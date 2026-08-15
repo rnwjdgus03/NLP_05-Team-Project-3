@@ -25,6 +25,8 @@ TOTAL_EXPORT_CLAIM = {
 
 def _result(obj_name, status="READY"):
     return {"mapping_status": status, "selected_obj_l1_name": obj_name,
+            "selected_obj_l1_axis_id": "OBJ_L1",
+            "selected_obj_l1_axis_name": "품목별",
             "selected_itm_name": "수출액", "tbl_name": "수출 및 수입액",
             "mapping_reason": "validated candidate"}
 
@@ -85,6 +87,70 @@ def test_provisional_is_also_gated():
 def test_reason_is_recorded_so_the_block_is_traceable():
     out = apply_semantic_ready_gate(TOTAL_EXPORT_CLAIM, _result("반도체"))
     assert out["mapping_reason"] == "CLAIM_ITEM_MISMATCH"
+
+
+def test_structured_obj_must_match_on_the_official_axis():
+    claim = {
+        "claim_text": "여자 비정규직 근로자는 491만8000명이다.",
+        "gender": "여자",
+        "indicator": "여자 비정규직 근로자 수",
+    }
+    result = {
+        "mapping_status": "READY",
+        "selected_itm_name": "근로자 수",
+        "tbl_name": "성/근로형태별 임금근로자 규모",
+        "selected_obj_l1_axis_id": "OBJ_L1",
+        "selected_obj_l1_axis_name": "성별",
+        "selected_obj_l1_name": "여자",
+    }
+
+    out = apply_semantic_ready_gate(claim, result)
+
+    assert out["mapping_status"] == "READY"
+    assert out["obj_axis_gate_strict_match"] == "Y"
+    assert out["obj_axis_gate_matched_count"] == 1
+
+
+def test_structured_obj_on_wrong_axis_is_demoted():
+    claim = {
+        "claim_text": "여자 비정규직 근로자는 491만8000명이다.",
+        "gender": "여자",
+        "indicator": "여자 비정규직 근로자 수",
+    }
+    result = {
+        "mapping_status": "READY",
+        "selected_itm_name": "근로자 수",
+        "tbl_name": "지역별 임금근로자 규모",
+        "selected_obj_l1_axis_id": "OBJ_L1",
+        "selected_obj_l1_axis_name": "지역별",
+        "selected_obj_l1_name": "여자",
+    }
+
+    out = apply_semantic_ready_gate(claim, result)
+
+    assert out["mapping_status"] == "NEEDS_CONFIRMATION"
+    assert out["mapping_reason"] == "OBJ_TARGET_INCOMPLETE_MATCH"
+    assert out["obj_axis_gate_missing"] == "gender"
+
+
+def test_structured_obj_without_axis_metadata_cannot_auto_ready():
+    claim = {
+        "claim_text": "여자 비정규직 근로자는 491만8000명이다.",
+        "gender": "여자",
+        "indicator": "여자 비정규직 근로자 수",
+    }
+    result = {
+        "mapping_status": "READY",
+        "selected_itm_name": "근로자 수",
+        "tbl_name": "임금근로자 규모",
+        "selected_obj_l1_name": "여자",
+    }
+
+    out = apply_semantic_ready_gate(claim, result)
+
+    assert out["mapping_status"] == "NEEDS_CONFIRMATION"
+    assert out["mapping_reason"] == "OBJ_AXIS_METADATA_MISSING"
+    assert out["obj_axis_gate_enforceable"] == "N"
 
 
 # --------------------------------------------------------------------------

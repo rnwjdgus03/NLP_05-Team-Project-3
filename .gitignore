@@ -31,6 +31,7 @@ data/models/
 # 로컬 분석 캐시와 재생성 가능한 실행 산출물
 .codex_spreadsheet_review_*/
 .codex_analysis/
+.codex_spreadsheet_*/
 outputs/*/
 !outputs/gold/
 outputs/gold/*.inspect.ndjson

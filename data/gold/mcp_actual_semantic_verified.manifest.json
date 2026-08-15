@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-08-13T11:59:53.171475+00:00",
+  "status": "PASS",
+  "gate": "MCP_ACTUAL_CLAIM_VALUE_REPRODUCIBILITY",
+  "input_path": "data\\gold\\mcp_actual_verified_23.csv",
+  "input_sha256": "c311674200bd94a9c95fe76eb798940ebdc657692ccc14a20c1d53effb224b07",
+  "audit_path": "data\\gold\\mcp_actual_claim_reproducibility_audit_23.csv",
+  "audit_sha256": "5c15238ce471facf415546a4e5591daf61339309aebe1087c2206957ba9ec942",
+  "trusted_path": "data\\gold\\mcp_actual_semantic_verified.csv",
+  "trusted_sha256": "25c581e1e29228a0c9202718a3224c9e3b2963b7f522f575688306c803e42969",
+  "input_rows": 23,
+  "trusted_rows": 8,
+  "review_rows": 15,
+  "reason_counts": {
+    "CLAIM_VALUE_REPRODUCED": 8,
+    "CLAIM_VALUE_NOT_REPRODUCED": 15
+  },
+  "level_tolerance": "percent: 0.15 percentage points; otherwise max(0.5 claim units, 0.1% of reproduced value)",
+  "change_rate_tolerance_percentage_points": 0.15,
+  "limitations": [
+    "The gate checks numerical reproducibility from independently queried KOSIS values.",
+    "Comparator, threshold, absolute-change, and unsupported derivations remain REVIEW instead of being guessed.",
+    "This is a development subset and not a disjoint holdout."
+  ]
+}

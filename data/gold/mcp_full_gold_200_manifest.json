@@ -1,6 +1,6 @@
 {
   "dataset": "mcp_full_gold_200",
-  "created_at": "2026-08-06T09:44:47+09:00",
+  "created_at": "2026-08-10T15:10:57+09:00",
   "row_count": 200,
   "all_rows_mcp_actual_value": true,
   "human_reviewed": false,
@@ -24,11 +24,15 @@
     "DT_1EA1011": 1
   },
   "unique_claim_count": 200,
+  "unique_article_count": 126,
+  "article_id_format": "A + zero-padded source article number (minimum 4 digits)",
   "unique_coordinate_period_count": 180,
   "blank_required_count": 0,
+  "original_200_preserved": null,
   "rejected_candidate_count_before_200": 17,
   "source": "outputs/bteam_review/final_verified_filled_2001_audited_v4.csv",
   "source_sha256": "ff1da2b8f27f7aa073ebd70b83e8737284facd02f3e99f498011a04c75b35cf7",
+  "source_file_available": false,
   "candidate_file": "data/gold/mcp_full_gold_200_candidates.json",
   "candidate_sha256": "2ca4d440f78e7e128186819444e33e3e8ce98baaa95d2f8d270a2d636f0dd58d",
   "evidence_files": [
@@ -42,5 +46,5 @@
     "data/gold/mcp_full_gold_evidence/batch_241_269.jsonl"
   ],
   "output": "data/gold/mcp_full_gold_200.csv",
-  "output_sha256": "bdb8727b7f8b7b22e8943b2d0dbefadc88aad773004c83483ff38a055f4df002"
+  "output_sha256": "e76216bfca177d7480669d0ab7d5dea5e306645dbb5ddae2939a6d5bddeb6933"
 }

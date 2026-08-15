@@ -12,6 +12,7 @@ import argparse
 import csv
 import re
 from collections import Counter
+from datetime import date, timedelta
 from pathlib import Path
 
 from kosis_claim_shape import (claim_shape_exclusion, cumulative_is_answerable,
@@ -121,12 +122,126 @@ def canonicalize_period(period: str, prd_se: str = "") -> str:
     return match.group() if match else raw
 
 
+def parse_publication_date(value) -> date | None:
+    """Parse ISO dates and Excel serial dates used by the news exports."""
+
+    raw = nz(value)
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        pass
+    try:
+        serial = float(raw)
+    except ValueError:
+        return None
+    if not 1 <= serial <= 100000:
+        return None
+    return date(1899, 12, 30) + timedelta(days=int(serial))
+
+
+def relative_annual_target(row: dict) -> tuple[str, str]:
+    """Recover an annual target that HCX bound to the comparison year.
+
+    The correction is deliberately narrow and gold-free.  It only applies when
+    the claim does not state an explicit year, the measurement is annual, and
+    the article contains a publication-relative target (``지난해``/``작년``).
+    A common extraction failure is to bind the current value to an explicit
+    comparison year in the following sentence, for example ``2023년 ...
+    지난해에 다시 반등했다`` in an article published in 2025.
+
+    The raw HCX period remains available as ``raw_measurement_period``; callers
+    receive a stable alignment reason for auditing.
+    """
+
+    periodicity = nz(row.get("measurement_prd_se") or row.get("prd_se")).upper()
+    if periodicity != "Y":
+        return "", ""
+    claim_text = nz(row.get("claim_text"))
+    if re.search(r"(?:19|20)\d{2}\s*년", claim_text):
+        return "", ""
+    published = parse_publication_date(row.get("date"))
+    if published is None:
+        return "", ""
+
+    target_year = published.year - 1
+    comparison_year = target_year - 1
+    measurement_period = canonicalize_period(
+        row.get("measurement_period"), periodicity
+    )
+    direct_relative = bool(re.search(r"지난해|작년", claim_text))
+    following = nz(row.get("next_sentence"))
+    comparison_then_relative = bool(
+        re.search(
+            rf"{comparison_year}\s*년.*(?:지난해|작년).*(?:반등|증가|늘|감소|줄|상승|하락)",
+            following,
+        )
+    )
+    if not (direct_relative or comparison_then_relative):
+        return "", ""
+
+    # Do not rewrite an unrelated historical series.  The known failure mode is
+    # exactly one year behind the publication-relative target; a blank period is
+    # also safe to enrich from the explicit relative expression.
+    if measurement_period and measurement_period not in {
+        str(target_year), str(comparison_year)
+    }:
+        return "", ""
+    if measurement_period == str(target_year):
+        return "", ""
+    reason = (
+        "RELATIVE_CLAIM_TO_PUBLICATION_YEAR"
+        if direct_relative
+        else "RELATIVE_CONTEXT_TO_PUBLICATION_YEAR"
+    )
+    return str(target_year), reason
+
+
+def half_year_target(row: dict) -> tuple[str, str]:
+    """Return KOSIS half-year code when the half-year scopes the measurement.
+
+    Merely mentioning that an annual result was affected by a second-half event
+    is not enough.  The indicator must occur after the half-year expression in
+    the same local clause, as in ``지난해 하반기 울릉군의 고용률``.
+    """
+
+    text = nz(row.get("claim_text"))
+    indicator = nz(row.get("measurement_indicator") or row.get("indicator"))
+    if not text or not indicator:
+        return "", ""
+    indicator_pattern = re.escape(indicator).replace(r"\ ", r"\s*")
+    matches = list(re.finditer(r"(?:(?P<year>(?:19|20)\d{2})\s*년\s*)?(?P<half>[상하])반기", text))
+    scoped = [
+        match for match in matches
+        if re.search(indicator_pattern, text[match.end(): match.end() + 50])
+    ]
+    if not scoped:
+        return "", ""
+    selected = scoped[-1]
+    if selected.group("year"):
+        year = int(selected.group("year"))
+    else:
+        published = parse_publication_date(row.get("date"))
+        if published is None:
+            return "", ""
+        prefix = text[max(0, selected.start() - 10):selected.start()]
+        year = published.year - 1 if re.search(r"지난해|작년", prefix) else published.year
+    half = "01" if selected.group("half") == "상" else "02"
+    return f"{year}{half}", "HALF_YEAR_TARGET_FROM_CLAIM"
+
+
 def unit_dimension(unit: str) -> str:
     value = canonicalize_unit(unit)
     if not value:
         return "unknown"
     if value in {"%", "%p"}:
         return "rate"
+    # 분모가 붙은 단위는 원 단위와 다른 물리량이다. 예를 들어 ``명/㎢``를
+    # ``명``과 같은 person_count로 보면 총인구 주장이 인구밀도 ITEM을 통과한다.
+    # 정확한 하위 차원까지 모르는 복합단위도 base 단위와 같다고 취급하지 않는다.
+    if "/" in value or re.search(r"(?:^|[^인])당(?:$|\D)", value):
+        return "compound"
     if any(token in value for token in ("원", "달러", "엔", "유로")):
         return "currency"
     if value in {"명", "천명", "만명", "백만명"}:
@@ -240,10 +355,16 @@ def expected_base_period(target_period: str, change_base: str) -> str:
 
 def align_change_period(row: dict) -> tuple[str, str]:
     """Correct a change measurement that was bound to its comparison period."""
+    half_period, half_reason = half_year_target(row)
+    if half_period:
+        return half_period, half_reason
     measurement_period = canonicalize_period(
         row.get("measurement_period"),
         row.get("measurement_prd_se"),
     )
+    relative_period, relative_reason = relative_annual_target(row)
+    if relative_period:
+        return relative_period, relative_reason
     claim_period = canonicalize_period(row.get("period"), row.get("prd_se"))
     role = nz(row.get("measurement_role"))
     if role not in {"증감률", "증감값"} or not claim_period:
@@ -371,6 +492,8 @@ def normalize_row(row: dict) -> dict:
         out["measurement_item"] = ""
     out["prd_se"] = nz(row.get("measurement_prd_se"))
     out["period"], out["period_alignment_status"] = align_change_period(row)
+    if out["period_alignment_status"] == "HALF_YEAR_TARGET_FROM_CLAIM":
+        out["prd_se"] = "H"
     # 누적 기간('1~11월')은 월 자료를 합산하면 답할 수 있다.
     # 연간 좌표로 물어보면 빠진 개월 수만큼 어긋난다 —
     # 실측: 반도체 수출 1~11월 1274억을 12개월치 1420억과 대조해 '불일치'가 났다.

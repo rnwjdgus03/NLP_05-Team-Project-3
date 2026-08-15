@@ -23,8 +23,8 @@ SURVEY_NAME_HINTS = (
     "경제활동인구조사", "지역별고용조사", "인구동향조사", "인구동향통계",
     "인구동향", "기업특성별무역통계", "기업특성별 무역통계", "무역통계",
     "광업제조업조사", "서비스업동향조사", "소비자물가조사", "가계동향조사",
-    "농림어업조사", "사회조사", "전국사업체조사", "인구주택총조사",
-    "장래인구추계", "국제수지",
+    "가계금융복지조사", "농림어업조사", "사회조사", "전국사업체조사", "인구주택총조사",
+    "인구총조사", "사망원인통계", "온라인쇼핑동향조사", "장래인구추계", "국제수지",
 )
 
 
@@ -70,6 +70,39 @@ def survey_hints_from_claim(claim):
     for name in SURVEY_NAME_HINTS:
         if re.sub(r"\s+", "", name) in compact:
             found.append(name)
+    # Strong official-series cues are useful even when the article omits the
+    # formal survey name.  Keep these rules at survey-family level; never inject
+    # a table ID or a gold answer into retrieval.
+    focused = re.sub(
+        r"\s+",
+        "",
+        " ".join(
+            str(claim.get(key, "") or "")
+            for key in (
+                "indicator", "measurement_indicator", "industry_or_item",
+                "metric_domain", "claim_text", "title",
+            )
+        ),
+    )
+    entity_type = str(claim.get("entity_type", "") or "").strip().lower()
+    if (
+        "비정규직" in focused
+        and any(token in focused for token in ("근로자", "임금근로자", "취업자"))
+        and entity_type not in {"organization", "company", "business"}
+    ):
+        found.append("경제활동인구조사")
+    elif any(token in focused for token in ("실업률", "고용률", "경제활동인구")):
+        found.append("경제활동인구조사")
+    if "사망원인" in focused or "영아돌연사" in focused:
+        found.append("사망원인통계")
+    elif any(token in focused for token in ("출생아", "혼인건수", "사망자수", "인구동향")):
+        found.append("인구동향조사")
+    if "1인가구" in focused and any(token in focused for token in ("가구수", "가구가", "국내", "전국")):
+        found.append("인구총조사")
+    if "온라인" in focused and any(token in focused for token in ("거래액", "거래규모")):
+        found.append("온라인쇼핑동향조사")
+    if "소비자물가" in focused:
+        found.append("소비자물가조사")
     return tuple(dict.fromkeys(found))
 
 
@@ -77,7 +110,8 @@ def target_axes_from_claim(claim):
     terms = []
     for key in (
         "obj_target_terms", "target_axes", "destination_country", "origin_country",
-        "region", "age_group", "gender", "industry_or_item", "measurement_item",
+        "region", "age_group", "gender", "education_level",
+        "industry_or_item", "measurement_item",
     ):
         raw = str(claim.get(key, "") or "").strip()
         if not raw or raw == "-":

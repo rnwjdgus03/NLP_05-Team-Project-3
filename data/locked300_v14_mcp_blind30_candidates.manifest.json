@@ -1,0 +1,118 @@
+{
+  "generated_at": "2026-08-13T13:12:27.868780+00:00",
+  "status": "FROZEN_UNLABELED",
+  "selection_version": "locked300_v14_mcp_blind30_hybrid_retrieval",
+  "selection_basis": "claim text + HCX structured period/axis + source diversity only",
+  "forbidden_at_selection": [
+    "v13 table predictions",
+    "SQLite coordinate predictions",
+    "KOSIS API values",
+    "KOSIS gold coordinates"
+  ],
+  "source_path": "data\\locked300_v13_1_period_repaired_ready.csv",
+  "source_sha256": "75f0f33dea7c09073faa2ee297fc86c92ed4a94977b9a1f3634517b195b96cec",
+  "output_path": "data\\locked300_v14_mcp_blind30_candidates.csv",
+  "output_sha256": "9e3d531bc4e9f076c91e2e7ae57071b314ab4dacb15ffd9de9fc50718d3539f8",
+  "rows": 30,
+  "unique_articles": 30,
+  "claim_measurement_ids": [
+    "A2648-SP179F478D32-m6",
+    "A2657-SP7761543E77-m1",
+    "A1940-SPF9ECF92995-m1",
+    "A2195-SP58D2B7A6CE-m1",
+    "A2386-SP476B05C816-m3",
+    "A2284-SPCBEB52F561-m1",
+    "A1019-SP67B37A8EED-m1",
+    "A0964-SP596B552885-m1",
+    "A0148-SP4A2E2CE320-m1",
+    "A2015-SP474A13E300-m1",
+    "A0834-SPE8364569CF-m3",
+    "A2335-SP264A54BFC4-m1",
+    "A2666-SP91F468293F-m1",
+    "A2691-SP1ADEC33A36-m2",
+    "A1121-SP787A049679-m2",
+    "A1960-SP54F638689B-m1",
+    "A0495-SPD347F35204-m1",
+    "A0835-SPC2BB4BE058-m1",
+    "A0904-SP44BF876821-m1",
+    "A0912-SPD1111F3FEA-m1",
+    "A1341-SP1D18743548-m3",
+    "A2606-SP1ACA18560A-m1",
+    "A2614-SPF52356A9A7-m2",
+    "A2676-SP7584553AD8-m1",
+    "A2680-SP37B568B3E8-m2",
+    "A2686-SPA255D86131-m2",
+    "A0361-SPB0D4FE646E-m1",
+    "A0393-SP3E1B566FB8-m2",
+    "A1719-SPC545842473-m4",
+    "A2032-SP065E5AB651-m1"
+  ],
+  "label_status": "UNLABELED_DO_NOT_SCORE",
+  "development_ids_excluded": [
+    "A2681-SP30B42ECECF-m1",
+    "A0673-SPFFFDAEF95A-m1",
+    "A1411-SP5F8BCC33E4-m2",
+    "A1381-SP5C0FA03C99-m1"
+  ],
+  "retained_unseen_from_v13": [
+    "A2648-SP179F478D32-m6",
+    "A2657-SP7761543E77-m1",
+    "A1940-SPF9ECF92995-m1",
+    "A2195-SP58D2B7A6CE-m1",
+    "A2386-SP476B05C816-m3",
+    "A2284-SPCBEB52F561-m1",
+    "A1019-SP67B37A8EED-m1",
+    "A0964-SP596B552885-m1",
+    "A0148-SP4A2E2CE320-m1",
+    "A2015-SP474A13E300-m1",
+    "A0834-SPE8364569CF-m3",
+    "A2335-SP264A54BFC4-m1",
+    "A2666-SP91F468293F-m1",
+    "A2691-SP1ADEC33A36-m2",
+    "A1121-SP787A049679-m2",
+    "A1960-SP54F638689B-m1"
+  ],
+  "newly_frozen_ids": [
+    "A0495-SPD347F35204-m1",
+    "A0835-SPC2BB4BE058-m1",
+    "A0904-SP44BF876821-m1",
+    "A0912-SPD1111F3FEA-m1",
+    "A1341-SP1D18743548-m3",
+    "A2606-SP1ACA18560A-m1",
+    "A2614-SPF52356A9A7-m2",
+    "A2676-SP7584553AD8-m1",
+    "A2680-SP37B568B3E8-m2",
+    "A2686-SPA255D86131-m2",
+    "A0361-SPB0D4FE646E-m1",
+    "A0393-SP3E1B566FB8-m2",
+    "A1719-SPC545842473-m4",
+    "A2032-SP065E5AB651-m1"
+  ],
+  "strata_intent": {
+    "periodicity": [
+      "Y",
+      "Q",
+      "M"
+    ],
+    "axes": [
+      "age",
+      "region",
+      "country",
+      "industry_or_item",
+      "aggregate"
+    ],
+    "scope": [
+      "likely_KOSIS",
+      "official_non_KOSIS",
+      "private_source_control"
+    ]
+  },
+  "code_freeze_sha256": {
+    "prepare_kosis_mapping_input.py": "4f247c40556d1dff106dd3ece22896c6a012998cd60ece9d89234ea4605f2cfa",
+    "kosis_sqlite_table_fts.py": "d36746f5265cd54343a531276419c9beae5c63c47b4aae472d1b24b4902768eb",
+    "merge_kosis_table_candidate_pools.py": "a3d5ebd347037c49a2396a32c8cd30cd02a827fe03d9e31b77cf9f1d647068a4",
+    "kosis_meta_coordinates.py": "1f9c0f38aec746d345b683dcd2c30772b0d37463034b9c8184a4994638ad0dd6",
+    "apply_kosis_structural_table_policy.py": "429742e4664fbcadcdb5d06213097dd730b864d04bc2bccd3409aa0e818e7508"
+  },
+  "independence_status": "FROZEN BEFORE V14 PREDICTIONS AND KOSIS LABELS; DO NOT CHANGE RULES AFTER LABELING STARTS"
+}

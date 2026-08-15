@@ -1,0 +1,73 @@
+{
+  "dataset": "mcp_full_gold_250",
+  "created_at": "2026-08-10T15:10:57+09:00",
+  "row_count": 250,
+  "all_rows_mcp_actual_value": true,
+  "human_reviewed": false,
+  "label_tier_counts": {
+    "FULL_KOSIS_MCP": 250
+  },
+  "label_counts": {
+    "SUPPORTS": 28,
+    "REFUTES": 222
+  },
+  "table_counts": {
+    "DT_1R11001_FRM101": 75,
+    "DT_1J22003": 25,
+    "INH_1B8000F_01": 7,
+    "DT_1DA7002S": 13,
+    "DT_1K41012": 13,
+    "DT_1DA7001S": 28,
+    "DT_1J22042": 41,
+    "DT_1R11006_FRM101": 43,
+    "DT_1KC2020": 4,
+    "DT_1EA1011": 1
+  },
+  "unique_claim_count": 250,
+  "unique_article_count": 142,
+  "article_id_format": "A + zero-padded source article number (minimum 4 digits)",
+  "unique_coordinate_period_count": 190,
+  "blank_required_count": 0,
+  "original_200_preserved": true,
+  "rejected_candidate_count_before_250": 17,
+  "source": "outputs/bteam_review/final_verified_filled_2001_audited_v4.csv",
+  "source_sha256": "ff1da2b8f27f7aa073ebd70b83e8737284facd02f3e99f498011a04c75b35cf7",
+  "source_file_available": false,
+  "candidate_file": "data/gold/mcp_full_gold_200_candidates.json",
+  "candidate_sha256": "2ca4d440f78e7e128186819444e33e3e8ce98baaa95d2f8d270a2d636f0dd58d",
+  "evidence_files": [
+    "data/gold/mcp_full_gold_evidence/batch_001_020.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_021_060.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_061_120.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_081_100.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_121_160.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_161_200.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_201_240.jsonl",
+    "data/gold/mcp_full_gold_evidence/batch_241_269.jsonl"
+  ],
+  "output": "data/gold/mcp_full_gold_250.csv",
+  "output_sha256": "1fda4196c35d8ce7d59315ceadb4f502cffec2c86c1a3ee2c652c382112bc508",
+  "added_rows": {
+    "total": 50,
+    "gold_id_range": [
+      "MCPG-201",
+      "MCPG-250"
+    ],
+    "label_counts": {
+      "REFUTES": 50
+    },
+    "table_counts": {
+      "DT_1K41012": 3,
+      "DT_1R11001_FRM101": 17,
+      "DT_1R11006_FRM101": 10,
+      "DT_1DA7001S": 4,
+      "DT_1J22003": 5,
+      "DT_1J22042": 11
+    },
+    "evidence_batch_counts": {
+      "161-200": 12,
+      "201-240": 38
+    },
+    "all_rows_mcp_actual_value": true
+  }
+}

@@ -162,7 +162,7 @@ def build_candidate_combinations(
         order = int(match.group(1)) if match else (int(key) if str(key).isdigit() else 0)
         if order:
             by_order[order] = rows
-    axes: list[tuple[int, list[dict[str, Any]]]] = []
+    axes: list[tuple[int, Mapping[str, Any], list[dict[str, Any]]]] = []
     for order, axis in grouped["axes"].items():
         choices = [x for x in _normalize_candidates(by_order.get(order, []))
                    if x["code"] in grouped["axis_codes"][order] and _score(x) > 0][:max(0, obj_top_k)]
@@ -174,9 +174,9 @@ def build_candidate_combinations(
                         "default_field": f"objL{order}", "default_value": default["code"],
                         "default_reason": f"축 '{axis.get('obj_name') or order}'이 미명시되어 공식 메타의 유일한 집계값 적용",
                         "default_risk": "LOW"}]
-        axes.append((order, choices))
+        axes.append((order, axis, choices))
     combinations: list[dict[str, Any]] = []
-    products = itertools.product(*(choices for _, choices in axes)) if axes else [()]
+    products = itertools.product(*(choices for _, _, choices in axes)) if axes else [()]
     for item, selected in itertools.product(items, products):
         defaults = [x for x in selected if x.get("is_default")]
         combo: dict[str, Any] = {
@@ -186,9 +186,11 @@ def build_candidate_combinations(
             "default_reason": "; ".join(str(x["default_reason"]) for x in defaults),
             "default_risk": "LOW" if defaults else "NONE",
         }
-        for (order, _), value in zip(axes, selected):
+        for (order, axis, _), value in zip(axes, selected):
             combo[f"objL{order}"] = value["code"]
             combo[f"objL{order}_name"] = value.get("name", "")
+            combo[f"objL{order}_axis_id"] = axis.get("obj_id", "")
+            combo[f"objL{order}_axis_name"] = axis.get("obj_name", "")
         combo.update(validate_candidate_codes_against_meta(combo, grouped))
         combinations.append(combo)
         if len(combinations) >= max(0, max_combinations):
@@ -217,6 +219,56 @@ def build_kosis_request(
     elif new_est_prd_cnt is not None:
         params["newEstPrdCnt"] = int(new_est_prd_cnt)
     return params
+
+
+def iter_relaxed_obj_combinations(
+    combinations: Iterable[Mapping[str, Any]], *,
+    max_obj_drops: int = 2,
+    max_requests: int = 16,
+) -> list[dict[str, Any]]:
+    """Broaden empty coordinates by dropping OBJ constraints progressively.
+
+    Relaxed coordinates are diagnostic recovery candidates, never automatic READY.
+    The bounded request budget prevents an eight-axis table from exploding.
+    """
+    if max_obj_drops <= 0 or max_requests <= 0:
+        return []
+    relaxed: list[dict[str, Any]] = []
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    for source in combinations:
+        fields = [
+            f"objL{level}" for level in range(1, 9)
+            if _first(source, f"objL{level}") not in (None, "")
+        ]
+        for drop_count in range(1, min(max_obj_drops, len(fields)) + 1):
+            # Higher OBJ levels are usually the narrowest classification. Try them first.
+            ordered_fields = list(reversed(fields))
+            for dropped in itertools.combinations(ordered_fields, drop_count):
+                row = dict(source)
+                dropped_values = []
+                for field in dropped:
+                    dropped_values.append(f"{field}={row.get(field, '')}")
+                    row.pop(field, None)
+                    row.pop(f"{field}_name", None)
+                    row.pop(f"{field}_axis_id", None)
+                    row.pop(f"{field}_axis_name", None)
+                signature = tuple(
+                    (f"objL{level}", str(row.get(f"objL{level}", "")))
+                    for level in range(1, 9)
+                ) + (("itm_id", str(row.get("itm_id", ""))),)
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                row.update({
+                    "relaxation_used": True,
+                    "relaxed_obj_fields": "|".join(dropped),
+                    "relaxed_obj_values": "|".join(dropped_values),
+                    "relaxed_obj_drop_count": drop_count,
+                })
+                relaxed.append(row)
+                if len(relaxed) >= max_requests:
+                    return relaxed
+    return relaxed
 
 
 def response_matches_request(request: Mapping[str, Any], rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -378,6 +430,8 @@ def validate_mapping_candidates(
     prd_se: str = "Y", item_top_k: int = 3, obj_top_k: int = 2,
     max_combinations: int = 20, margin_threshold: float = 0.10,
     mapping_type: str = "direct", allow_provisional: bool = False,
+    relax_empty_obj: bool = False, max_relaxed_requests: int = 16,
+    max_relaxed_obj_drops: int = 2,
 ) -> dict[str, Any]:
     """Small orchestration helper. It performs at most ``max_combinations`` calls."""
     item_candidates = list(item_candidates or [])
@@ -423,11 +477,74 @@ def validate_mapping_candidates(
                            "api_error": f"{type(exc).__name__}: {exc}"})
         attempted.append(result)
     ranked = rank_valid_combinations(attempted)
+    relaxed_attempted: list[dict[str, Any]] = []
+    relaxed_ranked: list[dict[str, Any]] = []
+    relaxed_api_errors = relaxed_empty_responses = 0
+    if (relax_empty_obj and combinations and empty_responses == len(combinations)
+            and not ranked):
+        for combo in iter_relaxed_obj_combinations(
+            combinations,
+            max_obj_drops=max_relaxed_obj_drops,
+            max_requests=max_relaxed_requests,
+        ):
+            request = build_kosis_request(
+                org_id, tbl_id, combo, prd_se=prd_se, periods=required_periods
+            )
+            result = dict(combo)
+            try:
+                response = list(data_fetcher(request) or [])
+                kosis_errors = [row for row in response if str(row.get("err", "")).strip()]
+                if kosis_errors:
+                    error_codes = {str(row.get("err", "")).strip() for row in kosis_errors}
+                    error_message = "; ".join(
+                        str(row.get("errMsg", "")).strip() for row in kosis_errors
+                        if str(row.get("errMsg", "")).strip()
+                    )
+                    if error_codes == {"30"}:
+                        response = []
+                    else:
+                        relaxed_api_errors += 1
+                        result.update({
+                            "response_code_valid": False,
+                            "api_valid": False,
+                            "api_error": (
+                                f"KOSIS_ERROR[{','.join(sorted(error_codes))}]: {error_message}"
+                            ),
+                        })
+                        relaxed_attempted.append(result)
+                        continue
+                if not response:
+                    relaxed_empty_responses += 1
+                result.update(response_matches_request(request, response))
+                result.update(validate_unit_and_period(
+                    result["matching_rows"], expected_unit=expected_unit,
+                    required_periods=required_periods, mapping_type=mapping_type,
+                ))
+                if not result["response_code_valid"]:
+                    result["validation_reason"] = "RESPONSE_CODE_MISMATCH"
+            except Exception as exc:
+                relaxed_api_errors += 1
+                result.update({
+                    "response_code_valid": False,
+                    "api_valid": False,
+                    "api_error": f"{type(exc).__name__}: {exc}",
+                })
+            relaxed_attempted.append(result)
+        relaxed_ranked = rank_valid_combinations(relaxed_attempted)
+
+    decision_ranked = ranked or relaxed_ranked
     decision = choose_or_abstain(
-        ranked,
+        decision_ranked,
         margin_threshold=margin_threshold,
         allow_provisional=allow_provisional,
     )
+    if relaxed_ranked and not ranked:
+        # A broader query proves that the table/ITEM has data but no longer proves the
+        # exact original coordinate. Preserve it for diagnosis without issuing a verdict.
+        decision.update(
+            mapping_status=NEEDS_CONFIRMATION,
+            mapping_reason="OBJ_RELAXED_AFTER_EMPTY_RESPONSE",
+        )
     required_period_set = {str(value) for value in required_periods or [] if value not in (None, "")}
     if (
         mapping_type in {"rate_from_level", "difference_from_level"}
@@ -440,18 +557,23 @@ def validate_mapping_candidates(
         )
     if not combinations:
         decision.update(mapping_status=MAPPING_FAILED, mapping_reason="INVALID_COMBINATION")
-    elif api_errors == len(combinations):
+    elif api_errors == len(combinations) and not relaxed_ranked:
         decision.update(mapping_status=API_ERROR, mapping_reason="all candidate API calls failed")
-    elif empty_responses == len(combinations):
+    elif empty_responses == len(combinations) and not relaxed_ranked:
         decision.update(mapping_status=MAPPING_FAILED, mapping_reason="EMPTY_RESPONSE")
     selected = decision.get("selected_combination") or {}
     output = {
         "candidate_itm_ids": [x["code"] for x in _normalize_candidates(item_candidates)[:item_top_k]],
-        "candidate_obj_combinations": attempted,
-        "attempted_combination_count": len(attempted),
-        "api_valid_combination_count": len(ranked),
-        "api_error_count": api_errors,
-        "empty_response_count": empty_responses,
+        "candidate_obj_combinations": [*attempted, *relaxed_attempted],
+        "attempted_combination_count": len(attempted) + len(relaxed_attempted),
+        "api_valid_combination_count": len(ranked) + len(relaxed_ranked),
+        "api_error_count": api_errors + relaxed_api_errors,
+        "empty_response_count": empty_responses + relaxed_empty_responses,
+        "obj_relaxation_attempted": bool(relaxed_attempted),
+        "obj_relaxation_recovered": bool(relaxed_ranked),
+        "relaxed_attempt_count": len(relaxed_attempted),
+        "relaxed_obj_fields": selected.get("relaxed_obj_fields", ""),
+        "relaxed_obj_values": selected.get("relaxed_obj_values", ""),
         **decision,
         "selected_itm_id": selected.get("itm_id", ""),
         "selected_itm_name": selected.get("itm_name", ""),
@@ -466,6 +588,12 @@ def validate_mapping_candidates(
     for level in range(1, 9):
         output[f"selected_obj_l{level}"] = selected.get(f"objL{level}", "")
         output[f"selected_obj_l{level}_name"] = selected.get(f"objL{level}_name", "")
+        output[f"selected_obj_l{level}_axis_id"] = selected.get(
+            f"objL{level}_axis_id", ""
+        )
+        output[f"selected_obj_l{level}_axis_name"] = selected.get(
+            f"objL{level}_axis_name", ""
+        )
     return output
 
 
@@ -746,6 +874,50 @@ def semantic_ready_gate(
             reasons.append("UNGROUNDED_NUMERIC_OBJ_SCOPE")
             break
 
+    # A READY coordinate must contain every structured target (gender, region,
+    # age, education, country, product) on a compatible KOSIS OBJ axis.  Text
+    # overlap alone is not sufficient: e.g. selecting "여자" on an unrelated
+    # axis, or losing the education target while retaining only age, must
+    # abstain.  Old indexes without axis metadata also cannot auto-confirm.
+    axis_context = dict(row)
+    axis_context.update(
+        {key: value for key, value in result.items() if value not in (None, "")}
+    )
+    axis_alignment = axis_target_alignment(row, axis_context)
+    if axis_alignment["required_count"]:
+        if not axis_alignment["enforceable"]:
+            reasons.append("OBJ_AXIS_METADATA_MISSING")
+        elif not axis_alignment["strict_match"]:
+            reasons.append("OBJ_TARGET_INCOMPLETE_MATCH")
+
+    # SQLite resolver가 공식 축 값과 주장 문장의 직접 일치로 찾은 동적 target도
+    # READY 필수조건이다. 사망원인·혼인관계·점유형태처럼 HCX의 고정 슬롯 밖에 있는
+    # 대상이 집계값 '계'로 사라지는 것을 막는다.
+    dynamic_required = 0
+    dynamic_matched: list[str] = []
+    dynamic_mismatched: list[str] = []
+    for level in range(1, 9):
+        terms = tuple(term for term in str(
+            axis_context.get(f"selected_obj_l{level}_dynamic_target_terms", "")
+        ).split("|") if term)
+        if not terms:
+            continue
+        dynamic_required += len(terms)
+        selected_name = _first(
+            axis_context, f"selected_obj_l{level}_name", f"obj_l{level}_name"
+        )
+        for term in terms:
+            if target_terms_match_text((term,), (selected_name,)):
+                dynamic_matched.append(f"axis{level}:{term}")
+            else:
+                dynamic_mismatched.append(f"axis{level}:{term}")
+    if dynamic_mismatched:
+        reasons.append("OBJ_DYNAMIC_TARGET_INCOMPLETE_MATCH")
+
+    relation_text = re.sub(r"\s+", "", claim_text)
+    if re.search(r"(?:남편|아내|부부).*(?:연상|연하|동갑)", relation_text):
+        reasons.append("RELATIONAL_AXIS_DERIVATION_REQUIRED")
+
     # claim 품목 ↔ 좌표 일치. **모든 확정 경로가 이 검사를 거쳐야 한다.**
     #
     # 2026-08-02: 이 가드가 downstream_validated_rank1(회수 경로)에만 있었다.
@@ -797,6 +969,17 @@ def semantic_ready_gate(
         "semantic_gate_valid": not reasons,
         "semantic_gate_reason": reasons[0] if reasons else "",
         "semantic_gate_details": ";".join(reasons),
+        "obj_axis_gate_required_count": axis_alignment["required_count"] + dynamic_required,
+        "obj_axis_gate_matched_count": axis_alignment["matched_count"] + len(dynamic_matched),
+        "obj_axis_gate_enforceable": "Y" if axis_alignment["enforceable"] else "N",
+        "obj_axis_gate_strict_match": "Y" if (
+            (axis_alignment["strict_match"] or not axis_alignment["required_count"])
+            and not dynamic_mismatched
+            and (dynamic_required == len(dynamic_matched))
+        ) else "N",
+        "obj_axis_gate_matched": "|".join((*axis_alignment["matched"], *dynamic_matched)),
+        "obj_axis_gate_missing": "|".join(axis_alignment["missing_axis"]),
+        "obj_axis_gate_mismatched": "|".join((*axis_alignment["mismatched"], *dynamic_mismatched)),
     }
 
 
@@ -859,6 +1042,7 @@ def low_priority_reason(row: Mapping[str, Any]) -> str:
 from kosis_meta_coordinates import (  # noqa: E402
     AGGREGATE_ITEM_TOKENS,
     AGGREGATE_OBJ_NAMES,
+    axis_target_alignment,
     claim_target_terms,
     normalize_periodicity,
     periodicity_satisfied,
@@ -1150,6 +1334,16 @@ def main() -> None:
             "것을 막는다."
         ),
     )
+    parser.add_argument(
+        "--relax-empty-obj",
+        action="store_true",
+        help=(
+            "정확 좌표가 모두 빈 응답이면 OBJ 제약을 하나씩 제거해 제한적으로 재조회한다. "
+            "회수 결과는 자동 READY가 아니라 NEEDS_CONFIRMATION이다."
+        ),
+    )
+    parser.add_argument("--max-relaxed-requests", type=int, default=16)
+    parser.add_argument("--max-relaxed-obj-drops", type=int, default=2)
     args = parser.parse_args()
 
     from kosis_api_test import get_stat_data
@@ -1270,6 +1464,9 @@ def main() -> None:
                 obj_top_k=args.obj_top_k, max_combinations=args.max_combinations,
                 mapping_type=str(row.get("mapping_type") or "direct"),
                 allow_provisional=args.allow_provisional,
+                relax_empty_obj=args.relax_empty_obj,
+                max_relaxed_requests=args.max_relaxed_requests,
+                max_relaxed_obj_drops=args.max_relaxed_obj_drops,
             )
         # 이중 게이트 해제 (2026-07-31)
         # validate는 이미 공식 메타 코드 + 실제 API 응답 + 단위·기간 정합을 독립 검증한다.

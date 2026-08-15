@@ -11,6 +11,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from kosis_meta_coordinates import axis_target_alignment, claim_axis_targets
+
 
 AGGREGATE_NAMES = {
     "", "-", "계", "총계", "합계", "전체", "전국", "총액", "총지수", "all", "total",
@@ -90,6 +92,24 @@ def item_match_score(claim: Mapping[str, str], candidate: Mapping[str, str]) -> 
             score += 180.0
         elif "증감률" in item_name:
             score -= 120.0
+    claim_text = normalized(claim.get("claim_text"))
+    indicator_text = normalized(
+        claim.get("measurement_indicator") or claim.get("indicator")
+    )
+    unit = clean(claim.get("unit"))
+    change_base = clean(claim.get("change_base"))
+    derived_production_rate = (
+        "생산" in indicator_text
+        and (unit == "%" or any(token in claim_text for token in ("낙폭", "증가율", "감소율")))
+        and (change_base or any(token in claim_text for token in ("전년", "전월", "낙폭")))
+    )
+    if derived_production_rate:
+        if "불변지수" in item_name:
+            score += 100.0
+        elif "경상지수" in item_name:
+            score -= 30.0
+        elif "계절조정지수" in item_name and "전월" not in change_base:
+            score -= 15.0
     # A candidate already ranked well by dense/lexical/reranker remains the
     # fallback when the article does not expose an item name explicitly.
     score += 25.0 / math.log2(rank_value(candidate, "table_rank") + 1.0)
@@ -109,21 +129,27 @@ def is_aggregate_candidate(candidate: Mapping[str, str]) -> bool:
 
 
 def obj_target_terms(claim: Mapping[str, str]) -> tuple[str, ...]:
-    raw = clean(claim.get("obj_target_terms"))
-    if raw:
-        return tuple(
-            term for term in raw.split("|")
-            if term and term != "-" and normalized(term)
+    targets = claim_axis_targets(claim)
+    typed = tuple(dict.fromkeys(
+        term for kind in ("country", "region", "age", "gender", "product")
+        for term in targets.get(kind, ()) if normalized(term)
+    ))
+    # The HCX schema historically carried employment status only in the
+    # precomputed obj_target_terms field.  Preserve this narrow, enumerated
+    # class without re-enabling arbitrary legacy age/product strings that can
+    # contain causal context rather than a requested coordinate.
+    employment_terms = {
+        normalized(term): term for term in (
+            "정규직", "비정규직", "상용직", "임시직", "일용직",
+            "상용근로자", "임시근로자", "일용근로자",
         )
-    return tuple(
-        term
-        for term in (
-            clean(claim.get("destination_country")), clean(claim.get("origin_country")),
-            clean(claim.get("region")), clean(claim.get("age_group")), clean(claim.get("gender")),
-            clean(claim.get("industry_or_item") or claim.get("measurement_item")),
-        )
-        if term and term != "-" and normalized(term)
-    )
+    }
+    legacy = []
+    for raw in clean(claim.get("obj_target_terms")).split("|"):
+        key = normalized(raw)
+        if key in employment_terms:
+            legacy.append(employment_terms[key])
+    return tuple(dict.fromkeys((*typed, *legacy)))
 
 
 def obj_term_matches(term: str, selected_name: str) -> bool:
@@ -142,6 +168,33 @@ def obj_term_matches(term: str, selected_name: str) -> bool:
     if selected in {target + "시", target + "도", target + "군", target + "구"}:
         return True
     return len(target) >= 3 and (target in selected or selected in target)
+
+
+def concept_target_terms(claim: Mapping[str, str]) -> tuple[str, ...]:
+    terms: list[str] = []
+    for field in ("item_intent_terms", "measurement_indicator", "indicator"):
+        for term in clean(claim.get(field)).split("|"):
+            if term and normalized(term) and term not in terms:
+                terms.append(term)
+    return tuple(terms)
+
+
+def concept_match_score(
+    claim: Mapping[str, str], candidate: Mapping[str, str]
+) -> tuple[float, tuple[str, ...], bool]:
+    terms = concept_target_terms(claim)
+    item_name = clean(candidate.get("selected_itm_name"))
+    selected_obj_names = obj_names(candidate)
+    names = (item_name, *selected_obj_names)
+    matched = tuple(
+        term for term in terms
+        if any(obj_term_matches(term, name) for name in names if name)
+    )
+    matched_on_obj = any(
+        obj_term_matches(term, name)
+        for term in terms for name in selected_obj_names if name
+    )
+    return (len(matched) / len(terms) if terms else 0.0), matched, matched_on_obj
 
 
 def obj_match_score(
@@ -183,33 +236,43 @@ def select_two_stage(
         )
         item_groups[key].append(candidate)
 
-    staged_items = []
+    staged_by_table: dict[tuple[str, str], list[tuple[float, str, tuple[str, str, str], list[dict[str, str]]]]] = defaultdict(list)
     for key, rows in item_groups.items():
         representative = min(rows, key=lambda row: rank_value(row, "candidate_rank"))
         score, matched = item_match_score(claim, representative)
-        staged_items.append((score, matched, key, rows))
-    staged_items.sort(key=lambda value: (-value[0], value[2]))
-    staged_items = staged_items[: max(1, item_top_k)]
+        staged_by_table[key[:2]].append((score, matched, key, rows))
+    staged_items = []
+    for table_key in sorted(staged_by_table):
+        table_items = sorted(staged_by_table[table_key], key=lambda value: (-value[0], value[2]))
+        for item_rank, entry in enumerate(table_items[: max(1, item_top_k)], 1):
+            staged_items.append((item_rank, *entry))
 
     finalists = []
-    for item_rank, (item_score, item_matched, key, rows) in enumerate(staged_items, 1):
+    for item_rank, item_score, item_matched, key, rows in staged_items:
         for row in rows:
             obj_score, obj_matched, aggregate, obj_matched_terms = obj_match_score(claim, row)
+            concept_score, concept_matched_terms, concept_matched_on_obj = concept_match_score(claim, row)
+            alignment = axis_target_alignment(claim, row)
+            if alignment["enforceable"]:
+                obj_score += 300.0 * alignment["score"]
             final_score = item_score + obj_score
             item_exact = bool(item_matched)
             targets = obj_target_terms(claim)
-            obj_priority = len(obj_matched_terms) if targets else int(aggregate)
+            obj_priority = len(obj_matched_terms) if targets else int(aggregate or concept_matched_on_obj)
             finalists.append(
-                (item_exact, obj_priority, final_score, -rank_value(row, "candidate_rank"),
+                (concept_score == 1.0, int(alignment["strict_match"]), alignment["score"],
+                 obj_priority, -rank_value(row, "table_rank"), item_exact, final_score,
+                 -rank_value(row, "candidate_rank"), concept_score, concept_matched_terms,
                  item_rank, item_score, item_matched, obj_score, obj_matched,
-                 aggregate, obj_matched_terms, row)
+                 aggregate, obj_matched_terms, alignment, row)
             )
     if not finalists:
         return None
-    selected = max(finalists, key=lambda value: value[:4])
+    selected = max(finalists, key=lambda value: value[:8])
     (
-        _, _, final_score, _, item_rank, item_score, item_matched, obj_score,
-        obj_matched, aggregate, obj_matched_terms, row,
+        _, _, _, _, _, _, final_score, _, concept_score, concept_matched_terms,
+        item_rank, item_score, item_matched, obj_score,
+        obj_matched, aggregate, obj_matched_terms, alignment, row,
     ) = selected
     return {
         **row,
@@ -223,13 +286,21 @@ def select_two_stage(
         "two_stage_item_rank": str(item_rank),
         "two_stage_item_score": str(item_score),
         "two_stage_item_matched_terms": item_matched,
+        "two_stage_concept_score": str(concept_score),
+        "two_stage_concept_matched_terms": "|".join(concept_matched_terms),
         "two_stage_obj_score": str(obj_score),
         "two_stage_obj_target_terms": "|".join(obj_target_terms(claim)),
         "two_stage_obj_matched_terms": "|".join(obj_matched_terms),
         "two_stage_obj_matched": "Y" if obj_matched else "N",
         "two_stage_obj_aggregate": "Y" if aggregate else "N",
+        "two_stage_axis_alignment": str(alignment["score"]),
+        "two_stage_axis_strict_match": "Y" if alignment["strict_match"] else "N",
+        "two_stage_axis_matched": "|".join(alignment["matched"]),
+        "two_stage_axis_missing": "|".join(
+            (*alignment["missing_axis"], *alignment["mismatched"])
+        ),
         "two_stage_final_score": str(final_score),
-        "selection_backend": "item_obj_first_v2",
+        "selection_backend": "item_obj_joint_v4",
         "two_stage_baseline_org_id": baseline_table[0],
         "two_stage_baseline_tbl_id": baseline_table[1],
         "two_stage_table_changed": "Y" if (

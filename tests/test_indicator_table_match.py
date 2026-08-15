@@ -190,6 +190,18 @@ def test_common_fragments_do_not_count_as_overlap():
                                     itm_name="수출액")
 
 
+@pytest.mark.parametrize("indicator,table,item,reason", [
+    ("1인당 국민소득", "자격별 1인당 연간 총급여비 현황", "급여비용", "어휘"),
+    ("1인당 PGDI", "자격별 1인당 연간 총급여비 현황", "급여비용", "어휘"),
+    ("우리나라 총인구", "인구밀도 - 시도", "인구밀도", "DENSITY"),
+    ("농가 수", "다문화 농가 및 농가인구", "농가", "MULTICULTURAL"),
+    ("자기 집을 소유한 가구의 평균 자산", "가구의 연간 경상소득 평균", "평균", "ASSET_INCOME"),
+    ("자기 집을 소유한 가구의 부동산 자산 가치", "순자산 10분위별 점유율", "평균 순자산", "REAL_ESTATE"),
+])
+def test_v10_false_ready_concepts_are_deferred(indicator, table, item, reason):
+    assert reason in indicator_table_mismatch(indicator, table, itm_name=item)
+
+
 # --------------------------------------------------------------------------
 # 파이프라인에 연결됐는가
 # --------------------------------------------------------------------------
