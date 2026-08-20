@@ -19,6 +19,7 @@ import csv
 import math
 import re
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -31,10 +32,20 @@ from kosis_semantic_search import (
     DEFAULT_RERANKER_MODEL,
     SemanticSearchRuntime,
     build_claim_query,
+    build_table_search_queries,
     file_sha256,
     normalized_rrf_score,
+    survey_hints_from_claim,
+    target_axes_from_claim,
     table_key,
 )
+from kosis_meta_coordinates import (
+    AGGREGATE_ITEM_TOKENS,
+    AGGREGATE_OBJ_NAMES,
+    claim_target_terms,
+    target_terms_match_text,
+)
+from kosis_taxonomy import regional_table_scope_matches
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -43,6 +54,8 @@ DEFAULT_TABLE_INDEX_CANDIDATES = [
 ]
 DEFAULT_META_INDEX = PROJECT_DIR / "data/claims/kosis_meta_index.csv"
 DEFAULT_SEMANTIC_INDEX = PROJECT_DIR / "data/indexes/kosis_bge_m3"
+DEFAULT_TABLE_OVERRIDES = PROJECT_DIR / "data/claims/kosis_table_search_overrides_v1.csv"
+DEFAULT_MAPPING_OVERRIDES = PROJECT_DIR / "data/claims/kosis_mapping_overrides_v1.csv"
 
 csv.field_size_limit(2 ** 31 - 1)
 
@@ -81,17 +94,20 @@ TOKEN_EXPANSIONS = {
     "수출": ["수출액", "품목별", "총액"],
     "수입": ["수입액", "품목별", "총액"],
     "무역수지": ["무역", "수출액", "수입액", "국제수지"],
+    "경상수지": ["국제수지", "국제수지통계"],
     "흑자": ["무역수지", "수출액", "수입액"],
     "적자": ["무역수지", "수출액", "수입액"],
     "자동차": ["승용자동차", "차량", "자동차"],
     "완성차": ["승용자동차", "차량", "자동차"],
     "선박": ["선박", "보트", "부유구조물"],
-    "반도체": ["반도체", "전자집적회로", "메모리", "디바이스"],
+    "반도체": ["반도체", "전자집적회로", "메모리", "디바이스", "ICT", "IT산업"],
     "화장품": ["화장품", "화장용품", "향수"],
     "석유화학": ["석유", "화학", "화학제품"],
-    "바이오헬스": ["의약품", "의료용품", "바이오"],
+    "바이오헬스": ["의약품", "의료용품", "바이오", "바이오헬스산업", "수출액"],
     "농수산식품": ["식품", "농산물", "수산", "어류"],
     "최저임금": ["임금", "노동", "근로"],
+    "에너지": ["에너지수급", "에너지수입액"],
+    "정비사": ["직무별", "종사자", "항공정비"],
 }
 
 STOPWORDS = {
@@ -115,6 +131,10 @@ ITEM_FAMILIES = {
 }
 
 
+from kosis_meta_coordinates import (normalize_periodicity, periodicity_satisfied,
+                                    table_periodicities)
+
+
 def read_csv(path: Path):
     with path.open(encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
@@ -133,6 +153,61 @@ def compact(text):
     return re.sub(r"\s+", "", str(text or "").strip())
 
 
+def load_table_overrides(path: Path | None = None):
+    target = path or DEFAULT_TABLE_OVERRIDES
+    if not target.exists():
+        return []
+    rows, _ = read_csv(target)
+    return [
+        row for row in rows
+        if str(row.get("enabled", "Y")).strip().upper() not in {"N", "FALSE", "0"}
+        and str(row.get("org_id", "")).strip()
+        and str(row.get("tbl_id", "")).strip()
+    ]
+
+
+def load_mapping_overrides(path: Path | None = None):
+    target = path or DEFAULT_MAPPING_OVERRIDES
+    if not target.exists():
+        return []
+    rows, _ = read_csv(target)
+    return [
+        row for row in rows
+        if str(row.get("enabled", "Y")).strip().upper() not in {"N", "FALSE", "0"}
+        and str(row.get("org_id", "")).strip()
+        and str(row.get("tbl_id", "")).strip()
+        and str(row.get("itm_id", "")).strip()
+    ]
+
+
+def _contains_rule_value(text, expected):
+    values = [compact(value) for value in str(expected or "").split("|") if compact(value)]
+    return not values or any(value in compact(text) for value in values)
+
+
+def table_override_matches_claim(rule, claim):
+    norm_claim = normalized_claim_row(claim)
+    if not _contains_rule_value(norm_claim.get("indicator"), rule.get("indicator_contains")):
+        return False
+    if not _contains_rule_value(norm_claim.get("industry_or_item"), rule.get("item_contains")):
+        return False
+    if not _contains_rule_value(norm_claim.get("claim_text"), rule.get("claim_contains")):
+        return False
+    required_prd_se = str(rule.get("prd_se", "")).strip().upper()
+    return not required_prd_se or required_prd_se == str(norm_claim.get("prd_se", "")).strip().upper()
+
+
+def mapping_override_matches_claim(rule, claim, table=None):
+    if not table_override_matches_claim(rule, claim):
+        return False
+    if table is None:
+        return True
+    return (
+        str(rule.get("org_id", "")).strip() == str(table.get("org_id", "")).strip()
+        and str(rule.get("tbl_id", "")).strip() == str(table.get("tbl_id", "")).strip()
+    )
+
+
 def get_first(row, *keys):
     for key in keys:
         value = row.get(key, "")
@@ -143,14 +218,21 @@ def get_first(row, *keys):
 
 def normalized_claim_row(row):
     """A팀/HCX 파일마다 다른 컬럼명을 후보 매칭용 표준명으로 맞춘다."""
-    if any(key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")):
+    has_measurement_contract = any(
+        key in row for key in ("measurement_indicator", "measurement_period", "measurement_prd_se")
+    )
+    already_prepared = all(
+        key in row
+        for key in ("mapping_eligible", "canonical_unit", "claim_indicator", "claim_period")
+    )
+    if has_measurement_contract and not already_prepared:
         row = normalize_mapping_row(row)
-    return {
+    normalized = {
         "claim_id": get_first(row, "claim_id", "claimId", "id"),
         "claim_measurement_id": get_first(row, "claim_measurement_id", "measurement_id"),
-        "indicator": get_first(row, "measurement_indicator", "indicator", "지표"),
+        "indicator": get_first(row, "indicator", "measurement_indicator", "지표"),
         "metric_domain": get_first(row, "metric_domain", "도메인", "검색 구분 레이블"),
-        "industry_or_item": get_first(row, "measurement_item", "industry_or_item", "품목", "산업", "대상"),
+        "industry_or_item": get_first(row, "industry_or_item", "measurement_item", "품목", "산업", "대상"),
         "keywords": get_first(row, "keywords", "키워드"),
         "region": get_first(row, "region", "지역"),
         "age_group": get_first(row, "age_group", "연령"),
@@ -169,12 +251,28 @@ def normalized_claim_row(row):
         "mapping_eligible": get_first(row, "mapping_eligible"),
         "mapping_exclusion_code": get_first(row, "mapping_exclusion_code"),
         "mapping_exclusion_reason": get_first(row, "mapping_exclusion_reason"),
-        "period": get_first(row, "measurement_period", "period", "작성일", "date"),
-        "prd_se": get_first(row, "measurement_prd_se", "prd_se", "주기"),
+        "period": get_first(row, "period", "measurement_period", "작성일", "date"),
+        "prd_se": get_first(row, "prd_se", "measurement_prd_se", "주기"),
         "change_base": get_first(row, "change_base"),
         "comparison_period": get_first(row, "comparison_period"),
+        "title": get_first(row, "title", "제목"),
+        "survey_name": get_first(row, "survey_name", "statistics_name", "stat_name", "source_survey"),
+        "obj_target_terms": get_first(row, "obj_target_terms"),
+        "destination_country": get_first(row, "destination_country"),
+        "origin_country": get_first(row, "origin_country"),
         "claim_text": get_first(row, "claim_text", "문장", "sentence", "evidence_text"),
     }
+    if not normalized["survey_name"]:
+        normalized["survey_name"] = "|".join(survey_hints_from_claim({**row, **normalized}))
+    axes = list(target_axes_from_claim({**row, **normalized}))
+    # HCX v1.6에는 국가 전용 필드가 없으므로 keywords를 마지막 보조 축으로 쓴다.
+    if not axes:
+        axes.extend(
+            part.strip() for part in re.split(r"[|,]", normalized["keywords"])
+            if part.strip()
+        )
+    normalized["target_axes"] = "|".join(dict.fromkeys(axes))
+    return normalized
 
 
 def tokens_from_text(text):
@@ -196,8 +294,10 @@ def claim_tokens(row):
     row = normalized_claim_row(row)
     weighted = []
     weights = [
+        ("survey_name", 6),
         ("indicator", 5),
         ("industry_or_item", 5),
+        ("target_axes", 4),
         ("keywords", 3),
         ("metric_domain", 3),
         ("region", 2),
@@ -288,12 +388,251 @@ def table_year_penalty(table_text, period):
     if not match:
         return 0
     target_year = int(match.group())
-    years = [int(year) for year in re.findall(r"(?:19|20)\d{2}", table_text)]
-    if years and max(years) < target_year - 1:
-        return -300
-    if "이전" in table_text and years and max(years) < target_year:
+    compact_text = compact(table_text)
+    coverage_end_years = [
+        int(year)
+        for year in re.findall(
+            r"(?:19|20)\d{2}(?:\.\d{1,2})?\s*[~～\-–]\s*((?:19|20)\d{2})",
+            compact_text,
+        )
+    ]
+    coverage_end_years.extend(
+        int(year)
+        for year in re.findall(r"((?:19|20)\d{2})년?(?:이전|까지|종료)", compact_text)
+    )
+    coverage_end_years.extend(
+        2000 + int(year)
+        for year in re.findall(r"['’]?(\d{2})년(?:이전|까지|종료)", compact_text)
+    )
+    if coverage_end_years and max(coverage_end_years) < target_year:
         return -300
     return 0
+
+
+def table_coverage_expired(table_text, period) -> bool:
+    """Return true only when the table explicitly ends before the claim year."""
+    return table_year_penalty(table_text, period) < 0
+
+
+def table_scope_adjustment(row, claim):
+    """Prefer tables whose explicit axes match the claim's target scope."""
+    norm_claim = normalized_claim_row(claim)
+    table_name = compact(row.get("tbl_name", ""))
+    focused = compact(
+        " ".join(
+            str(norm_claim.get(field, ""))
+            for field in (
+                "indicator", "industry_or_item", "region", "age_group", "gender",
+                "origin_country", "destination_country", "claim_text",
+            )
+        )
+    )
+    score = 0
+    if not regional_table_scope_matches(norm_claim, row.get("tbl_name", "")):
+        score -= 1000
+    has_region = compact(norm_claim.get("region")) not in {"", "-", "전국"}
+    has_country = any(
+        compact(norm_claim.get(field)) not in {"", "-"}
+        for field in ("origin_country", "destination_country")
+    )
+    has_age = compact(norm_claim.get("age_group")) not in {"", "-"} or bool(
+        re.search(r"\d{1,2}대|\d{1,2}\s*[~\-]\s*\d{1,2}세|연령", focused)
+    )
+    has_gender = compact(norm_claim.get("gender")) not in {"", "-"} or any(
+        token in focused for token in ("남자", "여자", "남성", "여성", "성별")
+    )
+    has_education = any(
+        token in focused for token in ("교육정도", "학력", "고졸", "대졸", "중졸", "초졸")
+    )
+
+    if not has_country and any(token in table_name for token in ("국가별", "주요국가", "교역상대국")):
+        score -= 180
+    if not has_region and any(token in table_name for token in ("지역별", "시도", "시군구", "읍면동")):
+        score -= 160
+    if not has_age and "연령" in table_name:
+        score -= 120
+    if not has_gender and "성별" in table_name:
+        score -= 120
+    if not has_education and any(token in table_name for token in ("교육정도", "학력")):
+        score -= 120
+    if "계절조정" in table_name and "계절조정" not in focused:
+        score -= 180
+
+    prd_se = str(norm_claim.get("prd_se", "")).upper()
+    if prd_se == "M" and "월" in table_name:
+        score += 80
+    elif prd_se == "Q" and "분기" in table_name:
+        score += 80
+    elif prd_se == "Y" and any(token in table_name for token in ("연간", "연도", "년별")):
+        score += 80
+    return score
+
+
+REAL_LEVEL_DIMENSIONS = {"currency", "count", "person_count", "quantity"}
+INDEX_TABLE_TOKENS = ("물가지수", "금액지수", "물량지수", "가격지수", "생산지수")
+PERIOD_TEXT_TOKENS = {
+    "M": ("월별", "월간", "월"),
+    "Q": ("분기별", "분기"),
+    "Y": ("연간", "연도별", "년도별", "년별"),
+}
+
+
+def table_unit_dimension_mismatch(table_text: str, semantic: str, claim_dimension: str) -> bool:
+    """Reject direct level claims that are being matched to index-only tables."""
+    if semantic not in {"amount", "level"}:
+        return False
+    if claim_dimension not in REAL_LEVEL_DIMENSIONS:
+        return False
+    compact_table = compact(table_text)
+    if claim_dimension == "currency" and any(
+        token in compact_table for token in ("수출액", "수입액", "매출액", "거래액", "생산액", "판매액")
+    ):
+        return False
+    return any(token in compact_table for token in INDEX_TABLE_TOKENS)
+
+
+def table_periodicity_text_mismatch(row, claim) -> bool:
+    """Detect explicit table-name periodicity mismatches before meta/API lookup."""
+    norm_claim = normalized_claim_row(claim)
+    required = str(norm_claim.get("prd_se", "")).strip().upper()
+    if required not in PERIOD_TEXT_TOKENS:
+        return False
+    table_text = compact(f"{row.get('tbl_name', '')} {row.get('category_path', '')}")
+    if not table_text:
+        return False
+    has_required = any(token in table_text for token in PERIOD_TEXT_TOKENS[required])
+    has_other = any(
+        token in table_text
+        for prd_se, tokens in PERIOD_TEXT_TOKENS.items()
+        if prd_se != required
+        for token in tokens
+    )
+    return has_other and not has_required
+
+
+def table_target_anchor_mismatch(row, claim) -> bool:
+    """Penalize dense hits whose table text has none of the claim's target anchors."""
+    norm_claim = normalized_claim_row(claim)
+    target_terms = tuple(claim_target_terms(norm_claim))
+    if not target_terms:
+        return False
+    table_values = [
+        row.get("tbl_name", ""),
+        row.get("category_path", ""),
+        row.get("stat_id", ""),
+    ]
+    if target_terms_match_text(target_terms, table_values):
+        return False
+    table_text = compact(" ".join(str(value or "") for value in table_values))
+    indicator_text = compact(norm_claim.get("indicator", ""))
+    generic_trade_item_table = (
+        any(token in indicator_text for token in ("수출", "수입", "무역수지"))
+        and "품목별" in table_text
+        and any(token in table_text for token in ("수출", "수입", "무역"))
+    )
+    if generic_trade_item_table:
+        return False
+    generic_axis_table = (
+        ("산업기술인력" in indicator_text and any(token in table_text for token in ("산업별", "업종별")))
+        or (
+            norm_claim.get("entity_type") == "organization"
+            and any(token in table_text for token in ("기업규모별", "종사자규모별", "규모별"))
+        )
+    )
+    if generic_axis_table:
+        return False
+    return True
+
+
+def table_structural_signals(row, norm_claim):
+    """Score BGE hits with cheap table-level structure before reranking."""
+    table_text = compact(f"{row.get('tbl_name', '')} {row.get('category_path', '')}")
+    semantic = norm_claim.get("semantic_type", "")
+    claim_dimension = norm_claim.get("unit_dimension") or infer_unit_dimension(norm_claim.get("unit", ""))
+    score = 0
+    hits = []
+
+    indicator_text = compact(norm_claim.get("indicator", ""))
+    if table_coverage_expired(table_text, norm_claim.get("period")):
+        return -10**9, ["guard:expired-table-coverage"]
+    if any(token in indicator_text for token in ("수출", "수입", "무역수지")):
+        if not any(token in table_text for token in ("수출", "수입", "무역", "교역")):
+            return -10**9, ["guard:metric-family-trade"]
+    if "산업기술인력" in indicator_text:
+        if not any(token in table_text for token in ("산업기술인력", "인력", "현재인원", "종사자")):
+            return -10**9, ["guard:metric-family-workforce"]
+    if any(token in indicator_text for token in ("신기술도입률", "기술도입률", "도입률")):
+        investment_only = (
+            any(token in table_text for token in ("기술개발비", "연구개발투자", "개발투자"))
+            and "도입" not in table_text
+        )
+        if investment_only:
+            return -10**9, ["guard:metric-family-adoption-rate"]
+
+    if table_unit_dimension_mismatch(table_text, semantic, claim_dimension):
+        return -10**9, ["guard:unit-dimension"]
+    if (
+        semantic in {"amount", "level"}
+        and claim_dimension in REAL_LEVEL_DIMENSIONS
+        and "지수" in table_text
+    ):
+        score -= 180
+        hits.append("penalty:index-token")
+    if table_periodicity_text_mismatch(row, norm_claim):
+        score -= 220
+        hits.append("penalty:period-text")
+    elif str(norm_claim.get("prd_se", "")).strip():
+        scope_score = table_scope_adjustment(row, norm_claim)
+        if scope_score > 0:
+            score += min(scope_score, 80)
+            hits.append("boost:period-text")
+    if table_target_anchor_mismatch(row, norm_claim):
+        score -= 600
+        hits.append("penalty:target-anchor")
+    elif claim_target_terms(norm_claim):
+        score += 250
+        hits.append("boost:target-anchor")
+    return score, hits
+
+
+def selected_meta_values(structured_meta, table=None):
+    values = [
+        structured_meta.get("selected_itm_name", ""),
+        (table or {}).get("tbl_name", ""),
+        (table or {}).get("category_path", ""),
+    ]
+    values.extend(
+        structured_meta.get(f"selected_obj_l{level}_name", "")
+        for level in range(1, 9)
+    )
+    return [value for value in values if value]
+
+
+def selection_is_aggregate_candidate(structured_meta) -> bool:
+    names = [
+        str(structured_meta.get(f"selected_obj_l{level}_name", "")).strip()
+        for level in range(1, 9)
+        if str(structured_meta.get(f"selected_obj_l{level}_name", "")).strip()
+    ]
+    if not names:
+        return True
+    aggregate_names = {compact(name) for name in AGGREGATE_OBJ_NAMES}
+    return all(compact(name) in aggregate_names for name in names)
+
+
+def candidate_target_mismatch(structured_meta, norm_claim, table=None) -> str:
+    target_terms = tuple(claim_target_terms(norm_claim))
+    if target_terms:
+        if target_terms_match_text(target_terms, selected_meta_values(structured_meta, table)):
+            return ""
+        return f"claim 대상 {','.join(target_terms)} 과 선택 ITEM/OBJ 불일치"
+
+    raw_item = str(norm_claim.get("industry_or_item") or "").strip()
+    if compact(raw_item) in {compact(item) for item in AGGREGATE_ITEM_TOKENS}:
+        if selection_is_aggregate_candidate(structured_meta):
+            return ""
+        return "세부 대상 없는 claim에 비집계 OBJ 좌표가 선택됨"
+    return ""
 
 
 def score_table(row, tokens, claim):
@@ -305,7 +644,13 @@ def score_table(row, tokens, claim):
     anchors = measurement_anchors(norm_claim)
     family = claim_item_family(norm_claim)
 
-    anchor_hits = [anchor for anchor in anchors if anchor in table_text]
+    anchor_aliases = {
+        "경상수지": ("경상수지", "국제수지"),
+    }
+    anchor_hits = [
+        anchor for anchor in anchors
+        if any(alias in table_text for alias in anchor_aliases.get(anchor, (anchor,)))
+    ]
     if anchor_hits:
         score += 120 + 20 * len(anchor_hits)
     elif anchors:
@@ -341,6 +686,11 @@ def score_table(row, tokens, claim):
     is_trade_claim = any(
         token in indicator_text for token in ("수출", "수입", "무역수지")
     )
+    claim_dimension = norm_claim.get("unit_dimension") or infer_unit_dimension(norm_claim.get("unit", ""))
+    if table_unit_dimension_mismatch(table_text, semantic, claim_dimension):
+        return -10**9, []
+    if table_periodicity_text_mismatch(row, norm_claim):
+        return -10**9, []
 
     # Dense retrieval is intentionally broad. These are population/metric
     # mismatches that semantic similarity must never promote to rank 1.
@@ -440,7 +790,10 @@ def score_table(row, tokens, claim):
     if "항공" in measurement_anchors(norm_claim):
         if any(token in table_text for token in ("수상여객", "철도여객", "도로여객")):
             return -10**9, []
+    if table_target_anchor_mismatch(row, norm_claim):
+        score -= 260
     score += table_year_penalty(f"{row['tbl_name']} {row['category_path']}", norm_claim.get("period"))
+    score += table_scope_adjustment(row, norm_claim)
     return score, list(dict.fromkeys(hits_name + hits_path))
 
 
@@ -597,22 +950,79 @@ def score_structured_meta(row, norm_claim, weighted_tokens):
     return score, hits
 
 
+# 단위가 비어 있을 때 항목 **이름**에서 차원을 추론한다.
+#
+# 2026-08-02: KOSIS 메타의 ITEM 452개 중 158개(35%)가 unit_name 이 비어 있다.
+# 그 결과 item_mapping_type 이 빈 값을 내고, verify 가 MAPPING_TYPE_UNSUPPORTED 로
+# 막아 잠근 103건 중 58건이 판정 자체를 못 받았다(실측).
+# 단위 없는 항목들은 이름에 단위가 들어 있는 경우가 많다 —
+# '바이오헬스산업 매출액', '생산 품목별 수출 금액(합계)', '쌀가루 생산판매 현황'.
+#
+# **순서가 중요하다.** '매출액 증가율'은 금액이 아니라 비율이므로 rate 를 먼저 본다.
+# 목록은 좁게 잡았다. 이름 추론은 틀릴 수 있고, 틀리면 잘못된 좌표가 확정된다.
+NAME_DIMENSION_HINTS = (
+    ("rate", ("비율", "증감률", "증가율", "감소율", "등락률", "구성비", "비중", "점유율",
+              "전월비", "전년동월비", "전년비", "전분기비", "전년동기비")),
+    ("currency", ("매출액", "수출액", "수입액", "거래액", "생산액", "판매액", "교역액",
+                  "금액", "자산", "부채", "예산", "소득", "지출", "수익", "차입금")),
+    ("person_count", ("종사자", "취업자", "근로자", "재직자", "고용인원", "인력")),
+    ("count", ("사업체수", "기업수", "업체수", "건수", "대수", "개수", "사례수")),
+)
+
+
+def name_unit_dimension(item_name) -> str:
+    """항목 이름만으로 차원을 추론한다. 확신이 없으면 unknown 을 유지한다."""
+    compact_item = compact(item_name)
+    if not compact_item:
+        return "unknown"
+    for dimension, tokens in NAME_DIMENSION_HINTS:
+        if any(token in compact_item for token in tokens):
+            return dimension
+    return "unknown"
+
+
 def meta_unit_dimension(meta_unit, item_name=""):
-    """Infer a KOSIS unit dimension, using the ITEM name only for rate items."""
+    """Infer a KOSIS unit dimension. 단위가 없으면 ITEM 이름으로 보완한다."""
+    raw_unit = str(meta_unit or "").strip().lower()
+    compact_item = compact(item_name)
+    if re.search(r"\d{4}\s*[=＝]\s*100(?:\.0+)?", raw_unit):
+        return "index"
+    if "지수" in compact_item or "index" in str(item_name or "").lower():
+        return "index"
     dimension = infer_unit_dimension(canonicalize_unit(meta_unit))
     if dimension != "unknown":
         return dimension
-    item = compact(item_name)
-    if any(token in item for token in ("비율", "증감률", "증가율", "감소율", "등락률", "구성비")):
-        return "rate"
-    return "unknown"
+    return name_unit_dimension(item_name)
+
+
+STRUCTURAL_RATE_BASE_ITEMS = {
+    "전월": ("전월비",),
+    "전년동월": ("전년동월비",),
+}
+
+
+def effective_semantic_type(norm_claim) -> str:
+    """명시 semantic_type이 없을 때 좁은 구조 필드 조합만 복구한다.
+
+    `value_type=증감률`만으로는 비교 기준이 없어 위험하다. 전월·전년동월처럼
+    계산식이 하나로 정해지는 경우에만 rate_change로 본다.
+    """
+    semantic = str(norm_claim.get("semantic_type", "") or "").strip()
+    if semantic:
+        return semantic
+    value_type = compact(norm_claim.get("value_type", ""))
+    change_base = compact(norm_claim.get("change_base", ""))
+    if value_type == "증감률" and change_base in STRUCTURAL_RATE_BASE_ITEMS:
+        return "rate_change"
+    return ""
 
 
 def item_mapping_type(norm_claim, meta_unit, item_name):
     """Return how an ITEM can produce the claim value, or an incompatibility reason."""
     claim_dimension = norm_claim.get("unit_dimension") or infer_unit_dimension(norm_claim.get("unit", ""))
     item_dimension = meta_unit_dimension(meta_unit, item_name)
-    semantic = norm_claim.get("semantic_type", "")
+    semantic = effective_semantic_type(norm_claim)
+    change_base = compact(norm_claim.get("change_base", ""))
     indicator = compact(norm_claim.get("indicator", ""))
     compact_item = compact(item_name)
 
@@ -629,13 +1039,24 @@ def item_mapping_type(norm_claim, meta_unit, item_name):
             return "", f"기업 수 claim에 다른 ITEM={item_name}"
 
     if semantic == "rate_change":
+        direct_base_items = STRUCTURAL_RATE_BASE_ITEMS.get(change_base, ())
+        other_base_items = tuple(
+            token
+            for base, tokens in STRUCTURAL_RATE_BASE_ITEMS.items()
+            if base != change_base
+            for token in tokens
+        )
+        if direct_base_items and any(token in compact_item for token in other_base_items):
+            return "", f"비교 기준 {change_base}와 KOSIS ITEM={item_name} 불일치"
         if item_dimension == "rate" and any(
-            token in compact_item for token in ("증감률", "증가율", "감소율", "등락률")
+            token in compact_item for token in (
+                "증감률", "증가율", "감소율", "등락률", *direct_base_items,
+            )
         ):
             return "direct", ""
         if item_dimension == "rate":
             return "", f"증감률 claim에 일반 비율 ITEM={item_name}"
-        if item_dimension in {"currency", "person_count", "count", "quantity"}:
+        if item_dimension in {"currency", "person_count", "count", "quantity", "index"}:
             return "rate_from_level", "KOSIS 수준값에서 증감률 계산 필요"
         return "", f"증감률을 계산할 수 없는 KOSIS 단위={meta_unit or '-'}"
     if semantic == "absolute_change":
@@ -654,19 +1075,25 @@ def item_mapping_type(norm_claim, meta_unit, item_name):
 
 
 def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
-    """검증 API가 바로 쓸 수 있게 item 후보와 objL1 후보를 분리해서 고른다."""
+    """검증 API가 바로 쓸 수 있게 ITEM과 실제 축 순서별 OBJ 후보를 고른다."""
     selected = {
         "selected_itm_id": "", "selected_itm_name": "", "selected_itm_unit": "", "selected_itm_score": "",
-        "selected_obj_l1_axis_id": "", "selected_obj_l1_axis_name": "",
-        "selected_obj_l1": "", "selected_obj_l1_name": "", "selected_obj_l1_score": "",
         "mapping_type": "", "unit_compatibility_reason": "",
         "selected_code_status": "meta 없음",
     }
+    for level in range(1, 9):
+        selected.update({
+            f"selected_obj_l{level}_axis_id": "",
+            f"selected_obj_l{level}_axis_name": "",
+            f"selected_obj_l{level}": "",
+            f"selected_obj_l{level}_name": "",
+            f"selected_obj_l{level}_score": "",
+        })
     if not meta_rows:
         return selected
 
     items = []
-    objs = []
+    objs_by_order = defaultdict(list)
     for r in meta_rows:
         meta_unit = r.get("unit_name") or r.get("UNIT_NM", "")
         score, hits = score_structured_meta(r, norm_claim, weighted_tokens)
@@ -682,9 +1109,13 @@ def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
                 score += 30
             items.append((score, r, mapping_type, unit_reason))
         else:
-            objs.append((score, r))
+            try:
+                order = int(str(r.get("axis_order") or r.get("OBJ_ID_SN") or "1"))
+            except ValueError:
+                order = 1
+            if 1 <= order <= 8:
+                objs_by_order[order].append((score, r))
     items.sort(key=lambda x: (-x[0], x[1].get("code_name", "")))
-    objs.sort(key=lambda x: (-x[0], x[1].get("axis_id", ""), x[1].get("code_name", "")))
 
     if items:
         score, r, mapping_type, unit_reason = items[0]
@@ -696,17 +1127,73 @@ def select_structured_meta(meta_rows, norm_claim, weighted_tokens):
             "mapping_type": mapping_type,
             "unit_compatibility_reason": unit_reason,
         })
-    if objs:
-        # 점수가 모두 낮으면 총액/계/전국 같은 안전한 기본값을 우선한다.
+    for order, objs in objs_by_order.items():
+        objs.sort(key=lambda x: (-x[0], x[1].get("axis_id", ""), x[1].get("code_name", "")))
         score, r = objs[0]
         selected.update({
-            "selected_obj_l1_axis_id": r.get("axis_id") or r.get("OBJ_ID", ""),
-            "selected_obj_l1_axis_name": r.get("axis_name") or r.get("OBJ_NM", ""),
-            "selected_obj_l1": r.get("code_id") or r.get("ITM_ID", ""),
-            "selected_obj_l1_name": r.get("code_name") or r.get("ITM_NM", ""),
-            "selected_obj_l1_score": score,
+            f"selected_obj_l{order}_axis_id": r.get("axis_id") or r.get("OBJ_ID", ""),
+            f"selected_obj_l{order}_axis_name": r.get("axis_name") or r.get("OBJ_NM", ""),
+            f"selected_obj_l{order}": r.get("code_id") or r.get("ITM_ID", ""),
+            f"selected_obj_l{order}_name": r.get("code_name") or r.get("ITM_NM", ""),
+            f"selected_obj_l{order}_score": score,
         })
-    selected["selected_code_status"] = "itm/obj 후보 선택" if selected["selected_itm_id"] or selected["selected_obj_l1"] else "코드 매칭 없음"
+    has_obj = any(selected[f"selected_obj_l{level}"] for level in range(1, 9))
+    selected["selected_code_status"] = "itm/obj 후보 선택" if selected["selected_itm_id"] or has_obj else "코드 매칭 없음"
+    return selected
+
+
+def apply_mapping_override(structured_meta, meta_rows, norm_claim, rule):
+    """공식 메타에 실제로 존재하는 코드만 감사 가능한 규칙으로 시드한다."""
+    selected = dict(structured_meta)
+    item_code = str(rule.get("itm_id", "")).strip()
+    item_row = next(
+        (
+            row for row in meta_rows
+            if (row.get("is_item") == "Y" or row.get("OBJ_ID") == "ITEM")
+            and str(row.get("code_id") or row.get("ITM_ID") or "").strip() == item_code
+        ),
+        None,
+    )
+    if item_row:
+        item_name = item_row.get("code_name") or item_row.get("ITM_NM", "")
+        source_unit = str(rule.get("source_unit", "")).strip() or (
+            item_row.get("unit_name") or item_row.get("UNIT_NM", "")
+        )
+        mapping_type = str(rule.get("mapping_type", "")).strip()
+        unit_reason = ""
+        if not mapping_type:
+            mapping_type, unit_reason = item_mapping_type(norm_claim, source_unit, item_name)
+        selected.update({
+            "selected_itm_id": item_code,
+            "selected_itm_name": item_name,
+            "selected_itm_unit": source_unit,
+            "selected_itm_score": 1000,
+            "mapping_type": mapping_type,
+            "unit_compatibility_reason": unit_reason,
+        })
+
+    for level in range(1, 9):
+        code = str(rule.get(f"obj_l{level}", "")).strip()
+        if not code:
+            continue
+        obj_row = next(
+            (
+                row for row in meta_rows
+                if str(row.get("axis_order") or row.get("OBJ_ID_SN") or "").strip() == str(level)
+                and str(row.get("code_id") or row.get("ITM_ID") or "").strip() == code
+            ),
+            None,
+        )
+        if obj_row:
+            selected.update({
+                f"selected_obj_l{level}_axis_id": obj_row.get("axis_id") or obj_row.get("OBJ_ID", ""),
+                f"selected_obj_l{level}_axis_name": obj_row.get("axis_name") or obj_row.get("OBJ_NM", ""),
+                f"selected_obj_l{level}": code,
+                f"selected_obj_l{level}_name": obj_row.get("code_name") or obj_row.get("ITM_NM", ""),
+                f"selected_obj_l{level}_score": 1000,
+            })
+    selected["mapping_override_rule"] = str(rule.get("rule_id", "")).strip()
+    selected["selected_code_status"] = "코드북 후보 선택"
     return selected
 
 
@@ -737,20 +1224,36 @@ def candidate_decision(
         row.get("is_item") != "Y" and row.get("OBJ_ID") != "ITEM"
         for row in table_meta_rows
     )
-    if has_obj_axis and not structured_meta.get("selected_obj_l1"):
+    selected_obj_codes = [
+        structured_meta.get(f"selected_obj_l{level}")
+        for level in range(1, 9)
+        if structured_meta.get(f"selected_obj_l{level}")
+    ]
+    if has_obj_axis and not selected_obj_codes:
         return "REVIEW", "OBJ_UNRESOLVED", "세부 대상 OBJ를 확정하지 못함"
 
     indicator = compact(norm_claim.get("indicator", ""))
     if "무역수지" in indicator:
         return "REVIEW", "FORMULA_REQUIRED", "수출액-수입액 계산식 매핑이 필요함"
+    target_mismatch = candidate_target_mismatch(structured_meta, norm_claim, table)
+    if target_mismatch:
+        return "REVIEW", "CLAIM_ITEM_MISMATCH", target_mismatch
 
     family = claim_item_family(norm_claim)
-    selected_obj_name = compact(structured_meta.get("selected_obj_l1_name", ""))
+    selected_obj_names = [
+        compact(structured_meta.get(f"selected_obj_l{level}_name", ""))
+        for level in range(1, 9)
+        if structured_meta.get(f"selected_obj_l{level}_name")
+    ]
+    selected_obj_name = compact(" ".join(selected_obj_names))
     if family:
         aliases = {compact(family), *(compact(alias) for alias in ITEM_FAMILIES[family])}
-        broad_code = selected_obj_name in aliases or selected_obj_name in {
-            compact(f"{family}계"), compact(f"{family}전체")
+        broad_names = aliases | {
+            compact(f"{family}계"),
+            compact(f"{family}전체"),
+            compact(f"{family}산업"),
         }
+        broad_code = any(name in broad_names for name in selected_obj_names)
         if not broad_code:
             return "REVIEW", "CODESET_REQUIRED", f"{family} 집계용 OBJ 코드셋이 필요함"
 
@@ -790,6 +1293,8 @@ def rank_table_candidates(
     semantic_runtime=None,
     semantic_top_k=50,
     rerank_top_k=20,
+    lexical_reserve_k=0,
+    table_overrides=None,
 ):
     """Return table candidates using lexical or hybrid retrieval.
 
@@ -799,35 +1304,61 @@ def rank_table_candidates(
     """
     norm_claim = normalized_claim_row(claim)
     tokens = claim_tokens(norm_claim)
+    semantic_only = (
+        semantic_runtime is not None
+        and getattr(semantic_runtime, "retrieval_mode", "hybrid") == "semantic"
+    )
     candidate_pool = filtered_tables_for_claim(table_rows, norm_claim)
+    matching_overrides = {
+        (str(rule.get("org_id", "")), str(rule.get("tbl_id", ""))): rule
+        for rule in table_overrides or []
+        if table_override_matches_claim(rule, norm_claim)
+    }
+    table_lookup = {table_key(table): table for table in table_rows}
+    candidate_keys = {table_key(table) for table in candidate_pool}
+    for key in matching_overrides:
+        table = table_lookup.get(key)
+        if table is not None and key not in candidate_keys:
+            candidate_pool.append(table)
+            candidate_keys.add(key)
     lexical = []
-    for table in candidate_pool:
-        score, hits = score_table(table, tokens, norm_claim)
-        if score >= min_score:
-            lexical.append((score, hits, table))
-    lexical.sort(key=lambda item: (-item[0], item[2]["tbl_name"]))
+    if not semantic_only:
+        for table in candidate_pool:
+            score, hits = score_table(table, tokens, norm_claim)
+            override = matching_overrides.get(table_key(table))
+            if override:
+                score += int(float(override.get("boost") or 1000))
+                hits = [*hits, f"codebook:{override.get('rule_id', 'override')}"]
+            if score >= min_score:
+                lexical.append((score, hits, table))
+        lexical.sort(key=lambda item: (-item[0], item[2]["tbl_name"]))
 
     if semantic_runtime is None:
-        return [
-            {
+        results = []
+        for score, hits, table in lexical[:top_tables]:
+            override = matching_overrides.get(table_key(table))
+            results.append({
                 "score": score,
                 "hits": hits,
                 "table": table,
-                "retrieval_backend": "lexical",
+                "retrieval_backend": "lexical+codebook" if override else "lexical",
                 "lexical_score": score,
                 "lexical_eligible": True,
                 "semantic_score": None,
                 "reranker_score": None,
                 "fusion_score": None,
-            }
-            for score, hits, table in lexical[:top_tables]
-        ]
+                "override_rule_id": override.get("rule_id", "") if override else "",
+            })
+        return results
 
     query = build_claim_query(norm_claim)
-    semantic_hits = semantic_runtime.search(query, top_k=semantic_top_k)
-    table_lookup = {table_key(table): table for table in table_rows}
+    search_queries = build_table_search_queries(norm_claim)
+    if hasattr(semantic_runtime, "search_many") and search_queries:
+        semantic_hits = semantic_runtime.search_many(search_queries, top_k=semantic_top_k)
+    else:
+        semantic_hits = semantic_runtime.search(query, top_k=semantic_top_k)
     lexical_pool_size = max(semantic_top_k, rerank_top_k, top_tables)
-    lexical_pool = lexical[:lexical_pool_size]
+    lexical_pool = [] if semantic_only else lexical[:lexical_pool_size]
     lexical_by_key = {
         table_key(table): {"rank": rank, "score": score, "hits": hits}
         for rank, (score, hits, table) in enumerate(lexical_pool, 1)
@@ -847,34 +1378,58 @@ def rank_table_candidates(
         if lexical_evidence:
             lexical_score = lexical_evidence["score"]
             hits = lexical_evidence["hits"]
+            lexical_eligible = lexical_score >= min_score
+        elif semantic_only:
+            lexical_score = None
+            lexical_eligible = None
+            hits = []
         else:
             lexical_score, hits = score_table(table, tokens, norm_claim)
             # Preserve hard table exclusions even when dense retrieval finds it.
             if lexical_score <= -10**8:
                 continue
+            lexical_eligible = lexical_score >= min_score
+        structural_score, structural_hits = table_structural_signals(table, norm_claim)
+        if structural_score <= -10**8:
+            continue
         semantic_evidence = semantic_by_key.get(key)
         lexical_rank = lexical_evidence["rank"] if lexical_evidence else None
         semantic_rank = semantic_evidence["rank"] if semantic_evidence else None
-        fusion = normalized_rrf_score(lexical_rank, semantic_rank)
+        fusion = (1.0 / max(semantic_rank, 1)) if semantic_only and semantic_rank else normalized_rrf_score(lexical_rank, semantic_rank)
         fused.append(
             {
                 "table": table,
-                "hits": hits,
+                "hits": [*hits, *structural_hits],
                 "lexical_score": lexical_score,
-                "lexical_eligible": lexical_score >= min_score,
+                "structural_score": structural_score,
+                "lexical_eligible": lexical_eligible,
                 "semantic_score": semantic_evidence["score"] if semantic_evidence else None,
                 "fusion_score": fusion,
                 "reranker_score": None,
+                "override_rule_id": (
+                    matching_overrides.get(key, {}).get("rule_id", "")
+                ),
             }
         )
-    fused.sort(
-        key=lambda item: (
-            -int(item["lexical_eligible"]),
-            -item["fusion_score"],
-            -item["lexical_score"],
-            item["table"]["tbl_name"],
+    if semantic_only:
+        fused.sort(
+            key=lambda item: (
+                -item["fusion_score"],
+                -item["semantic_score"],
+                -item["structural_score"],
+                item["table"]["tbl_name"],
+            )
         )
-    )
+    else:
+        fused.sort(
+            key=lambda item: (
+                -int(item["lexical_eligible"]),
+                -item["structural_score"],
+                -item["fusion_score"],
+                -item["lexical_score"],
+                item["table"]["tbl_name"],
+            )
+        )
 
     rerank_count = min(rerank_top_k, len(fused))
     if rerank_count:
@@ -885,25 +1440,90 @@ def rank_table_candidates(
         for item, reranker_score in zip(fused[:rerank_count], reranker_scores):
             item["reranker_score"] = reranker_score
 
+    dense_scores = [
+        item["semantic_score"] for item in fused
+        if item["semantic_score"] is not None
+    ]
+    dense_min = min(dense_scores) if dense_scores else 0.0
+    dense_max = max(dense_scores) if dense_scores else 0.0
+    dense_span = dense_max - dense_min
+    reranker_scores = [
+        item["reranker_score"] for item in fused
+        if item["reranker_score"] is not None
+    ]
+    reranker_min = min(reranker_scores) if reranker_scores else 0.0
+    reranker_max = max(reranker_scores) if reranker_scores else 0.0
+    reranker_span = reranker_max - reranker_min
     for item in fused:
-        if item["reranker_score"] is None:
-            final = item["fusion_score"]
-            backend = "hybrid"
+        if item["semantic_score"] is None:
+            dense_relevance = 0.0
+        elif dense_span <= 1e-12:
+            dense_relevance = 0.5
         else:
-            final = 0.35 * item["reranker_score"] + 0.65 * item["fusion_score"]
-            backend = "hybrid+reranker"
+            dense_relevance = (item["semantic_score"] - dense_min) / dense_span
+        structural_adjustment = max(-0.12, min(0.10, item["structural_score"] / 2500.0))
+        if item["reranker_score"] is None:
+            final = 0.70 * dense_relevance + 0.20 * item["fusion_score"]
+            backend = "semantic" if semantic_only else "hybrid"
+        else:
+            reranker_relevance = (
+                0.5
+                if reranker_span <= 1e-12
+                else (item["reranker_score"] - reranker_min) / reranker_span
+            )
+            final = (
+                0.70 * reranker_relevance
+                + 0.20 * dense_relevance
+                + 0.10 * item["fusion_score"]
+            )
+            backend = "semantic+reranker" if semantic_only else "hybrid+reranker"
+        final += structural_adjustment
+        if item.get("override_rule_id"):
+            backend += "+codebook"
+        if item.get("structural_score"):
+            backend += "+guards"
         item["score"] = int(round(final * 1000))
         item["retrieval_backend"] = backend
-    fused.sort(
-        key=lambda item: (
-            -int(item["lexical_eligible"]),
-            -item["score"],
-            -item["fusion_score"],
-            -item["lexical_score"],
-            item["table"]["tbl_name"],
+    if semantic_only:
+        fused.sort(
+            key=lambda item: (
+                -item["score"],
+                -item["structural_score"],
+                -item["fusion_score"],
+                item["table"]["tbl_name"],
+            )
         )
-    )
-    return fused[:top_tables]
+    else:
+        fused.sort(
+            key=lambda item: (
+                -int(item["lexical_eligible"]),
+                -item["score"],
+                -item["structural_score"],
+                -item["fusion_score"],
+                -item["lexical_score"],
+                item["table"]["tbl_name"],
+            )
+        )
+    if lexical_reserve_k <= 0:
+        return fused[:top_tables]
+
+    required_keys = {
+        table_key(table)
+        for _, _, table in lexical[: min(lexical_reserve_k, top_tables)]
+    }
+    selected = [item for item in fused if table_key(item["table"]) in required_keys]
+    selected_keys = {table_key(item["table"]) for item in selected}
+    for item in fused:
+        key = table_key(item["table"])
+        if key in selected_keys:
+            continue
+        selected.append(item)
+        selected_keys.add(key)
+        if len(selected) >= top_tables:
+            break
+    original_order = {table_key(item["table"]): index for index, item in enumerate(fused)}
+    selected.sort(key=lambda item: original_order[table_key(item["table"])])
+    return selected[:top_tables]
 
 
 def _float_or_none(value):
@@ -913,6 +1533,14 @@ def _float_or_none(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _precomputed_sort_key(item):
+    """Keep --ranking-input in exactly the first-pass candidate order."""
+    rank = item.get("precomputed_rank")
+    if rank is not None:
+        return (rank,)
+    return (-int(item["lexical_eligible"]), -item["score"])
 
 
 def load_precomputed_rankings(path, table_rows):
@@ -934,6 +1562,7 @@ def load_precomputed_rankings(path, table_rows):
         )
         grouped[measurement_key].append(
             {
+                "precomputed_rank": int(float(row.get("candidate_rank") or 999999)),
                 "score": int(float(row.get("candidate_score") or 0)),
                 "hits": [hit for hit in row.get("candidate_hits", "").split(",") if hit],
                 "table": table,
@@ -943,12 +1572,11 @@ def load_precomputed_rankings(path, table_rows):
                 "semantic_score": _float_or_none(row.get("semantic_score")),
                 "reranker_score": _float_or_none(row.get("reranker_score")),
                 "fusion_score": _float_or_none(row.get("fusion_score")),
+                "override_rule_id": row.get("table_override_rule", ""),
             }
         )
     for candidates in grouped.values():
-        candidates.sort(
-            key=lambda item: (-int(item["lexical_eligible"]), -item["score"])
-        )
+        candidates.sort(key=_precomputed_sort_key)
     return grouped
 
 
@@ -963,16 +1591,33 @@ def main():
     parser.add_argument("--min-score", type=int, default=2)
     parser.add_argument(
         "--retrieval-mode",
-        choices=["auto", "lexical", "hybrid"],
+        choices=["auto", "lexical", "semantic", "hybrid"],
         default="auto",
-        help="auto는 임베딩 인덱스가 있으면 hybrid, 없으면 lexical 사용",
+        help="auto는 semantic index가 유효하면 hybrid, 아니면 lexical fallback 사용",
     )
     parser.add_argument("--semantic-index", default=str(DEFAULT_SEMANTIC_INDEX))
     parser.add_argument("--semantic-top-k", type=int, default=50)
     parser.add_argument("--rerank-top-k", type=int, default=20)
+    parser.add_argument(
+        "--lexical-reserve-k",
+        type=int,
+        default=0,
+        help="Keep this many strongest lexical tables in the final hybrid Top-K",
+    )
     parser.add_argument("--reranker-model", default=DEFAULT_RERANKER_MODEL)
+    parser.add_argument("--reranker-batch-size", type=int, default=8)
     parser.add_argument("--device", default=None, help="임베딩/리랭커 장치: cuda 또는 cpu")
     parser.add_argument("--no-reranker", action="store_true")
+    parser.add_argument(
+        "--table-overrides",
+        default=str(DEFAULT_TABLE_OVERRIDES),
+        help="감사 가능한 통계표 검색 override CSV. 빈 문자열이면 사용하지 않음",
+    )
+    parser.add_argument(
+        "--mapping-overrides",
+        default=str(DEFAULT_MAPPING_OVERRIDES),
+        help="공식 ITEM/OBJ 코드로 검증되는 매핑 override CSV. 빈 문자열이면 사용하지 않음",
+    )
     parser.add_argument(
         "--ranking-input",
         default="",
@@ -1008,6 +1653,16 @@ def main():
         r["_compact_tbl_name"] = compact(r["tbl_name"])
         r["_compact_category_path"] = compact(r["category_path"])
     meta_by_table = load_meta_index(meta_path)
+    table_overrides = (
+        load_table_overrides(Path(args.table_overrides).expanduser())
+        if args.table_overrides
+        else []
+    )
+    mapping_overrides = (
+        load_mapping_overrides(Path(args.mapping_overrides).expanduser())
+        if args.mapping_overrides
+        else []
+    )
 
     precomputed = None
     semantic_runtime = None
@@ -1018,26 +1673,44 @@ def main():
     elif retrieval_mode != "lexical":
         semantic_index = Path(args.semantic_index)
         try:
+            print(
+                f"semantic_runtime=loading index={semantic_index} device={args.device}",
+                flush=True,
+            )
+            runtime_started = time.monotonic()
             semantic_runtime = SemanticSearchRuntime(
                 semantic_index,
                 reranker_model=args.reranker_model,
                 use_reranker=not args.no_reranker,
                 device=args.device,
+                reranker_batch_size=args.reranker_batch_size,
             )
             expected_hash = semantic_runtime.index.manifest.get("source_sha256")
             if expected_hash and expected_hash != file_sha256(table_path):
                 raise ValueError(
                     "임베딩 인덱스가 현재 --table-index와 다릅니다. 인덱스를 다시 생성하세요."
                 )
-            retrieval_mode = "hybrid"
+            retrieval_mode = "hybrid" if args.retrieval_mode == "auto" else args.retrieval_mode
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
-            if args.retrieval_mode == "hybrid":
-                raise
+            if args.retrieval_mode in {"semantic", "hybrid"}:
+                raise SystemExit(
+                    "BGE-M3 semantic retrieval requires a valid --semantic-index. "
+                    "Build it with kosis_build_embedding_index.py first, or use "
+                    "--retrieval-mode auto/lexical for lexical fallback. "
+                    f"Original error: {exc}"
+                ) from exc
             retrieval_mode = "lexical"
             print(f"semantic_retrieval=disabled ({exc})")
+        else:
+            print(
+                f"semantic_runtime=ready backend={semantic_runtime.index.search_backend} "
+                f"seconds={time.monotonic() - runtime_started:.1f}",
+                flush=True,
+            )
 
     out = []
-    for claim in claims:
+    search_started = time.monotonic()
+    for claim_number, claim in enumerate(claims, 1):
         norm_claim = normalized_claim_row(claim)
         # 입력 파일 자체가 이미 is_claim=True 100건으로 선별됐다고 가정한다.
         # is_claim/verifiable_kosis 값은 후보 매핑의 필터로 사용하지 않는다.
@@ -1046,6 +1719,8 @@ def main():
         if precomputed is not None:
             ranked = precomputed.get(measurement_key, [])[: args.top_tables]
         else:
+            if semantic_runtime is not None:
+                semantic_runtime.retrieval_mode = retrieval_mode
             ranked = rank_table_candidates(
                 table_rows,
                 norm_claim,
@@ -1054,6 +1729,14 @@ def main():
                 semantic_runtime=semantic_runtime,
                 semantic_top_k=args.semantic_top_k,
                 rerank_top_k=args.rerank_top_k,
+                lexical_reserve_k=args.lexical_reserve_k,
+                table_overrides=table_overrides,
+            )
+        if claim_number == 1 or claim_number % 5 == 0 or claim_number == len(claims):
+            print(
+                f"semantic_claim_progress={claim_number}/{len(claims)} "
+                f"elapsed_seconds={time.monotonic() - search_started:.1f}",
+                flush=True,
             )
         for rank, candidate in enumerate(ranked, 1):
             table_score = candidate["score"]
@@ -1061,19 +1744,36 @@ def main():
             table = candidate["table"]
             runner_up_score = None
             if rank == 1:
-                eligibility = candidate.get("lexical_eligible", True)
-                runner_up = next(
-                    (
-                        other
-                        for other in ranked[1:]
-                        if other.get("lexical_eligible", True) == eligibility
-                    ),
-                    None,
-                )
+                if retrieval_mode == "semantic":
+                    runner_up = ranked[1] if len(ranked) > 1 else None
+                else:
+                    eligibility = candidate.get("lexical_eligible", True)
+                    runner_up = next(
+                        (
+                            other
+                            for other in ranked[1:]
+                            if other.get("lexical_eligible", True) == eligibility
+                        ),
+                        None,
+                    )
                 if runner_up is not None:
                     runner_up_score = runner_up["score"]
             table_meta_rows = meta_by_table.get((table["org_id"], table["tbl_id"]), [])
             structured_meta = select_structured_meta(table_meta_rows, norm_claim, tokens)
+            mapping_rule = next(
+                (
+                    rule for rule in mapping_overrides
+                    if mapping_override_matches_claim(rule, norm_claim, table)
+                ),
+                None,
+            )
+            if mapping_rule:
+                structured_meta = apply_mapping_override(
+                    structured_meta,
+                    table_meta_rows,
+                    norm_claim,
+                    mapping_rule,
+                )
             candidate_status, candidate_status_code, candidate_status_reason = candidate_decision(
                 rank,
                 table_score,
@@ -1083,6 +1783,19 @@ def main():
                 norm_claim,
                 table,
             )
+            # 표가 그 주기를 못 주면 후보에서 뺀다 (2026-08-04).
+            # 홀드아웃1 표 245개 중 연간 전용이 115개, 격년이 69개였다 —
+            # 분기·월 주장은 대부분 답할 수 없는 표로 갔고,
+            # KOSIS 는 없는 주기를 물어도 에러 없이 연간을 돌려줘서 그대로 비교됐다.
+            table_prd_se = "|".join(sorted(table_periodicities(table_meta_rows)))
+            if not periodicity_satisfied(
+                    normalize_periodicity(norm_claim.get("prd_se")),
+                    table_periodicities(table_meta_rows)):
+                candidate_status = "REJECT"
+                candidate_status_code = "PERIODICITY_NOT_AVAILABLE"
+                candidate_status_reason = (
+                    f"표는 {table_prd_se or '?'} 만 제공, 주장은 "
+                    f"{normalize_periodicity(norm_claim.get('prd_se'))}")
             meta_candidates = top_meta_candidates(table_meta_rows, tokens, args.top_meta)
             if meta_candidates:
                 meta_summary = " | ".join(
@@ -1113,16 +1826,21 @@ def main():
                 "candidate_rank": rank,
                 "candidate_score": table_score,
                 "candidate_runner_up_score": runner_up_score if runner_up_score is not None else "",
+                "table_prd_se_list": table_prd_se,
                 "candidate_status": candidate_status,
                 "candidate_status_code": candidate_status_code,
                 "candidate_status_reason": candidate_status_reason,
                 "candidate_hits": ",".join(list(dict.fromkeys(table_hits))[:20]),
                 "retrieval_backend": candidate.get("retrieval_backend", retrieval_mode),
                 "lexical_score": candidate.get("lexical_score") if candidate.get("lexical_score") is not None else "",
-                "lexical_eligible": "Y" if candidate.get("lexical_eligible", True) else "N",
+                "lexical_eligible": (
+                    "" if candidate.get("lexical_eligible") is None
+                    else "Y" if candidate.get("lexical_eligible") else "N"
+                ),
                 "semantic_score": candidate.get("semantic_score") if candidate.get("semantic_score") is not None else "",
                 "reranker_score": candidate.get("reranker_score") if candidate.get("reranker_score") is not None else "",
                 "fusion_score": candidate.get("fusion_score") if candidate.get("fusion_score") is not None else "",
+                "table_override_rule": candidate.get("override_rule_id", ""),
                 "org_id": table["org_id"],
                 "tbl_id": table["tbl_id"],
                 "tbl_name": table["tbl_name"],
@@ -1138,13 +1856,25 @@ def main():
         "value", "unit", "raw_unit", "unit_dimension", "semantic_type", "entity_type",
         "value_type", "measurement_role", "measurement_usage", "period", "prd_se", "change_base", "comparison_period",
         "candidate_rank", "candidate_score", "candidate_runner_up_score",
+        "table_prd_se_list",
         "candidate_status", "candidate_status_code", "candidate_status_reason", "candidate_hits",
         "retrieval_backend", "lexical_score", "lexical_eligible", "semantic_score", "reranker_score", "fusion_score",
+        "table_override_rule", "mapping_override_rule",
         "org_id", "tbl_id", "tbl_name", "stat_id", "category_path",
         "meta_candidates",
         "selected_itm_id", "selected_itm_name", "selected_itm_unit", "selected_itm_score",
-        "selected_obj_l1_axis_id", "selected_obj_l1_axis_name",
-        "selected_obj_l1", "selected_obj_l1_name", "selected_obj_l1_score", "selected_code_status",
+        *[
+            field
+            for level in range(1, 9)
+            for field in (
+                f"selected_obj_l{level}_axis_id",
+                f"selected_obj_l{level}_axis_name",
+                f"selected_obj_l{level}",
+                f"selected_obj_l{level}_name",
+                f"selected_obj_l{level}_score",
+            )
+        ],
+        "selected_code_status",
         "mapping_type", "unit_compatibility_reason",
         "claim_text",
     ]

@@ -18,6 +18,7 @@ import os
 import re
 import time
 import uuid
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -72,6 +73,23 @@ RESPONSE_SCHEMA = {
 
 
 
+# 품목 규칙은 프롬프트에서 뺐다 (2026-08-02). 두 번 시도했고 둘 다 원본보다 나빴다.
+#
+#   원본                         대상 있음 222/443 (50%) · 근거 없음 39
+#   1차 '문장에 없으면 -'         대상 있음 117/444 (26%) · 근거 없음 14
+#   2차 '총계 문장에만' 으로 좁힘   대상 있음  97/449 (22%) · 근거 없음 22
+#
+# 규칙을 좁혔는데 더 나빠졌다. 어떤 형태로 넣든 모델이 품목을 대거 버린다.
+# 잃은 것 중에는 문장에 **있는** 품목이 많았다 —
+#   '폴크스바겐그룹 전기차 80만대', '로봇이 주요 공정의 100%를 처리',
+#   '저비용항공사(LCC) 이용객 2419만명'.
+#
+# 대신 하류에서 막는다: prepare_kosis_mapping_input.claim_item_grounded 가
+# 문장·지표에 근거가 없는 대상을 지운다. 오탐을 27 -> 12 로 줄여 검증했고,
+# API 없이 테스트되며, 정당한 대상을 잃지 않는다.
+#
+# 교훈: LLM 프롬프트로 정밀한 제약을 거는 것보다, 출력에 결정적 후처리를 거는 편이
+#       측정 가능하고 되돌리기 쉽다. 프롬프트는 방향을 주고 경계는 코드로 긋는다.
 SYSTEM_PROMPT = """너는 한국 뉴스 문장에서 통계 주장을 구조화 추출하는 시스템이다. 반드시 JSON만 출력한다.
 
 ## 출력 JSON 스키마
@@ -121,6 +139,14 @@ SYSTEM_PROMPT = """너는 한국 뉴스 문장에서 통계 주장을 구조화 
 - measurement_indicator는 지표, measurement_item은 품목·산업·대상으로 분리한다. 예: 반도체 1419억 달러는 indicator=수출액, item=반도체다.
 - 한 문장에 여러 품목이 있으면 각 수치를 가까운 품목과 연결한다. 바이오헬스·농수산식품·화장품 값을 하나의 결합 indicator로 묶지 않는다.
 - 현재값과 이전값의 연도가 다르면 measurement_period도 각각 다르게 쓴다. 기사 제목과 앞뒤 문장에 명시된 연도를 활용한다.
+- `작년 8월`, `지난달` 같은 상대 시점이 있을 때만 기사 작성일을 달력 기준으로 삼아 YYYYMM으로 변환한다. `한 달 전`은 기사일이 아니라 문장의 현재 관측월에서 한 달을 뺀다.
+- `2022년 기록을 2억 달러 웃돌아 2024년에 ...`의 `2억 달러`는 2024년 관측값의 증감값이다. 2022년은 change_base=특정시점의 비교 기준이며 증감값의 measurement_period가 아니다.
+- **'한 달 전', '지난달', '직전 분기'처럼 시점을 가리키는 말은 change_base가 아니다.**
+  그런 수치는 시점만 옮긴 같은 지표이므로 change_base는 문장의 주 비교 기준을 그대로 쓴다.
+  예: '1년 전 대비 6.6% 늘어 한 달 전(1.4%)에 비해 오름폭을 키웠다'
+      → 6.6%: period=202412, change_base=전년동월
+      → 1.4%: period=202411, change_base=**전년동월** (전월이 아니다)
+  (실측 오류: 1.4%에 change_base=전월이 붙어 11월 대 10월(-2.1%)을 계산해 '불일치'로 단언했다.)
 - 수주·도입·발표·조사 시작 연도처럼 원인이나 배경을 설명하는 연도는 관측값의 measurement_period로 쓰지 않는다. 예: '2021년 수주한 선박이 2024년에 256억 달러 수출'의 수출액 시점은 2024다.
 - 기사 작성일은 통계 관측 시점의 근거가 아니다. 제목·현재 문장·앞뒤 문장에서 시점을 확정할 수 없으면 measurement_period와 measurement_prd_se를 -로 두고 추측하지 않는다.
 - '처음으로 100억 달러를 돌파'의 100억 달러처럼 실제 관측값이 아니라 돌파 기준인 값은 CONTEXT로 분류한다.
@@ -138,6 +164,18 @@ USER_TMPL = """기사 제목: {title}
 {numeric_candidates}
 
 위 후보를 참고해 [검증 대상 문장]의 주장을 JSON으로 추출하라. 후보는 검증 보조 정보이며 문맥에 맞게 역할과 용도를 판정하라."""
+
+RETRIEVAL_CONTEXT_TMPL = """
+
+[KOSIS retrieval hints - not article evidence]
+{retrieval_context}
+
+Use these candidates only to normalize possible indicator and item names.
+Never copy a value, period, unit, population, or scope from a candidate unless
+the article title, claim sentence, or neighboring sentences support it.
+If time information is absent or ambiguous in the article, keep the period and
+periodicity unresolved. The article evidence always takes priority.
+"""
 
 REPAIR_TMPL = """
 
@@ -161,7 +199,8 @@ OUT_COLS = ["claim_id", "claim_measurement_id", "article_id", "title", "date", "
             "evidence_text", "extraction_confidence", "needs_review", "review_reason",
             "measurement_repaired", "measurement_fallback_count", "measurement_binding_fallback_count",
             "extraction_model", "prompt_version", "extracted_at"]
-PROMPT_VERSION = "v1.5-measurement-binding"
+PROMPT_VERSION = "v1.7-relative-comparison-period"
+RETRIEVAL_PROMPT_VERSION = "v1.8-relative-comparison-period-retrieval"
 
 NUMBER_TOKEN = (
     r"(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)"
@@ -362,8 +401,20 @@ def prompt_candidates(candidates):
     return json.dumps(compact, ensure_ascii=False)
 
 
-def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4,
-             effort="none", previous_result=None, issues=None):
+def build_hcx_user_content(
+    title,
+    date,
+    text,
+    prev,
+    nxt,
+    candidates,
+    retrieval_context="",
+    article_context="",
+    local_context="",
+    antecedent_context="",
+    previous_result=None,
+    issues=None,
+):
     user_content = USER_TMPL.format(
         title=title,
         date=date,
@@ -372,11 +423,55 @@ def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4
         next=nxt,
         numeric_candidates=prompt_candidates(candidates),
     )
+    context_sections = [
+        ("Shared article context", article_context),
+        ("Claim-local context", local_context),
+        ("Related sentences from the same article", antecedent_context),
+    ]
+    context_text = "\n\n".join(
+        f"[{label}]\n{str(value).strip()}"
+        for label, value in context_sections
+        if str(value or "").strip() not in {"", "-"}
+    )
+    if context_text:
+        user_content += (
+            "\n\n[Additional article evidence]\n"
+            f"{context_text}\n"
+            "Use this evidence only to resolve the claim subject, item, and "
+            "explicit or relative measurement period. The article publication "
+            "date is metadata, not a measurement period. Major-target hints "
+            "are retrieval hints and must be confirmed against quoted article "
+            "sentences. Never copy a value from outside the target claim span."
+        )
+    if retrieval_context and str(retrieval_context).strip() not in {"", "-", "[]"}:
+        user_content += RETRIEVAL_CONTEXT_TMPL.format(
+            retrieval_context=str(retrieval_context).strip()
+        )
     if issues:
         user_content += REPAIR_TMPL.format(
             issues="; ".join(issues),
             previous_result=json.dumps(previous_result, ensure_ascii=False),
         )
+    return user_content
+
+
+def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4,
+             effort="none", previous_result=None, issues=None, retrieval_context="",
+             article_context="", local_context="", antecedent_context=""):
+    user_content = build_hcx_user_content(
+        title=title,
+        date=date,
+        text=text,
+        prev=prev,
+        nxt=nxt,
+        candidates=candidates,
+        retrieval_context=retrieval_context,
+        article_context=article_context,
+        local_context=local_context,
+        antecedent_context=antecedent_context,
+        previous_result=previous_result,
+        issues=issues,
+    )
     body = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -394,7 +489,12 @@ def call_hcx(api_key, model, title, date, text, prev, nxt, candidates, retries=4
                "X-NCP-CLOVASTUDIO-REQUEST-ID": str(uuid.uuid4()),
                "Content-Type": "application/json"}
     for i in range(retries):
-        r = requests.post(URL.format(model=model), headers=headers, json=body, timeout=90)
+        # 연결 자체는 빨리 실패시키고, 응답 본문은 최대 90초까지 기다린다.
+        # 단일 숫자 timeout은 DNS/연결 단계와 응답 단계를 구분하지 않아
+        # Colab에서 멈춘 것처럼 보이는 시간이 길어질 수 있다.
+        r = requests.post(
+            URL.format(model=model), headers=headers, json=body, timeout=(15, 90)
+        )
         if r.status_code == 429:
             time.sleep(5 * (i + 1)); continue
         r.raise_for_status()
@@ -424,9 +524,26 @@ def period_is_grounded(period, claim):
     value = norm(period)
     if value == "-":
         return False
+    article_context = re.sub(
+        r"(?mi)^\[publication_date\][^\n]*(?:\n|$)",
+        "",
+        norm(claim.get("article_context")),
+    )
     evidence = " ".join(
-        norm(claim.get(field))
-        for field in ("title", "claim_text", "prev_sentence", "next_sentence")
+        [
+            *[
+                norm(claim.get(field))
+                for field in (
+                    "title",
+                    "claim_text",
+                    "prev_sentence",
+                    "next_sentence",
+                )
+            ],
+            article_context,
+            norm(claim.get("local_context")),
+            norm(claim.get("antecedent_context")),
+        ]
     )
     year_match = re.search(r"(?:19|20)\d{2}", value)
     if not year_match:
@@ -443,7 +560,102 @@ def period_is_grounded(period, claim):
         return True
     if year == article_year - 1 and re.search(r"지난해|작년|전년", evidence):
         return True
+    article_date = _parse_article_date(claim.get("date"))
+    if article_date and re.fullmatch(r"(?:19|20)\d{4}", value):
+        previous = _shift_month(article_date.strftime("%Y%m"), -1)
+        if value == previous and re.search(r"지난\s*달|지난월", evidence):
+            return True
     return False
+
+
+def _parse_article_date(value):
+    match = re.search(r"((?:19|20)\d{2})[-./]?(\d{2})[-./]?(\d{2})", norm(value))
+    if not match:
+        return None
+    try:
+        return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None
+
+
+def _shift_month(period, offset):
+    if not re.fullmatch(r"(?:19|20)\d{4}", norm(period)):
+        return "-"
+    year, month = int(period[:4]), int(period[4:])
+    index = year * 12 + month - 1 + offset
+    return f"{index // 12:04d}{index % 12 + 1:02d}"
+
+
+def apply_relative_measurement_periods(result, claim):
+    """Resolve explicit relative months without treating publication as evidence otherwise."""
+    text = norm(claim.get("claim_text"))
+    article_date = _parse_article_date(claim.get("date"))
+    claim_period = norm(result.get("period"))
+    current_periods = [
+        norm(row.get("measurement_period"))
+        for row in result.get("measurements") or []
+        if norm(row.get("measurement_role")) == "현재값"
+        and re.fullmatch(r"(?:19|20)\d{4}", norm(row.get("measurement_period")))
+    ]
+    anchor = claim_period if re.fullmatch(r"(?:19|20)\d{4}", claim_period) else (
+        current_periods[0] if current_periods else "-"
+    )
+    corrected = 0
+    search_from = 0
+    for measurement in result.get("measurements") or []:
+        key = norm(measurement.get("measurement_text"))
+        if key in {"", "-"}:
+            key = norm(measurement.get("value"))
+        index = text.find(key, search_from) if key not in {"", "-"} else -1
+        if index < 0 and key not in {"", "-"}:
+            index = text.find(key)
+        if index < 0:
+            continue
+        search_from = index + len(key)
+        local = text[max(0, index - 36):index + len(key)]
+        resolved = ""
+        relative_month = re.findall(r"(작년|지난해|올해|금년)\s*(\d{1,2})\s*월", local)
+        if relative_month and article_date:
+            label, raw_month = relative_month[-1]
+            month = int(raw_month)
+            if 1 <= month <= 12:
+                year = article_date.year - 1 if label in {"작년", "지난해"} else article_date.year
+                resolved = f"{year:04d}{month:02d}"
+        elif re.search(r"한\s*달\s*전", local) and anchor != "-":
+            resolved = _shift_month(anchor, -1)
+        elif re.search(r"지난\s*달|지난월", local) and article_date:
+            resolved = _shift_month(article_date.strftime("%Y%m"), -1)
+        if resolved and resolved != "-" and norm(measurement.get("measurement_period")) != resolved:
+            measurement["measurement_period"] = resolved
+            measurement["measurement_prd_se"] = "M"
+            corrected += 1
+    return corrected
+
+
+def apply_comparison_value_periods(result, claim):
+    """Keep a comparison year as the base, not the delta value's observation period."""
+    text = norm(claim.get("claim_text"))
+    target = norm(result.get("period"))
+    if not re.fullmatch(r"(?:19|20)\d{2}(?:0[1-9]|1[0-2])?", target):
+        return 0
+    corrected = 0
+    for measurement in result.get("measurements") or []:
+        if norm(measurement.get("measurement_role")) not in {"증감값", "증감률"}:
+            continue
+        key = norm(measurement.get("measurement_text"))
+        index = text.find(key) if key not in {"", "-"} else -1
+        if index < 0:
+            continue
+        local = text[max(0, index - 48):index + len(key) + 24]
+        comparison = re.search(
+            r"((?:19|20)\d{2})\s*년(?:[^\n.!?]{0,30})?(?:기록|수준|실적|기준)(?:[^\n.!?]{0,30})?(?:웃돌|넘|상회|밑돌|미달)",
+            local,
+        )
+        if comparison and norm(measurement.get("measurement_period")) == comparison.group(1):
+            measurement["measurement_period"] = target
+            measurement["measurement_prd_se"] = "M" if len(target) == 6 else "Y"
+            corrected += 1
+    return corrected
 
 
 def apply_local_explicit_years(result, claim):
@@ -676,6 +888,10 @@ def extract_claim(api_key, model, claim, effort="none"):
         "nxt": claim.get("next_sentence", "-"),
         "candidates": candidates,
         "effort": effort,
+        "retrieval_context": claim.get("_retrieval_context", ""),
+        "article_context": claim.get("article_context", ""),
+        "local_context": claim.get("local_context", ""),
+        "antecedent_context": claim.get("antecedent_context", ""),
     }
     raw = call_hcx(**common)
     result = parse_json(raw)
@@ -687,8 +903,10 @@ def extract_claim(api_key, model, claim, effort="none"):
         result = parse_json(raw)
 
     result = normalize_hcx_measurements(result, candidates, text=text)
+    relative_period_count = apply_relative_measurement_periods(result, claim)
     apply_local_explicit_years(result, claim)
     apply_local_explicit_months(result, claim)
+    comparison_period_count = apply_comparison_value_periods(result, claim)
     period_removed_count = remove_ungrounded_measurement_periods(result, claim)
     binding_fallback_count = ensure_measurement_bindings(result)
     fallback_count = add_fallback_measurements(result, candidates)
@@ -708,6 +926,13 @@ def extract_claim(api_key, model, claim, effort="none"):
     result["_measurement_fallback_count"] = str(fallback_count)
     result["_measurement_binding_fallback_count"] = str(binding_fallback_count)
     result["_measurement_period_removed_count"] = str(period_removed_count)
+    result["_measurement_relative_period_count"] = str(relative_period_count)
+    result["_measurement_comparison_period_count"] = str(comparison_period_count)
+    result["_prompt_version"] = (
+        RETRIEVAL_PROMPT_VERSION
+        if norm(claim.get("_retrieval_context")) not in {"-", "[]"}
+        else PROMPT_VERSION
+    )
     return result
 
 
@@ -740,7 +965,8 @@ def to_rows(claim, j, model):
                                        "origin_country", "destination_country", "period", "period_end",
                                        "prd_se", "time_resolution_status", "evidence_text",
                                        "extraction_confidence", "needs_review", "review_reason"]},
-        "extraction_model": model, "prompt_version": PROMPT_VERSION,
+        "extraction_model": model,
+        "prompt_version": norm(j.get("_prompt_version", PROMPT_VERSION)),
         "extracted_at": time.strftime("%Y-%m-%d"),
         "measurement_repaired": norm(j.get("_measurement_repaired", "N")),
         "measurement_fallback_count": norm(j.get("_measurement_fallback_count", "0")),
@@ -784,6 +1010,11 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--sleep", type=float, default=1.0)
     ap.add_argument("--overwrite", action="store_true")
+    ap.add_argument(
+        "--retrieval-context",
+        default="",
+        help="claim_id,retrieval_context CSV from kosis_early_retrieve.py",
+    )
     a = ap.parse_args()
 
     load_dotenv()
@@ -793,6 +1024,23 @@ def main():
 
     with open(a.input, encoding="utf-8-sig") as f:
         claims = list(csv.DictReader(f))
+    if a.retrieval_context:
+        with open(a.retrieval_context, encoding="utf-8-sig") as f:
+            context_rows = list(csv.DictReader(f))
+        context_by_claim = {
+            norm(row.get("claim_id")): row.get("retrieval_context", "")
+            for row in context_rows
+            if norm(row.get("claim_id")) != "-"
+        }
+        for claim in claims:
+            claim["_retrieval_context"] = context_by_claim.get(
+                norm(claim.get("claim_id")), ""
+            )
+        print(
+            f"retrieval_context={len(context_by_claim)} "
+            f"matched={sum(bool(c.get('_retrieval_context')) for c in claims)}",
+            flush=True,
+        )
     output_path = Path(a.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     done = set()
@@ -805,7 +1053,7 @@ def main():
                     "새 출력 경로를 쓰거나 --overwrite를 지정하세요."
                 )
             done = {r["claim_id"] for r in reader}
-        print(f"이어받기: {len(done)}건 완료됨")
+        print(f"이어받기: {len(done)}건 완료됨", flush=True)
 
     mode = "a" if done else "w"
     with output_path.open(mode, newline="", encoding="utf-8-sig") as f:
@@ -813,11 +1061,16 @@ def main():
         if mode == "w":
             w.writeheader()
         n = 0
+        pending_total = sum(c["claim_id"] not in done for c in claims)
         for c in claims:
             if c["claim_id"] in done:
                 continue
             if a.limit and n >= a.limit:
                 break
+            print(
+                f"[{n + 1}/{pending_total}] {c['claim_id']} HCX 요청 시작",
+                flush=True,
+            )
             try:
                 result = extract_claim(key, a.model, c, effort=a.effort)
                 rows = to_rows(c, result, a.model)
@@ -826,12 +1079,12 @@ def main():
                 fallback = result.get("_measurement_fallback_count", "0")
                 binding = result.get("_measurement_binding_fallback_count", "0")
                 period_removed = result.get("_measurement_period_removed_count", "0")
-                print(f"[{c['claim_id']}] ok ({len(rows)} 행, repair={repaired}, fallback={fallback}, binding={binding}, period_removed={period_removed})")
+                print(f"[{c['claim_id']}] ok ({len(rows)} 행, repair={repaired}, fallback={fallback}, binding={binding}, period_removed={period_removed})", flush=True)
             except Exception as e:
-                print(f"[{c['claim_id']}] 실패: {type(e).__name__}: {e}")
+                print(f"[{c['claim_id']}] 실패: {type(e).__name__}: {e}", flush=True)
             n += 1
             time.sleep(a.sleep)
-    print("완료 →", a.output)
+    print("완료 →", a.output, flush=True)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+{
+  "schema_version": "blind-coordinate-gold-lock-v1",
+  "locked_before_prediction": true,
+  "source_unverified_sha256": "1a5ed232ab4647f1ad13dbfa96c74178c3f768544ee5a41f9e1925839fc4ab5d",
+  "locked_gold_sha256": "981210d3dd991724c9d8ead05e7a8e35855ee225401fa98fbd96e37e77e093e7",
+  "rows": 31,
+  "ready_rows": 31,
+  "failures": [],
+  "retrieval_time_utc": "2026-08-20T06:05:23.464174+00:00",
+  "verification": "KOSIS Open API exact org/table/item/obj/period row and value tolerance"
+}

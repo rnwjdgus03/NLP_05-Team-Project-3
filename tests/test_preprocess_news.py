@@ -57,6 +57,12 @@ def test_clean_article_body_stops_before_comments_and_site_footer():
     assert cleaned == "회사는 외부 접근을 막았다고 밝혔다."
 
 
+def test_clean_article_body_removes_leading_media_count_without_byline():
+    cleaned = clean_article_body("5 Passenger volume increased by 3 percent.")
+
+    assert cleaned == "Passenger volume increased by 3 percent."
+
+
 def test_preprocess_articles_assigns_ids_and_sentence_context():
     articles = [
         {
@@ -89,6 +95,25 @@ def test_preprocess_articles_assigns_ids_and_sentence_context():
     assert rows[0]["next_sentence"] == "전월보다는 0.2% 올랐다."
     assert rows[1]["prev_sentence"] == "소비자물가는 2.3% 상승했다."
     assert rows[1]["next_sentence"] == ""
+    assert rows[0]["paragraph_id"] == "1"
+    assert rows[0]["paragraph_sentence_index"] == "1"
+
+
+def test_preprocess_preserves_paragraph_boundaries():
+    articles = [
+        {
+            "title": "Title",
+            "date": "2026-07-20",
+            "content": "Lead one. Lead two.\nSecond paragraph.",
+        }
+    ]
+    columns = resolve_columns(articles[0].keys(), {})
+
+    rows, _ = preprocess_articles(articles, columns, split_sentences_regex)
+
+    assert [row["paragraph_id"] for row in rows] == ["1", "1", "2"]
+    assert [row["paragraph_sentence_index"] for row in rows] == ["1", "2", "1"]
+    assert {row["paragraph_count"] for row in rows} == {"2"}
 
 
 def test_regex_splitter_handles_ellipsis_and_policy_bullets():

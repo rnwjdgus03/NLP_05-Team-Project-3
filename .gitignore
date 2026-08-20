@@ -1,27 +1,45 @@
-# 환경변수 / 비밀키
+# Secrets
 .env
+.env.*
+!.env.example
 
-# Python
+# Python / notebooks
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .venv/
 venv/
-*_api_cache.json
-
-# Jupyter
 .ipynb_checkpoints/
 
-# OS
-.DS_Store
-~$*.xlsx
+# Local data, indexes, databases and model caches
+data/raw/
+data/inputs/
+data/indexes/
+*.sqlite
+*.sqlite3
+*.db
+*.faiss
+*.npy
+*.npz
+.cache/
 
-# 대용량 원본 데이터 (노션에만 보관, 깃허브 용량 제한 때문에 제외)
+# Reproducible run artifacts
+outputs/
+runs/
+checkpoints/
+*_api_cache.json
+*.log
+*.tar
+*.tar.gz
+*.zip
+
+# Large source catalogs (download/build locally)
 chosun_full.csv
 kosis_table_summary_*.csv
+kosis_meta_index*.csv
+kosis_metadata_summary*.csv
 
-# 로컬 파이프라인 입력/실행 결과
-data/inputs/*.csv
-data/indexes/
-outputs/runs/*.csv
-outputs/runs/*.json
-outputs/runs/**
+# OS / office temporary files
+.DS_Store
+Thumbs.db
+~$*.xlsx

@@ -1,0 +1,27 @@
+{
+  "schema_version": "v24-residual-audit-v1",
+  "eligible": 30,
+  "v23_full_top5": 19,
+  "period_only_full_top5": 20,
+  "v24_final_full_top5": 22,
+  "period_recovered_claims": [
+    "A0012-SPFEFB3037E3-m1"
+  ],
+  "stage_b_slot_recovered_claims": [
+    "A0018-SP8114050F3A-m1",
+    "A0031-SP041EDC0971-m1"
+  ],
+  "residual_failures": 8,
+  "residual_stage_a": 7,
+  "residual_stage_bc": 1,
+  "residual_claims": [
+    "A0006-SP270B11DBD0-m2",
+    "A0006-SP9282109973-m1",
+    "A0006-SP9282109973-m2",
+    "A0006-SP9461F3F4FE-m2",
+    "A0012-SP13E0E2E6EE-m2",
+    "A0012-SP13E0E2E6EE-m3",
+    "A0018-SP2F67F9842A-m1",
+    "A0041-SP87530E5592-m3"
+  ]
+}

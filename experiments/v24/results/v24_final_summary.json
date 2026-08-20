@@ -1,0 +1,25 @@
+{
+  "schema_version": "v24-combined-coordinate-ab-v1",
+  "coordinate": {
+    "accuracy_at_1": 0.5,
+    "accuracy_at_3": 0.6666666666666666,
+    "accuracy_at_5": 0.7333333333333333,
+    "hit_at_1": 15,
+    "hit_at_3": 20,
+    "hit_at_5": 22,
+    "mrr": 0.5816666666666667
+  },
+  "full": {
+    "accuracy_at_1": 0.5,
+    "accuracy_at_3": 0.6666666666666666,
+    "accuracy_at_5": 0.7333333333333333,
+    "hit_at_1": 15,
+    "hit_at_3": 20,
+    "hit_at_5": 22,
+    "mrr": 0.5816666666666667
+  },
+  "target_coordinate_top5": 22,
+  "target_full_top5": 22,
+  "coordinate_target_met": true,
+  "full_target_met": true
+}
