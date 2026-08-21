@@ -1,0 +1,29 @@
+{
+  "schema_version": "kosis-v32-identifiable-ready-unused-coordinate-blind-v1",
+  "selection_locked_before_prediction": true,
+  "frozen_code_tree_sha256": "3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf",
+  "selection_seed": "v32-identifiable-ready-unused-coordinate-blind-r1",
+  "rows": 30,
+  "articles": 30,
+  "tables": 10,
+  "period_table_counts": {
+    "M": 4,
+    "Q": 3,
+    "Y": 3
+  },
+  "historical_development_table_overlap": 0,
+  "input_sha256": "6a6afb75182548e14987d8047f9a04e6e04222cb717aeb4663f3c1890081b8cc",
+  "gold_sha256": "781d33c7ee9cd99dcebcf521b9158e9b7b2b523481034ffe00499adb04ad05de",
+  "human_reviewed": false,
+  "all_inputs_prechecked_ready": true,
+  "evaluation_scope": "table/ITEM/OBJ/period retrieval; structured extraction and cited survey/statistics names supplied",
+  "preregistered_thresholds": {
+    "stage_a_table_top10_min": 0.8,
+    "table_item_top5_min": 0.7,
+    "coordinate_top5_min": 0.6,
+    "full_top5_min": 0.5,
+    "false_value_mismatch_max": 0,
+    "uncertain_must_be_unresolved": true
+  },
+  "created_at": "2026-08-20T15:22:58.515302+00:00"
+}

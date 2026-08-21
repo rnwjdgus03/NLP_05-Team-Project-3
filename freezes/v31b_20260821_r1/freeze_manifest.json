@@ -1,0 +1,31 @@
+{
+  "schema_version": "kosis-v31b-freeze-v1",
+  "freeze_id": "v31b_20260821_r1",
+  "frozen_before_new_blind_selection": true,
+  "code_tree_sha256": "3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf",
+  "tests": {
+    "passed": 75,
+    "failed": 0
+  },
+  "development_results": {
+    "opened_v30_30": "/home/ubuntu/kosis-project/runs/v31b_explicit_table_scope_opened30_dev_20260821",
+    "previous30_regression": "/home/ubuntu/kosis-project/runs/v31b_previous30_regression_20260821",
+    "old10_regression": "/home/ubuntu/kosis-project/runs/v31b_old10_regression_20260821"
+  },
+  "opened_v30_metrics": {
+    "stage_a_table_top10": 0.8,
+    "table_item_top5": 0.8,
+    "coordinate_top5": 0.7666666666666667,
+    "full_top5": 0.7666666666666667,
+    "false_value_mismatch": 0,
+    "uncertain_is_unresolved": true
+  },
+  "preregistered_blind_thresholds": {
+    "stage_a_table_top10_min": 0.8,
+    "table_item_top5_min": 0.7,
+    "coordinate_top5_min": 0.6,
+    "full_top5_min": 0.5,
+    "false_value_mismatch_max": 0,
+    "uncertain_must_be_unresolved": true
+  }
+}

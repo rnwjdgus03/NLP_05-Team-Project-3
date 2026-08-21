@@ -1,0 +1,19 @@
+[Unit]
+Description=KOSIS v31b fact verification API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/kosis-project/service_api
+EnvironmentFile=/home/ubuntu/kosis-project/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/kosis-project/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

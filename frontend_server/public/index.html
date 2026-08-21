@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="뉴스 속 통계 주장을 KOSIS 공식 통계로 검증합니다." />
+    <title>KOSIS 뉴스 검증</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span>KOSIS OFFICIAL DATA</div>
+        <h1>뉴스 속 숫자,<br /><span>공식 통계로 확인하세요.</span></h1>
+        <p>기사 URL을 입력하면 수치 주장을 자동으로 찾고, KOSIS 표·항목·기간을 연결해 공식 수치와 비교합니다.</p>
+      </header>
+
+      <section class="workspace" aria-labelledby="form-title">
+        <form id="verify-form" class="input-panel">
+          <div class="section-heading">
+            <div>
+              <span class="step-number">01</span>
+              <h2 id="form-title">검증할 기사</h2>
+            </div>
+            <span id="server-state" class="status-badge neutral">연결 확인 중</span>
+          </div>
+
+          <label class="url-field">기사 URL<input id="url" name="url" required type="url" inputmode="url" autocomplete="url" placeholder="https://news.example.com/article/…" /></label>
+          <div class="url-help">
+            <strong>URL 하나면 충분합니다</strong>
+            <span>서버가 기사 제목·작성일·본문을 읽고 수치가 포함된 주장 문장을 최대 8개까지 자동으로 선별합니다.</span>
+          </div>
+          <button id="submit-button" type="submit"><span>검증 시작</span><span aria-hidden="true">→</span></button>
+          <p class="form-note">로그인·구독이 필요한 기사나 본문 수집을 차단한 사이트는 처리되지 않을 수 있습니다. 불확실한 수치는 UNRESOLVED로 표시합니다.</p>
+        </form>
+
+        <section class="result-panel" aria-live="polite" aria-labelledby="result-title">
+          <div class="section-heading">
+            <div>
+              <span class="step-number">02</span>
+              <h2 id="result-title">검증 결과</h2>
+            </div>
+            <span id="job-state" class="status-badge neutral">대기 중</span>
+          </div>
+          <div id="empty-state" class="empty-state">
+            <div class="data-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+            <strong>검증 결과가 여기에 표시됩니다</strong>
+            <span>처리 중에는 현재 단계도 실시간으로 확인할 수 있습니다.</span>
+          </div>
+          <ol id="progress" class="progress-list hidden" aria-label="검증 진행 단계"></ol>
+          <div id="result" class="results hidden"></div>
+          <div id="error" class="error-box hidden" role="alert"></div>
+        </section>
+      </section>
+    </main>
+    <footer><span>KOSIS 기반 시범 서비스</span><span>생성형 AI 결과는 공식 발표 자료와 함께 확인하세요.</span></footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

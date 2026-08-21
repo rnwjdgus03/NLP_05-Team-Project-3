@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kosis_coordinate_suggestions_v1.schema.json",
+  "title": "KOSIS canonical coordinate suggestions JSONL row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "claim_measurement_id", "source", "suggestions"],
+  "properties": {
+    "schema_version": {"const": "kosis-coordinate-suggestions-v1"},
+    "claim_measurement_id": {"type": "string", "minLength": 1},
+    "source": {"enum": ["local_reranker", "local_reranker_fallback", "kosis_mcp"]},
+    "suggestions": {"type": "array"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"source": {"const": "local_reranker"}}},
+      "then": {
+        "properties": {
+          "suggestions": {
+            "minItems": 0,
+            "maxItems": 3,
+            "prefixItems": [
+              {"$ref": "#/$defs/localRank1"},
+              {"$ref": "#/$defs/localRank2"},
+              {"$ref": "#/$defs/localRank3"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"source": {"const": "local_reranker_fallback"}}},
+      "then": {
+        "properties": {
+          "suggestions": {
+            "minItems": 0,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"source": {"const": "kosis_mcp"}}},
+      "then": {
+        "properties": {
+          "suggestions": {
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              {"$ref": "#/$defs/mcpRank1"},
+              {"$ref": "#/$defs/mcpRank2"}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "coordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "org_id", "tbl_id", "item_id", "axis_values", "prd_se",
+        "target_period", "previous_period", "aggregation"
+      ],
+      "properties": {
+        "org_id": {"type": "string", "minLength": 1},
+        "tbl_id": {"type": "string", "minLength": 1},
+        "item_id": {"type": "string", "minLength": 1},
+        "axis_values": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/axisValue"}
+        },
+        "prd_se": {"type": "string"},
+        "target_period": {"type": "string"},
+        "previous_period": {"type": "string"},
+        "aggregation": {"type": "string"}
+      }
+    },
+    "axisValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis_order", "axis_id", "value_id"],
+      "properties": {
+        "axis_order": {"type": "integer", "minimum": 1},
+        "axis_id": {"type": "string", "minLength": 1},
+        "value_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source", "source_rank", "coordinate", "score", "rationale", "evidence"
+      ],
+      "properties": {
+        "source": {"enum": ["local_reranker", "local_reranker_fallback", "kosis_mcp"]},
+        "source_rank": {"type": "integer", "minimum": 1, "maximum": 3},
+        "coordinate": {"$ref": "#/$defs/coordinate"},
+        "score": {"type": ["number", "null"]},
+        "rationale": {"type": "string"},
+        "evidence": {"type": "object"}
+      }
+    },
+    "localRank1": {
+      "allOf": [{"$ref": "#/$defs/suggestion"}, {"properties": {"source": {"const": "local_reranker"}, "source_rank": {"const": 1}}}]
+    },
+    "localRank2": {
+      "allOf": [{"$ref": "#/$defs/suggestion"}, {"properties": {"source": {"const": "local_reranker"}, "source_rank": {"const": 2}}}]
+    },
+    "localRank3": {
+      "allOf": [{"$ref": "#/$defs/suggestion"}, {"properties": {"source": {"const": "local_reranker"}, "source_rank": {"const": 3}}}]
+    },
+    "mcpRank1": {
+      "allOf": [{"$ref": "#/$defs/suggestion"}, {"properties": {"source": {"const": "kosis_mcp"}, "source_rank": {"const": 1}}}]
+    },
+    "mcpRank2": {
+      "allOf": [{"$ref": "#/$defs/suggestion"}, {"properties": {"source": {"const": "kosis_mcp"}, "source_rank": {"const": 2}}}]
+    }
+  }
+}

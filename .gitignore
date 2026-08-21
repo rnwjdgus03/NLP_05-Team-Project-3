@@ -27,11 +27,21 @@ data/indexes/
 outputs/
 runs/
 checkpoints/
+service_api/state/
+service_api/e2e/
 *_api_cache.json
 *.log
 *.tar
 *.tar.gz
 *.zip
+*.pem
+*.key
+
+# Server-only large artifacts
+indexes/
+postgres_snapshot*/
+*.dump
+*.sql.gz
 
 # Large source catalogs (download/build locally)
 chosun_full.csv
