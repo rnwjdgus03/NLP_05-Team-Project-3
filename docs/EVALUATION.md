@@ -37,7 +37,20 @@ Top-k는 검색·좌표 매핑 지표입니다. 기사 전체 판정 정확도, 
 
 저장소에는 READY 주장 30건 규모의 이전 소규모 블라인드 자료가 남아 있습니다. 이는 개발 과정의 기준선으로만 보존하며, 표본이 작고 좌표 식별 가능한 주장에 한정되어 v60의 대표 일반화 성능으로 사용하지 않습니다.
 
-## 일반화 감사
+## 잠금 조선일보 URL50 E2E
+
++| 항목 | 결과 | 기준 | 판정 |
++|---|---:|---:|---|
++| 기사 수집 성공률 | 100% | 90% 이상 | PASS |
++| 작업 성공률 | 100% | 95% 이상 | PASS |
++| 공식 근거 선택률 | 4/95 (4.21%) | 10% 이상 | FAIL |
++| 공식 근거 기사 | 3건 | 5건 이상 | FAIL |
++| 작업시간 p95 | 328.0초 | 600초 이하 | PASS |
++| 엔진 정체성 | 단일 v60 SHA | 단일 SHA | PASS |
++
++50개 URL은 모두 수집·처리에 성공했지만 `service_readiness.json`은 `FAIL`, `promotion_allowed=false`입니다. 이 잠금셋은 튜닝에 재사용하지 않으며, 별도 개발 기사셋에서 개선한 다음 새로운 잠금 URL셋으로 재평가합니다.
++
++## 일반화 감사
 
 - 최초 v33 blind100 실패 35건은 Stage A 20건, ITEM 11건, OBJ 4건으로 분류됐습니다.
 - 후속 신규 blind100의 ITEM/좌표 Top-5는 71/68%, 65/64%, 56/50%, 73/70%로 변동했습니다.
@@ -61,3 +74,4 @@ Top-k는 검색·좌표 매핑 지표입니다. 기사 전체 판정 정확도, 
 - `freezes/v60_service_candidate_20260824_r1/evidence/dev300/regression_gate.json`
 - `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`
 - `evaluation/generalization_audit/public_generalization_audit.json`
+- `evaluation/v60_locked_url50/public_url50_summary.json`

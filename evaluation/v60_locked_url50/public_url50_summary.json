@@ -1,0 +1,83 @@
+{
+  "schema_version": "kosis-public-v60-locked-url50-summary-v1",
+  "completed_at": "2026-08-24T03:04:41.924167+00:00",
+  "dataset_role": "LOCKED_EVALUATION_ONLY_NOT_FOR_TUNING",
+  "engine": {
+    "freeze_id": "v60_service_candidate_20260824_r1",
+    "code_sha256": "743360d418f5173bfa8445f0e25126a5bd20320967a21398388538ff964f3cef",
+    "identity_audit_status": "PASS"
+  },
+  "execution": {
+    "locked_urls": 50,
+    "article_fetch_succeeded": 50,
+    "article_fetch_failed": 0,
+    "article_fetch_success_rate": 1.0,
+    "jobs_succeeded": 50,
+    "jobs_failed": 0,
+    "job_success_rate_given_fetch": 1.0,
+    "extracted_measurements": 362,
+    "ready_measurements": 95,
+    "verdict_counts": {
+      "UNRESOLVED": 236,
+      "MATCH": 4
+    },
+    "selected_evidence_count": 4,
+    "selected_evidence_rate": 0.042105263157894736,
+    "articles_with_selected_evidence": 3,
+    "run_latency_seconds": {
+      "p50": 169.59555,
+      "p95": 327.988315,
+      "max": 374.150201
+    }
+  },
+  "funnel": {
+    "pipeline_articles": 28,
+    "gate_only_articles": 22,
+    "ready_measurements": 95,
+    "enrich_measurements": 55,
+    "rejected_measurements": 215,
+    "verified_candidate_rows": 226,
+    "verified_verdict_code_counts": {
+      "UNIT_UNCERTAIN": 70,
+      "PERIODICITY_NOT_AVAILABLE": 34,
+      "MATCH": 8,
+      "MISMATCH_BLOCKED_UNCONFIRMED_COORDINATE": 44,
+      "REVISION_VINTAGE_RISK": 6,
+      "LIKELY_MISMAPPING": 25,
+      "ACTUAL_DERIVATION_FAILED": 28,
+      "SEMANTIC_SCOPE_REVIEW_REQUIRED": 7,
+      "WITHIN_UNCERTAINTY_BAND": 4
+    }
+  },
+  "service_readiness": {
+    "status": "FAIL",
+    "promotion_allowed": false,
+    "passed_checks": [
+      "locked_url_count",
+      "article_fetch_success_rate",
+      "job_success_rate_given_fetch",
+      "run_latency_p95_seconds",
+      "single_frozen_engine",
+      "measurements_extracted",
+      "kosis_ready_measurements"
+    ],
+    "failed_checks": {
+      "selected_evidence_rate": {
+        "actual": 0.042105263157894736,
+        "expected": ">= 0.1"
+      },
+      "articles_with_selected_evidence": {
+        "actual": 3,
+        "expected": ">= 5"
+      }
+    }
+  },
+  "source_sha256": {
+    "locked_urls": "e73c30cc539657868c409293b197c653070460c4d17dfef5756f996f0f892d0b",
+    "qa_state": "e5c653516d19d9c01497600b8ccec85f5b11b7e03aee7ef1de0a051f776afc4f",
+    "qa_summary": "1cd7dad6e6674867cda83f8e0613b4782cd9396eebe5639094e7d581d8818990",
+    "identity_audit": "c012b038067a425c5f7df9607f2f1a0b9fd10f631bbdf38a468973fccbd4c95f",
+    "funnel_audit": "1e98afcbd86d8f70ffc689a398eade62005ec5de494d53904c728cb191c336d7",
+    "service_readiness": "60c09f169c29cdd14761765e030d41cc497151cfcf84a845e008ef14edf0d97b"
+  }
+}

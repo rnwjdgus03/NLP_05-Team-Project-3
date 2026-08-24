@@ -20,6 +20,8 @@
 8. `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`
 9. `docs/GENERALIZATION_AUDIT.md`
 10. `evaluation/generalization_audit/public_generalization_audit.json`
+11. `evaluation/v60_locked_url50/README.md`
+12. `evaluation/v60_locked_url50/public_url50_summary.json`
 
 프로젝트 정의:
 
@@ -59,6 +61,8 @@
 - v60을 완성된 운영 모델이나 독립 테스트 검증 완료 모델이라고 표현하지 않는다.
 - 이전 v31b 30건 수치는 작은 기준선일 뿐 v60 대표 성능으로 앞세우지 않는다.
 - 별도 근거 파일이 저장소에 없는 숫자는 절대 만들지 않는다.
+- 잠금 URL50은 기사 수집·작업 성공률 100%, 공식 근거 선택률 4.21%, 근거 기사 3건이며 사전 서비스 승격 게이트는 FAIL이라고 설명한다.
+- `UNRESOLVED`를 오답이나 정답으로 계산하지 않고 자동 판정 보류로 설명한다.
 - 진행 중 URL E2E 중간 집계는 최종 결과처럼 사용하지 않는다.
 
 시각화 요구:
