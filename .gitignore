@@ -53,3 +53,7 @@ kosis_metadata_summary*.csv
 .DS_Store
 Thumbs.db
 ~$*.xlsx
+
+# Local experiment worktrees and sync scratch
+candidates/
+.server_sync/

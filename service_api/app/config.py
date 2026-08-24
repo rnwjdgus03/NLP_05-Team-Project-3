@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-EXPECTED_FREEZE_ID = "v31b_20260821_r1"
-EXPECTED_CODE_SHA256 = "3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf"
+EXPECTED_FREEZE_ID = os.getenv(
+    "KOSIS_EXPECTED_FREEZE_ID", "v64_candidate_20260824_r1"
+)
+EXPECTED_CODE_SHA256 = os.getenv(
+    "KOSIS_EXPECTED_CODE_SHA256",
+    "760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64",
+)
 
 
 def _bool_env(name: str, default: bool) -> bool:
@@ -45,10 +50,13 @@ class Settings:
         )
         return cls(
             project_root=root,
-            engine_dir=Path(os.getenv("KOSIS_ENGINE_DIR", str(root / "freezes" / EXPECTED_FREEZE_ID))),
+            engine_dir=Path(os.getenv(
+                "KOSIS_ENGINE_DIR",
+                str(root / "freezes" / "v64_candidate_20260824_r1" / "engine"),
+            )),
             index_dir=Path(os.getenv("KOSIS_INDEX_DIR", str(root / "indexes" / "bge_m3_table_v2_complete"))),
             python=Path(os.getenv("KOSIS_PYTHON", str(root / ".venv" / "bin" / "python"))),
-            runs_dir=Path(os.getenv("KOSIS_SERVICE_RUNS_DIR", str(root / "runs" / "service_v31b"))),
+            runs_dir=Path(os.getenv("KOSIS_SERVICE_RUNS_DIR", str(root / "runs" / "service_v64"))),
             state_db=Path(os.getenv("KOSIS_SERVICE_STATE_DB", str(service_root / "state" / "jobs.sqlite3"))),
             postgres_dsn=os.getenv("KOSIS_POSTGRES_DSN", "postgresql:///kosis_project"),
             api_key=os.getenv("KOSIS_SERVICE_API_KEY", ""),
@@ -62,18 +70,19 @@ class Settings:
     def validate_engine(self) -> dict:
         manifest_path = self.engine_dir / "freeze_manifest.json"
         if not manifest_path.is_file():
-            raise RuntimeError(f"v31b freeze manifest not found: {manifest_path}")
+            raise RuntimeError(f"frozen engine manifest not found: {manifest_path}")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("freeze_id") != EXPECTED_FREEZE_ID:
             raise RuntimeError("unexpected engine freeze_id")
         if manifest.get("code_tree_sha256") != EXPECTED_CODE_SHA256:
-            raise RuntimeError("unexpected v31b code SHA")
+            raise RuntimeError("unexpected frozen engine code SHA")
         required = (
             "prepare_kosis_mapping_input.py",
             "run_kosis_coordinate_stage_a.py",
             "run_kosis_coordinate_stage_b.py",
             "run_kosis_coordinate_stage_c.py",
             "run_kosis_top5_verification.py",
+            "cloud_setup/run_v58_dev300_pipeline.sh",
         )
         missing = [name for name in required if not (self.engine_dir / name).is_file()]
         if missing:

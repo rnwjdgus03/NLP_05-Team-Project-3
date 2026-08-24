@@ -1,4 +1,4 @@
-# v60 운영·재현 Runbook
+# v64 운영·재현 Runbook
 
 ## 공개 저장소와 서버 런타임
 
@@ -9,7 +9,7 @@ GitHub에는 코드와 작은 평가 근거만 둡니다. 다음 자산은 서�
 - `.env`의 HCX/KOSIS/서비스 키
 - 모델 캐시와 실행 결과
 
-공개 스냅샷은 `freezes/v60_service_candidate_20260824_r1`이며 `PUBLICATION_MANIFEST.json`에서 제거·정제 내역을 확인할 수 있습니다.
+최종 동결 엔진은 `freezes/v64_candidate_20260824_r1`이며 `engine/freeze_manifest.json`과 루트 SHA 파일에서 엔진 정체성을 확인할 수 있습니다. 기존 v60 공개 스냅샷은 개발 기준선으로 보존합니다.
 
 ## 필수 런타임 확인
 
@@ -33,8 +33,8 @@ CLOVA_API_KEY=...
 KOSIS_API_KEY=...
 KOSIS_SERVICE_API_KEY=...
 KOSIS_POSTGRES_DSN=postgresql:///kosis_project
-KOSIS_EXPECTED_FREEZE_ID=v60_service_candidate_20260824_r1
-KOSIS_EXPECTED_CODE_SHA256=743360d418f5173bfa8445f0e25126a5bd20320967a21398388538ff964f3cef
+KOSIS_EXPECTED_FREEZE_ID=v64_candidate_20260824_r1
+KOSIS_EXPECTED_CODE_SHA256=760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64
 ```
 
 발표자료·이슈·채팅에 IP, 비밀번호, API 키, PEM을 넣지 않습니다. 노출 가능성이 있었던 키는 재사용하지 않고 교체합니다.
@@ -54,7 +54,7 @@ KOSIS_EXPECTED_CODE_SHA256=743360d418f5173bfa8445f0e25126a5bd20320967a2139838853
 서버가 localhost에만 바인딩된 경우 SSH 터널을 사용합니다.
 
 ```powershell
-ssh -N -L 13100:127.0.0.1:3100 `
+ssh -N -L 13100:127.0.0.1:3102 -L 18002:127.0.0.1:8002 `
   -i "$env:USERPROFILE\.ssh\3rd.pem" `
   ubuntu@SERVER_IP
 ```
@@ -63,7 +63,7 @@ ssh -N -L 13100:127.0.0.1:3100 `
 
 ## 결과 확인 체크리스트
 
-1. `/readyz`가 `status=ready`와 정확한 v60 freeze ID를 반환
+1. `/readyz`가 `status=ready`와 정확한 v64 freeze ID를 반환
 2. 기사 URL 수집 성공
 3. HCX 추출 결과에 기간·값·단위 존재
 4. READY/ENRICH/REJECT 집계 존재
@@ -71,13 +71,14 @@ ssh -N -L 13100:127.0.0.1:3100 `
 6. KOSIS 근거에 tbl_id·ITEM·OBJ·period·unit 기록
 7. 불확실한 좌표에서 자동 VALUE_MISMATCH가 차단됨
 8. 실행 manifest에 코드·인덱스·입력 SHA 기록
+9. `evaluation/v66_locked_url50/service_readiness.json`이 `PASS`이고 failed check가 없음
 
 ## GitHub 공개 전 점검
 
 ```bash
-git diff --cached --check
-git grep -n -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|CLOVA_API_KEY=[^.]|KOSIS_API_KEY=[^.]'
+git diff --cached --check -- . ':!freezes/v64_candidate_20260824_r1/**'
+git grep --cached -n -E 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|postgresql://[^:]+:[^@]+@'
 git status --short
 ```
 
-DB, 인덱스, ZIP/TAR, `.env`, PEM, 실행 결과가 staged 되면 제거합니다.
+v64 동결본은 서버 원본 바이트와 manifest SHA를 보존하므로 내부 CSV의 기존 CRLF·공백은 수정하지 않습니다. DB, 인덱스, ZIP/TAR, `.env`, PEM, 원문·API cache가 staged 되면 제거합니다. 작은 공개 평가 요약 JSON은 예외입니다.

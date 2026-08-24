@@ -1,0 +1,63 @@
+{
+  "schema_version": "kosis-real-url-service-readiness-v1",
+  "status": "PASS",
+  "checks": [
+    {
+      "name": "locked_url_count",
+      "passed": true,
+      "actual": 50,
+      "expected": ">= 30"
+    },
+    {
+      "name": "article_fetch_success_rate",
+      "passed": true,
+      "actual": 1.0,
+      "expected": ">= 0.9"
+    },
+    {
+      "name": "job_success_rate_given_fetch",
+      "passed": true,
+      "actual": 1.0,
+      "expected": ">= 0.95"
+    },
+    {
+      "name": "selected_evidence_rate",
+      "passed": true,
+      "actual": 0.11458333333333333,
+      "expected": ">= 0.1"
+    },
+    {
+      "name": "articles_with_selected_evidence",
+      "passed": true,
+      "actual": 5,
+      "expected": ">= 5"
+    },
+    {
+      "name": "run_latency_p95_seconds",
+      "passed": true,
+      "actual": 290.35885,
+      "expected": "0 < value <= 600.0"
+    },
+    {
+      "name": "single_frozen_engine",
+      "passed": true,
+      "actual": 1,
+      "expected": "== 1"
+    },
+    {
+      "name": "measurements_extracted",
+      "passed": true,
+      "actual": 96,
+      "expected": "> 0"
+    },
+    {
+      "name": "kosis_ready_measurements",
+      "passed": true,
+      "actual": 96,
+      "expected": "> 0"
+    }
+  ],
+  "failed_checks": [],
+  "promotion_allowed": true,
+  "note": "모든 기준을 충족했습니다. 동결·승격 전 표본별 근거 내용을 최종 확인하세요."
+}

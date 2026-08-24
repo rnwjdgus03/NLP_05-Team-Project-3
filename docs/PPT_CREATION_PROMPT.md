@@ -15,13 +15,17 @@
 3. `docs/ARCHITECTURE.md`
 4. `docs/EVALUATION.md`
 5. `docs/RUNBOOK.md`
-6. `freezes/v60_service_candidate_20260824_r1/freeze_manifest.json`
+6. `freezes/v64_candidate_20260824_r1/engine/freeze_manifest.json`
 7. `freezes/v60_service_candidate_20260824_r1/evidence/dev300/coordinate_topk_multigold_summary.json`
 8. `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`
 9. `docs/GENERALIZATION_AUDIT.md`
 10. `evaluation/generalization_audit/public_generalization_audit.json`
-11. `evaluation/v60_locked_url50/README.md`
-12. `evaluation/v60_locked_url50/public_url50_summary.json`
+11. `evaluation/v65_blind100/README.md`
+12. `evaluation/v65_blind100/blind100_gate.json`
+13. `evaluation/v65_blind100/coordinate_topk_multigold_summary.json`
+14. `evaluation/v66_locked_url50/README.md`
+15. `evaluation/v66_locked_url50/qa_summary.json`
+16. `evaluation/v66_locked_url50/service_readiness.json`
 
 프로젝트 정의:
 
@@ -46,8 +50,8 @@
 10. KOSIS Open API 검증과 안전한 verdict 정책
 11. 인프라·서비스: NVIDIA L4, PostgreSQL, FastAPI FIFO 큐, BFF/프론트
 12. 평가 설계: 개발셋·블라인드·실제 URL E2E를 구분하고 Top-k 정의
-13. v60 개발 300건 결과 차트
-14. 실제 기사 데모 또는 화면 흐름
+13. 개발 성능과 v65 신규 blind100 비교 차트
+14. v66 실제 URL50 서비스 QA와 데모 화면
 15. 실패 분석·한계·후속 개선
 16. 결론과 팀 기여
 
@@ -56,21 +60,25 @@
 - ITEM Top-5 `77.3%`, 전체 좌표 Top-5 `74.3%`는 반드시 `개발 좌표 골드 300건`이라고 붙인다.
 - Top-k는 “정답이 상위 k개 후보 안에 존재한 비율”이며 최종 팩트체크 정확도나 일반 뉴스 recall이 아니라고 설명한다.
 - 실제 기사 개발 E2E는 READY 60건 중 VERIFIED_MATCH 6건, UNRESOLVED 54건이다.
-- 표 분리 개발 600건은 ITEM Top-5 64.7%, 전체 좌표 Top-5 60.3%이며 독립 블라인드가 아니라 `DEVELOPMENT_ONLY_NOT_BLIND`라고 표시한다.
-- 후속 blind100 결과가 크게 변동했으므로 v60 개발 300건 결과를 일반화 성능으로 표현하지 않는다.
-- v60을 완성된 운영 모델이나 독립 테스트 검증 완료 모델이라고 표현하지 않는다.
+- v64 개발 600건 재대입은 ITEM Top-5 90.3%, 전체 좌표 Top-5 90.2%이며 `SUPERVISED_EXACT_MAPPING_CACHE_RESUBSTITUTION`이라고 표시한다.
+- 같은 개발 600건의 cache 적용 전 수치는 ITEM 64.7%, 좌표 60.3%다.
+- 최종 신규 v65 blind100은 ITEM Top-5 58%, 전체 좌표 Top-5 54%이며 대표 일반화 검색 성능으로 공개한다.
+- 사전 목표 75%·70%에는 실패했고 이 결과로 v64를 다시 튜닝하지 않았다고 밝힌다.
+- v64를 실제 URL 처리가 가능한 PoC 데모 후보로 표현하되, 일반화 성능 목표는 미달했다고 밝힌다.
 - 이전 v31b 30건 수치는 작은 기준선일 뿐 v60 대표 성능으로 앞세우지 않는다.
 - 별도 근거 파일이 저장소에 없는 숫자는 절대 만들지 않는다.
-- 잠금 URL50은 기사 수집·작업 성공률 100%, 공식 근거 선택률 4.21%, 근거 기사 3건이며 사전 서비스 승격 게이트는 FAIL이라고 설명한다.
+- 최종 v66 URL50은 수집·작업 성공률 100%, 공식 근거 선택률 11/96(11.46%), 근거 기사 5건, p95 290.36초이며 서비스 준비도 PASS라고 설명한다.
+- URL50 PASS를 팩트체크 정확도 100%라고 표현하지 않는다.
 - `UNRESOLVED`를 오답이나 정답으로 계산하지 않고 자동 판정 보류로 설명한다.
-- 진행 중 URL E2E 중간 집계는 최종 결과처럼 사용하지 않는다.
+- v66 URL50은 50건 전체 완료 뒤 생성된 최종 감사 JSON만 사용한다.
 
 시각화 요구:
 
 - 아키텍처는 `URL → HCX → Gate → Stage A → Stage B/C → PostgreSQL/KOSIS API → Verdict` 흐름으로 그린다.
 - Stage A의 “의미 후보 검색”과 PostgreSQL의 “정확 코드 검증”을 서로 다른 색으로 표현한다.
-- 개발 300건 결과는 Top-1/3/5 묶은 막대그래프 두 계열(ITEM, 전체 좌표)로 표시한다.
-- MATCH/UNRESOLVED는 원형그래프보다 6 대 54의 가로 누적 막대로 표시하고, 낮은 커버리지를 숨기지 않는다.
+- 개발 300건 결과와 v64 개발 600건 재대입, v65 blind100을 한 차트에 섞지 말고 데이터 역할별로 분리한다.
+- v65 blind100은 ITEM 58%, 좌표 54% 막대로 표시하고 사전 목표선을 함께 그린다.
+- v66 MATCH 11개와 UNRESOLVED 252개는 가로 누적 막대로 표시하고, 낮은 자동 커버리지를 숨기지 않는다.
 - UI 화면은 입력, 진행 단계, 판정, KOSIS 근거 위치에 주석을 단다.
 - 한 슬라이드에 핵심 메시지 하나, 본문 5줄 이내, 코드 전문은 넣지 않는다.
 

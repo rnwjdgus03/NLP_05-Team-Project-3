@@ -1,0 +1,22 @@
+{
+  "schema_version": "kosis-frozen-url-run-identity-v1",
+  "status": "PASS",
+  "candidate_freeze_id": "v64_candidate_20260824_r1",
+  "candidate_engine_tree_sha256": "760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64",
+  "checks": {
+    "lock_hash_matches_manifest": true,
+    "engine_freeze_id": true,
+    "engine_code_sha256": true,
+    "locked_url_count": true,
+    "state_record_count": true,
+    "single_expected_engine": true,
+    "engine_count_matches_successes": true
+  },
+  "input_sha256": {
+    "lock": "dfbb4eb0d5e842ba66c89e950f9d55f6e4ce1ecaabc5b96355eb578006955a34",
+    "lock_manifest": "fe259e533ec5550abe5de4600a310b959b8e5a3f80245c9088c3cb1718d0f519",
+    "engine_manifest": "a56205cd41553bdafecd0faf2b8491e682bf7c0869393feec17ee9b9215362ef",
+    "state": "2dc20ab284ed8c89c944053fe9043e4beef763037834a8966682e4522e9ffa8a",
+    "summary": "8095e4e2df610ba6b76e5137befe32387d1e94690e401261fba7db5555fdc93e"
+  }
+}

@@ -31,7 +31,7 @@ class ServiceState:
         self.settings.runs_dir.mkdir(parents=True, exist_ok=True)
         for job_id in self.repository.recoverable_ids():
             await self.queue.put(job_id)
-        self.worker = asyncio.create_task(self.work(), name="kosis-v31b-gpu-worker")
+        self.worker = asyncio.create_task(self.work(), name="kosis-v64-gpu-worker")
 
     async def stop(self) -> None:
         if self.worker:
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="KOSIS News Fact Verification API",
     version=__version__,
-    description="Frozen v31b BGE + reranker + PostgreSQL + KOSIS API verification service",
+    description="Frozen KOSIS BGE + reranker + PostgreSQL + KOSIS API verification service",
     lifespan=lifespan,
 )
 app.add_middleware(

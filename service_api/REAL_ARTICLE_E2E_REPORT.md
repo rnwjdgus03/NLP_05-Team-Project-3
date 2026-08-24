@@ -1,51 +1,24 @@
-# Real article 5-claim end-to-end report
+# v66 locked URL50 E2E report
 
-## Run identity
+## 범위
 
-- Date: 2026-08-21
-- Job ID: `08bad84558a24c3dbecfe74dfcf72fc8`
-- Engine: frozen `v31b_20260821_r1`
-- Input: five claims from three real news articles
-- Path: HCX extraction → READY gate → Stage A → Stage B → Stage C → PostgreSQL preflight → KOSIS API → public verdict
+원본 `chosun_full.csv` 풀에서 잠근 조선일보 URL 50건을 `v64_candidate_20260824_r1` 동결 엔진으로 한 번에 처리했습니다. 별도 임의 크롤링 데이터로 바꿔 평가하지 않았습니다.
 
-## Aggregate result
+## 결과
 
-| Metric | Result |
+| 항목 | 결과 |
 |---|---:|
-| Raw claims | 5 |
-| Articles | 3 |
-| HCX measurements | 12 |
-| READY measurements searched | 5 |
-| ENRICH measurements withheld | 6 |
-| REJECT measurements withheld | 1 |
-| MATCH | 2 |
-| UNRESOLVED | 10 |
-| VALUE_MISMATCH | 0 |
+| URL 수집 | 50/50 |
+| 작업 완료 | 50/50 |
+| HCX 추출 측정값 | 393 |
+| KOSIS-ready 측정값 | 96 |
+| 최종 MATCH 근거 | 11 |
+| 공식 근거 선택률 | 11.46% |
+| 근거 기사 | 5건 |
+| 최종 UNRESOLVED | 252 |
+| 작업시간 p50 / p95 / max | 87.78초 / 290.36초 / 386.49초 |
+| 단일 엔진 ID·SHA | 50/50 일치 |
 
-The API job completed with `SUCCEEDED`. All five READY measurements obtained Stage A Top-10 candidates. Stage B created coordinate beams for all five; Stage C selected coordinates for four and safely abstained for one.
+서비스 준비도 감사는 `PASS`, `promotion_allowed=true`였습니다. 이 판정은 URL 수집 성공률, 작업 성공률, 최소 근거 커버리지, 지연시간과 동결 정체성 기준을 통과했다는 의미입니다. v65 blind100 검색 정확도 목표 통과와는 별개의 결과입니다.
 
-## Resolved evidence
-
-1. Annual exports
-   - Claim: USD 683.8 billion in 2024
-   - KOSIS: USD 683,609,488,000
-   - Table: `DT_1R11001_FRM101`, `품목별 수출액, 수입액`
-   - Verdict: `MATCH`
-
-2. Monthly semiconductor exports
-   - Claim: USD 14.5 billion in 2024-12
-   - KOSIS: USD 14,511,028,387
-   - Table: `DT_092_115_2009_S023`, `IT산업별/월별 수출 현황`
-   - Verdict: `MATCH`
-
-## Conservative outcomes
-
-- The separate 31.5% growth measurement was `UNRESOLVED` because the candidate unit was uncertain.
-- For shipbuilding technical workforce, Stage A correctly ranked the official `산업기술인력수급실태조사` tables, including the industrial-current-personnel table at rank 2. Stage C could not safely bind the shipbuilding OBJ coordinate, so it abstained instead of guessing.
-- The foreign-workforce sentence was withheld by role/periodicity enrichment gates.
-- The Korea Consumer Agency product-price survey was withheld as contextual/non-KOSIS evidence, as intended.
-- No unconfirmed numeric difference was exposed as `VALUE_MISMATCH`.
-
-## Conclusion
-
-The deployed API contract, HCX integration, GPU queue, retrieval, coordinate selection, PostgreSQL preflight, KOSIS API lookup, result persistence, and frontend-facing serialization all work end to end. The remaining quality opportunity is resolution coverage—not safety—especially OBJ binding for the shipbuilding industry and enrichment of comparison/periodicity fields. Keep v31b frozen; address those issues in a new candidate version and regress it before promotion.
+근거 JSON은 `evaluation/v66_locked_url50/`에 보존합니다.

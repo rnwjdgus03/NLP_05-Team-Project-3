@@ -1,50 +1,37 @@
-# v31b API deployment report
+# v64 API deployment report
 
-## Deployment state
+## 최종 상태
 
-- Engine: `v31b_20260821_r1` (read-only source)
-- Engine SHA-256: `3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf`
-- Service: `kosis-v31b-api.service`
-- Internal endpoint: `http://127.0.0.1:8000`
-- Runtime check: NVIDIA L4, PostgreSQL `kosis_tables=107138`
-- Worker policy: one Uvicorn worker and one FIFO GPU queue
-- Supported: `input_stage=measurements`, `input_stage=claims`
-- URL input: `frontend_server`가 기사에서 raw claim을 자동 생성
+- 엔진: `v64_candidate_20260824_r1` (읽기 전용)
+- 엔진 SHA-256: `760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64`
+- 내부 API: `http://127.0.0.1:8002`
+- 내부 프론트: `http://127.0.0.1:3102`
+- 런타임: NVIDIA L4, PostgreSQL `kosis_tables=107138`
+- 정책: Uvicorn worker 1개, FIFO GPU 큐 1개
+- 지원 입력: `claims`, `measurements`, 프론트 BFF의 조선일보 URL
 
-실제 기사 URL 테스트가 기사 수집, HCX, Stage A legacy/balanced, Stage B, Stage C, KOSIS API 검증, 결과 직렬화를 통과했습니다. 2024년 수출액은 공식 KOSIS 값과 `MATCH / VERIFIED_MATCH`로 완료됐습니다.
+`v66_final_service_url50_20260824_r1`에서 원본 `chosun_full.csv` 기반 잠금 URL 50건이 모두 수집·처리되었습니다. KOSIS-ready 측정값 96개 중 최종 선택 근거는 11개, 근거 기사는 5건, 작업시간 p95는 290.36초였습니다. 자세한 결과는 `evaluation/v66_locked_url50/`에 있습니다.
 
-## Safe access before HTTPS
-
-Keep the API bound to localhost and use an SSH tunnel during development:
-
-```powershell
-ssh -N -L 8000:127.0.0.1:8000 `
-  -i "C:\Users\김진성\.ssh\3rd.pem" `
-  ubuntu@SERVER_IP
-```
-
-Then open `http://127.0.0.1:8000/docs`. Do not put the service API key in browser source. A frontend server/BFF should keep it in an environment variable and proxy requests; see `deploy/frontend_server_client.ts`.
-
-## Operations
-
-```bash
-sudo systemctl status kosis-v31b-api
-sudo journalctl -u kosis-v31b-api -f
-curl http://127.0.0.1:8000/healthz
-curl http://127.0.0.1:8000/readyz
-```
-
-To enable raw HCX extraction without printing the secret:
+## 시작과 상태 확인
 
 ```bash
 cd /home/ubuntu/kosis-project
-read -rsp "CLOVA API key: " CLOVA_KEY
-echo
-printf '\nCLOVA_API_KEY=%s\n' "$CLOVA_KEY" >> .env
-unset CLOVA_KEY
-chmod 600 .env
-sudo systemctl restart kosis-v31b-api
-curl http://127.0.0.1:8000/readyz
+./cloud_setup/start_v64_final_api.sh
+./cloud_setup/start_v64_final_frontend.sh
+curl -fsS http://127.0.0.1:8002/readyz
+curl -I http://127.0.0.1:3102/
 ```
 
-Before public frontend connection, configure a domain, HTTPS, frontend origin allowlist, reverse-proxy rate limiting, and a server-side frontend proxy. Plain HTTP is intentionally not enabled for authenticated article traffic.
+## 외부 공개 전 안전한 접속
+
+```powershell
+ssh -N -L 18002:127.0.0.1:8002 -L 13100:127.0.0.1:3102 `
+  -i "C:\Users\사용자\.ssh\3rd.pem" `
+  ubuntu@SERVER_IP
+```
+
+브라우저에서는 `http://127.0.0.1:13100`을 엽니다. `.env`, 서비스 키, KOSIS 키와 CLOVA 키는 브라우저 코드나 저장소에 넣지 않습니다. 공개 배포 시에는 도메인, HTTPS, CORS 허용 목록, rate limit을 별도로 설정합니다.
+
+## 해석 주의
+
+v65 신규 blind100은 사전 검색 목표에 실패했습니다. 이 배포는 기능·안전성·E2E 완주를 보여주는 PoC 데모 후보이며, 블라인드 정확도 목표 통과를 주장하지 않습니다.
