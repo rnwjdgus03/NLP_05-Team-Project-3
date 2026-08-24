@@ -1,49 +1,53 @@
-# v31b 평가 결과
+# v60 평가와 해석
 
-## 동결 식별자
+## 지표 정의
 
-- Freeze: `v31b_20260821_r1`
-- Code SHA-256: `3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf`
-- 동결 전 회귀 테스트: `75 passed`
+- 표·ITEM Top-k: 정답 `tbl_id + ITEM`이 상위 k개 후보 안에 존재하는 주장 비율
+- 전체 좌표 Top-k: 정답 표·ITEM·OBJ 좌표가 상위 k개 안에 존재하는 주장 비율
+- MRR: 첫 정답 후보 순위의 역수 평균
+- E2E 검증 커버리지: READY 주장 중 공식 근거로 자동 MATCH까지 도달한 비율
 
-## 개발 30건
+Top-k는 검색·좌표 매핑 지표입니다. 기사 전체 판정 정확도, recall, 자동 검증률과 동일하지 않습니다.
 
-| 지표 | 결과 |
-|---|---:|
-| Stage A 표 Top-10 | 80.0% |
-| 표·ITEM Top-5 | 80.0% |
-| 좌표 Top-5 | 76.7% |
-| Full Top-5 | 76.7% |
-| 잘못된 VALUE_MISMATCH | 0 |
+## v60 개발 좌표 골드 300건
 
-## 미사용 좌표 블라인드 30건
-
-동결 이후에 선정·잠금한 KOSIS 좌표 식별 가능 READY 주장 30건입니다.
-
-| 지표 | Top-1 | Top-3 | Top-5 | Top-10 |
+| 지표 | Top-1 | Top-3 | Top-5 | MRR |
 |---|---:|---:|---:|---:|
-| 표 | 83.3% | 93.3% | 96.7% | 96.7% |
-| ITEM | 83.3% | 93.3% | 96.7% | 96.7% |
-| 좌표 | 76.7% | 90.0% | 93.3% | 93.3% |
-| Full | 76.7% | 90.0% | 93.3% | 93.3% |
+| 표·ITEM | 157/300 (52.3%) | 209/300 (69.7%) | 232/300 (77.3%) | 0.613 |
+| 전체 좌표 | 148/300 (49.3%) | 200/300 (66.7%) | 223/300 (74.3%) | 0.583 |
 
-- 최종 claim 상태: `VERIFIED_MATCH 26`, `UNRESOLVED 4`
-- 잘못된 자동 `VALUE_MISMATCH`: `0`
-- 사전 등록한 6개 통과 기준: 모두 PASS
+- 300개 모두 예측 패킷 존재
+- 다중 정답 좌표 456행을 허용한 claim 단위 평가
+- 사전 중단 기준 ITEM Top-5 ≥75%, 좌표 Top-5 ≥70% 통과
+- 데이터 역할: `DEVELOPMENT_ONLY_NOT_BLIND`
 
-이 평가는 임의 뉴스 전체가 아니라 KOSIS 좌표가 존재하고 식별 가능한 층화 표본입니다. 따라서 수치는 검색·좌표 선택 성능을 나타내며, 서비스 전체 coverage나 언론사별 본문 수집률을 나타내지 않습니다.
+## 실제 기사 개발 E2E
 
-## 실제 기사 E2E
+| 항목 | 결과 |
+|---|---:|
+| READY 측정값 | 60 |
+| VERIFIED_MATCH | 6 |
+| UNRESOLVED | 54 |
+| MATCH 도달률 | 10.0% |
+| MATCH가 나온 서로 다른 기사 | 5 |
 
-3개 실제 기사에서 수동으로 선택한 5개 raw claim을 넣은 smoke test 결과:
+이 결과는 안전 게이트가 동작하지만 서비스 커버리지가 아직 낮다는 뜻입니다. `UNRESOLVED`는 오답이 아니라 자동 검증 보류입니다.
 
-- HCX measurements 12
-- READY 5, ENRICH 6, REJECT 1
-- MATCH 2, UNRESOLVED 10
-- 잘못된 VALUE_MISMATCH 0
+## 이전 v31b 기준선
 
-URL 자동 수집을 포함한 단일 기사 테스트에서는 제목·날짜·수치 주장 1개를 자동 추출했고, 2024년 수출액을 KOSIS 공식값과 비교해 MATCH로 완료했습니다.
+저장소에는 READY 주장 30건 규모의 이전 소규모 블라인드 자료가 남아 있습니다. 이는 개발 과정의 기준선으로만 보존하며, 표본이 작고 좌표 식별 가능한 주장에 한정되어 v60의 대표 일반화 성능으로 사용하지 않습니다.
 
-## 해석
+## 발표 시 반드시 지킬 해석
 
-현재 강점은 좌표가 확인되는 주장에 대한 Top-5 검색과 오답 MISMATCH 억제입니다. 남은 과제는 기사 수집 성공률, HCX READY coverage, 세부 산업·대상 OBJ binding입니다. 새로운 개선 규칙은 이 블라인드 30건에 재튜닝하지 않고 별도 개발셋에서 만든 뒤 새로운 홀드아웃으로 평가해야 합니다.
+1. 77.3%와 74.3%는 `개발 300건 Top-5 적중률`이라고 말합니다.
+2. 이를 “팩트체크 정확도 74%”라고 표현하지 않습니다.
+3. 독립 블라인드 일반화는 개발 결과보다 낮을 수 있으며 후속 확대 평가가 필요하다고 밝힙니다.
+4. URL 기반 실제 기사 E2E 결과가 최종 확정되기 전에는 중간 집계를 성능표에 넣지 않습니다.
+5. 서비스의 장점은 높은 자동 판정률보다 공식 좌표 확인과 보수적 `UNRESOLVED` 정책입니다.
+
+## 근거 파일
+
+- `freezes/v60_service_candidate_20260824_r1/freeze_manifest.json`
+- `freezes/v60_service_candidate_20260824_r1/evidence/dev300/coordinate_topk_multigold_summary.json`
+- `freezes/v60_service_candidate_20260824_r1/evidence/dev300/regression_gate.json`
+- `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`

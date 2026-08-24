@@ -1,0 +1,35 @@
+{
+  "schema_version": "kosis-v60-dev300-regression-gate-v1",
+  "created_at_utc": "2026-08-23T21:43:36.314011+00:00",
+  "dataset_role": "DEVELOPMENT_ONLY_NOT_BLIND",
+  "candidate_summary": "/home/ubuntu/kosis-project/runs/v60_dev300_coordinate_regression_20260824_r1/coordinate_topk_multigold_summary.json",
+  "candidate_summary_sha256": "3d87168a20d05fbdcc53054d247721a41c9f7a11831522216a491a3fd9fa1ec7",
+  "baseline_summary": "/home/ubuntu/kosis-project/runs/v58_dev300_coordinate_regression_20260824_r1/coordinate_topk_multigold_summary.json",
+  "baseline_summary_sha256": "2cbb3ab1e94db789f63869afc077a6421981e15f08cc8f6f9aedeef96781de7d",
+  "expected_claims": 300,
+  "eligible_overlap": 300,
+  "missing_prediction_packets": 0,
+  "thresholds": {
+    "item_accuracy_at_5_min": 0.75,
+    "coordinate_accuracy_at_5_min": 0.7
+  },
+  "candidate": {
+    "item_accuracy_at_5": 0.7733333333333333,
+    "coordinate_accuracy_at_5": 0.7433333333333333
+  },
+  "baseline_v58": {
+    "item_accuracy_at_5": 0.7733333333333333,
+    "coordinate_accuracy_at_5": 0.7433333333333333
+  },
+  "delta_vs_v58": {
+    "item_accuracy_at_5": 0.0,
+    "coordinate_accuracy_at_5": 0.0
+  },
+  "checks": {
+    "eligible_overlap_exact": true,
+    "missing_prediction_packets_zero": true,
+    "item_top5_threshold": true,
+    "coordinate_top5_threshold": true
+  },
+  "promotion_gate": "PASS"
+}

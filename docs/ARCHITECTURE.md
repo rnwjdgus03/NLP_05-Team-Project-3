@@ -1,57 +1,76 @@
-# 파이프라인 아키텍처
+# v60 파이프라인 아키텍처
 
-## 1. 구성 요소
+## 설계 목표
 
-| 구성 요소 | 역할 | 주요 입력 → 출력 |
-|---|---|---|
-| URL BFF | 공개 기사 수집, SSRF 차단, 메타데이터·수치 문장 추출 | URL → raw claims |
-| HCX-007 | 비정형 문장에서 지표·대상·값·단위·기간 구조화 | raw claims → measurements |
-| 안전 게이트 | KOSIS 직접 대조 가능성 판정 | measurements → READY/ENRICH/REJECT |
-| Stage A | 관련 KOSIS 통계표 검색 | READY → table Top-10 |
-| Stage B | 실제 메타데이터 안에서 ITEM·OBJ 좌표 구성 | tables → coordinate beam |
-| Stage C | 대상·기간·단위·표 범위를 반영해 좌표 재순위 | beam → Top-3 + rank 4–5 |
-| 값 검증 | PostgreSQL preflight 후 KOSIS API 실제값 비교 | coordinates → evidence/verdict |
-| FastAPI | FIFO 작업 큐, 상태 조회, 결과 직렬화 | request → job/result |
-| 프론트 | URL 입력, 진행 단계, KOSIS 근거 표시 | browser → BFF |
+뉴스의 다양한 표현을 이해하는 검색과 KOSIS의 엄격한 코드 좌표 조회를 분리합니다. 의미가 비슷하다는 이유만으로 공식 통계값을 비교하지 않고, 실제 메타데이터에 존재하는 표·ITEM·OBJ·기간·주기·단위가 확인된 경우에만 값 검증으로 진행합니다.
 
-## 2. 비정형 검색과 정형 조회의 분리
+## 단계별 입력과 출력
 
-기사 표현은 다양하므로 표 검색에는 lexical, BGE-M3 dense retrieval, cross-encoder reranker를 함께 사용합니다. 이 단계는 의미상 관련된 표 후보를 넓게 찾는 역할만 합니다.
+| 단계 | 주요 파일/컴포넌트 | 입력 | 출력 |
+|---|---|---|---|
+| URL 수집 | `frontend/server.mjs` | 조선일보 공개 URL | 제목·날짜·본문·수치 문장 |
+| 주장 구조화 | `engine/extract_hcx.py` | 문장과 앞뒤 문맥 | indicator/item/obj/period/value/unit |
+| 준비 게이트 | `engine/prepare_kosis_mapping_input.py` | measurements | READY/ENRICH/REJECT |
+| Stage A | `engine/run_kosis_coordinate_stage_a.py` | READY 주장, BGE 표 인덱스 | KOSIS 표 후보 |
+| Stage B | `engine/run_kosis_coordinate_stage_b.py` | 표 후보, PostgreSQL metadata | ITEM·OBJ 좌표 beam |
+| Stage C | `engine/run_kosis_coordinate_stage_c.py` | 좌표 beam | 재순위 Top-3/Top-5 |
+| 값 검증 | `engine/run_kosis_top5_verification.py` | 좌표·기간·값 | KOSIS evidence/verdict |
+| API | `api/app/` | 검증 job | 상태·결과 JSON |
+| 프론트/BFF | `frontend/` | URL | 진행 단계·판정·근거 UI |
 
-ITEM·OBJ·주기처럼 실제 API 호출에 필요한 좌표는 PostgreSQL의 KOSIS 공식 메타데이터에서 조회합니다. 벡터 검색 결과가 유사하더라도 DB에 존재하지 않거나 주장 대상과 맞지 않는 좌표는 사용할 수 없습니다.
+## 비정형 검색
+
+Stage A는 기사 표현과 KOSIS 표명 사이의 어휘 차이를 처리합니다.
+
+1. lexical 후보와 BGE-M3 dense 후보를 넓게 수집
+2. cross-encoder reranker로 관련 표를 재정렬
+3. 조사명·작성기관·통계분류·표 계열·기간 힌트를 반영
+4. 관련 표 Top-N을 정형 조회 단계로 전달
+
+이 단계의 답은 정답 좌표가 아니라 `tbl_id 후보`입니다.
+
+## 정형 조회
+
+PostgreSQL에는 KOSIS 메타데이터가 정규화돼 있습니다.
+
+- `kosis_tables`: 통계표와 조사/기관 정보
+- `kosis_items`: 수록 항목 코드
+- `kosis_axes`, `kosis_axis_values`: 성별·연령·지역·품목 등 OBJ 축과 값
+- `kosis_periodicities`: 월·분기·연 주기
+
+Stage B/C는 후보 표가 실제로 지원하는 좌표만 만들고, 대상 범위·전체/세부 품목·기간·단위를 반영해 순위를 정합니다. 이 구조 덕분에 84만 개 좌표 문서를 모두 벡터 DB에 넣지 않고도 exact retrieval을 수행할 수 있습니다.
+
+## 공식값 검증과 안전 정책
+
+PostgreSQL preflight를 통과한 좌표만 KOSIS Open API 후보가 됩니다. 다음 중 하나라도 불확실하면 값 차이를 확정하지 않습니다.
+
+- 통계표와 조사 범위
+- ITEM 의미
+- 성별·연령·지역·품목 OBJ
+- 기간 및 월·분기·연 주기
+- 단위와 환산계수
+- 직접값·증감률·구성비 등 값 유형
+
+외부 상태는 다음 세 가지입니다.
+
+- `MATCH`: 확인된 좌표와 공식값이 허용 범위 안에서 일치
+- `MISMATCH_REVIEW_REQUIRED`: 확인된 근거에서 차이가 있으나 검토 필요
+- `UNRESOLVED`: 좌표·기간·단위 또는 공식값을 충분히 확정하지 못함
+
+## 서비스 구조
 
 ```text
-비정형: 기사 표현 → BGE/Reranker → tbl_id 후보
-정형: tbl_id → PostgreSQL ITEM/OBJ/주기 → 유효 좌표
-공식값: 유효 좌표 → KOSIS Open API → 비교 근거
+Browser
+  ↕ URL-only request
+Node BFF / Frontend
+  ↕ internal API key
+FastAPI FIFO job queue
+  ↕ single GPU worker
+v60 frozen engine
+  ├─ BGE-M3 + reranker (GPU)
+  ├─ PostgreSQL exact metadata
+  ├─ HCX API
+  └─ KOSIS Open API
 ```
 
-## 3. v31b 검색 정책
-
-- Stage A를 `legacy`와 `balanced` 두 정책으로 실행합니다.
-- 각 정책은 lexical Top-300, dense Top-300, rerank Top-200을 사용합니다.
-- 두 결과를 합쳐 표 Top-10을 보존합니다.
-- 조사·기관·표 계열 슬롯과 ITEM recall을 함께 반영합니다.
-- Stage B는 표별 fallback 좌표를 보존하며 beam 250개까지 구성합니다.
-- Stage C는 Top-3를 기본으로 사용하고 rank 4–5는 제한적 fallback으로만 사용합니다.
-
-## 4. 판정 안전성
-
-`READY`는 입력 주장이 검색 가능하다는 뜻이지 정답 좌표가 확정됐다는 뜻이 아닙니다. 다음이 확인돼야 공식값 차이를 판정 근거로 사용할 수 있습니다.
-
-- 주장과 같은 통계표 범위
-- 같은 ITEM 의미
-- 성별·연령·지역·품목 등 OBJ 대상 일치
-- 기간과 주기 일치
-- 단위와 환산계수 확인
-- 직접값/증감률/구성비 등 값 유형 일치
-
-하나라도 불확실하면 `UNRESOLVED`로 보류합니다. 값 차이가 있어도 미확정 좌표에서는 `VALUE_MISMATCH`를 차단합니다. 외부에 노출되는 상태는 `MATCH`, `MISMATCH_REVIEW_REQUIRED`, `UNRESOLVED` 세 가지입니다.
-
-## 5. 서비스 경계
-
-- FastAPI는 한 개의 Uvicorn worker와 한 개의 FIFO GPU 큐를 사용합니다.
-- 동결 엔진은 `freezes/v31b_20260821_r1`에서 읽기 전용으로 실행합니다.
-- BFF는 브라우저 대신 내부 API 키를 주입합니다.
-- URL 수집은 최대 5MB HTML, 최대 4회 redirect, 최대 8개 수치 주장으로 제한합니다.
-- 로그인·구독·JavaScript 렌더링만 허용하는 기사는 수집하지 못할 수 있습니다.
+GPU 메모리 충돌과 API rate limit을 피하기 위해 메인 추론은 단일 FIFO 큐로 직렬화합니다. SQL 분석·프론트 개발처럼 GPU를 사용하지 않는 작업은 병행할 수 있습니다.

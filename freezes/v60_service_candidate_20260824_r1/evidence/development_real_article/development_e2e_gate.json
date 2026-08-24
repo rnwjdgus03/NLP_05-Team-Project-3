@@ -1,0 +1,41 @@
+{
+  "schema_version": "kosis-v60-real-article-development-gate-v1",
+  "created_at_utc": "2026-08-23T21:07:53.038145+00:00",
+  "dataset_role": "DEVELOPMENT_E2E_NOT_BLIND",
+  "ready_file": "/home/ubuntu/kosis-project/runs/v60_live40_pipeline_replay_20260824_r1/prepared_ready.csv",
+  "ready_file_sha256": "221b8df9067e2f30f1357c9c32995b5dd0db49a9ee018cdfc90ae13efc48343a",
+  "decisions_file": "/home/ubuntu/kosis-project/runs/v60_live40_pipeline_replay_20260824_r1/primary_decisions.jsonl",
+  "decisions_file_sha256": "1a9e1b93a03907b75fb5638210ca6de2f9c0588fc0c5cf26b07d31d54fc2c5fb",
+  "ready_measurements": 60,
+  "decision_rows": 60,
+  "decision_status_counts": {
+    "UNRESOLVED": 54,
+    "VERIFIED_MATCH": 6
+  },
+  "verified_matches": 6,
+  "verified_match_rate": 0.1,
+  "matched_distinct_articles": 5,
+  "matched_article_ids": [
+    "URL-1787508322120",
+    "URL-1787508335207",
+    "URL-1787508338319",
+    "URL-1787508366671",
+    "URL-1787508405174"
+  ],
+  "missing_decisions": [],
+  "unexpected_decisions": [],
+  "thresholds": {
+    "expected_ready": 60,
+    "verified_match_min": 6,
+    "distinct_matched_articles_min": 5,
+    "verified_match_rate_min": 0.1
+  },
+  "checks": {
+    "ready_count_exact": true,
+    "decision_coverage_complete": true,
+    "verified_match_min": true,
+    "distinct_matched_articles_min": true,
+    "verified_match_rate_min": true
+  },
+  "promotion_gate": "PASS"
+}
