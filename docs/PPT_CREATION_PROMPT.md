@@ -18,6 +18,8 @@
 6. `freezes/v60_service_candidate_20260824_r1/freeze_manifest.json`
 7. `freezes/v60_service_candidate_20260824_r1/evidence/dev300/coordinate_topk_multigold_summary.json`
 8. `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`
+9. `docs/GENERALIZATION_AUDIT.md`
+10. `evaluation/generalization_audit/public_generalization_audit.json`
 
 프로젝트 정의:
 
@@ -52,6 +54,8 @@
 - ITEM Top-5 `77.3%`, 전체 좌표 Top-5 `74.3%`는 반드시 `개발 좌표 골드 300건`이라고 붙인다.
 - Top-k는 “정답이 상위 k개 후보 안에 존재한 비율”이며 최종 팩트체크 정확도나 일반 뉴스 recall이 아니라고 설명한다.
 - 실제 기사 개발 E2E는 READY 60건 중 VERIFIED_MATCH 6건, UNRESOLVED 54건이다.
+- 표 분리 개발 600건은 ITEM Top-5 64.7%, 전체 좌표 Top-5 60.3%이며 독립 블라인드가 아니라 `DEVELOPMENT_ONLY_NOT_BLIND`라고 표시한다.
+- 후속 blind100 결과가 크게 변동했으므로 v60 개발 300건 결과를 일반화 성능으로 표현하지 않는다.
 - v60을 완성된 운영 모델이나 독립 테스트 검증 완료 모델이라고 표현하지 않는다.
 - 이전 v31b 30건 수치는 작은 기준선일 뿐 v60 대표 성능으로 앞세우지 않는다.
 - 별도 근거 파일이 저장소에 없는 숫자는 절대 만들지 않는다.

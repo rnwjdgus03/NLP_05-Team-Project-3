@@ -37,6 +37,15 @@ Top-k는 검색·좌표 매핑 지표입니다. 기사 전체 판정 정확도, 
 
 저장소에는 READY 주장 30건 규모의 이전 소규모 블라인드 자료가 남아 있습니다. 이는 개발 과정의 기준선으로만 보존하며, 표본이 작고 좌표 식별 가능한 주장에 한정되어 v60의 대표 일반화 성능으로 사용하지 않습니다.
 
+## 일반화 감사
+
+- 최초 v33 blind100 실패 35건은 Stage A 20건, ITEM 11건, OBJ 4건으로 분류됐습니다.
+- 후속 신규 blind100의 ITEM/좌표 Top-5는 71/68%, 65/64%, 56/50%, 73/70%로 변동했습니다.
+- 과거 골드 통계표와 중복이 0개인 v62 별도 개발 600건에서는 ITEM Top-5 64.7%, 전체 좌표 Top-5 60.3%였습니다.
+- v62 실패 퍼널은 Stage A 132건, ITEM 85건, OBJ 26건이며 성공은 357건입니다.
+
+따라서 v60의 개발 300건 목표 통과는 PoC 중단 기준을 충족한 것이지만, 목표 수준의 일반화가 입증된 것은 아닙니다. 자세한 정책과 근거 SHA는 `GENERALIZATION_AUDIT.md`와 `evaluation/generalization_audit/public_generalization_audit.json`에 있습니다.
+
 ## 발표 시 반드시 지킬 해석
 
 1. 77.3%와 74.3%는 `개발 300건 Top-5 적중률`이라고 말합니다.
@@ -51,3 +60,4 @@ Top-k는 검색·좌표 매핑 지표입니다. 기사 전체 판정 정확도, 
 - `freezes/v60_service_candidate_20260824_r1/evidence/dev300/coordinate_topk_multigold_summary.json`
 - `freezes/v60_service_candidate_20260824_r1/evidence/dev300/regression_gate.json`
 - `freezes/v60_service_candidate_20260824_r1/evidence/development_real_article/development_e2e_gate.json`
+- `evaluation/generalization_audit/public_generalization_audit.json`

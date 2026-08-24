@@ -2,7 +2,7 @@
 
 조선일보 기사 URL을 입력하면 기사 안의 수치 주장을 추출하고, KOSIS 공식 통계의 표·ITEM·OBJ·기간 좌표를 찾아 실제 값과 비교하는 AI 기반 사실검증 PoC입니다.
 
-현재 발표·서비스 후보는 `v60_service_candidate_20260824_r1`입니다. 개발 300건 목표를 통과한 동결 후보이며, **일반 뉴스 전체에서 검증된 완성 모델이나 독립 테스트 성능으로 해석하면 안 됩니다.**
+현재 발표·서비스 후보는 `v60_service_candidate_20260824_r1`입니다. 개발 300건 목표를 통과한 동결 후보이며, **일반 뉴스 전체에서 검증된 완성 모델이나 독립 테스트 성능으로 해석하면 안 됩니다.** 표가 겹치지 않는 별도 개발 600건에서는 ITEM Top-5 64.7%, 전체 좌표 Top-5 60.3%로 하락했습니다.
 
 ## 현재 완료 범위
 
@@ -55,6 +55,7 @@
 ├─ service_api/                                 # 안정화된 FastAPI 서비스 골격
 ├─ frontend_server/                             # URL 입력 BFF/UI 골격
 ├─ evaluation/v31b_blind/                       # 이전 소규모 블라인드 기준선
+├─ evaluation/generalization_audit/              # 공개용 일반화 감사 집계
 └─ docs/                                        # 구조·평가·운영·발표 문서
 ```
 
@@ -73,6 +74,7 @@
 
 - [아키텍처](docs/ARCHITECTURE.md)
 - [평가 결과와 해석](docs/EVALUATION.md)
+- [일반화 감사](docs/GENERALIZATION_AUDIT.md)
 - [운영·재현 안내](docs/RUNBOOK.md)
 - [최종 PoC 상태](docs/FINAL_POC_STATUS.md)
 - [발표자료 제작 프롬프트](docs/PPT_CREATION_PROMPT.md)

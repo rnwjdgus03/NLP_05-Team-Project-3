@@ -3,57 +3,225 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="뉴스 속 통계 주장을 KOSIS 공식 통계로 검증합니다." />
-    <title>KOSIS 뉴스 검증</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <meta
+      name="description"
+      content="기사 원문의 수치 주장을 KOSIS 공식 통계와 대조하는 사실검증 챗봇"
+    />
+    <title>팩트렌즈 | 뉴스 수치 검증</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/app.js" defer></script>
   </head>
   <body>
-    <main>
-      <header class="hero">
-        <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span>KOSIS OFFICIAL DATA</div>
-        <h1>뉴스 속 숫자,<br /><span>공식 통계로 확인하세요.</span></h1>
-        <p>기사 URL을 입력하면 수치 주장을 자동으로 찾고, KOSIS 표·항목·기간을 연결해 공식 수치와 비교합니다.</p>
-      </header>
+    <div class="app-layout">
+      <aside class="sidebar" aria-label="서비스 메뉴">
+        <a class="brand" href="/" aria-label="팩트렌즈 홈">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32">
+              <path d="M6 7.5h13.5A6.5 6.5 0 0 1 26 14v10.5H12.5A6.5 6.5 0 0 1 6 18V7.5Z" />
+              <path d="m12 16 2.8 2.8L21 12.6" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>팩트렌즈</strong>
+            <small>KOSIS FACT CHECK</small>
+          </span>
+        </a>
 
-      <section class="workspace" aria-labelledby="form-title">
-        <form id="verify-form" class="input-panel">
-          <div class="section-heading">
-            <div>
-              <span class="step-number">01</span>
-              <h2 id="form-title">검증할 기사</h2>
+        <button id="newAnalysisButton" class="new-analysis-button" type="button">
+          <span aria-hidden="true">＋</span>
+          새 통계 검증
+        </button>
+
+
+        <section class="recent-section" aria-labelledby="recentHeading">
+          <h2 id="recentHeading">최근 검증</h2>
+          <div id="recentList" class="recent-list">
+            <p class="recent-empty">완료된 검증이 여기에 표시됩니다.</p>
+          </div>
+        </section>
+
+        <div class="sidebar-footer">
+          <p><span class="status-dot" aria-hidden="true"></span>KOSIS 공식 통계 연결</p>
+          <small>HCX 주장 추출 · KOSIS 원자료 대조</small>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="mobile-header">
+          <a class="mobile-brand" href="/">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32">
+                <path d="M6 7.5h13.5A6.5 6.5 0 0 1 26 14v10.5H12.5A6.5 6.5 0 0 1 6 18V7.5Z" />
+                <path d="m12 16 2.8 2.8L21 12.6" />
+              </svg>
+            </span>
+            <strong>팩트렌즈</strong>
+          </a>
+          <button id="mobileNewButton" type="button" aria-label="새 통계 검증">＋</button>
+        </header>
+
+        <section id="homeHero" class="home-hero" aria-labelledby="heroTitle">
+          <div class="hero-inner">
+            <div class="hero-symbol" aria-hidden="true">
+              <svg viewBox="0 0 32 32">
+                <path d="M6 7.5h13.5A6.5 6.5 0 0 1 26 14v10.5H12.5A6.5 6.5 0 0 1 6 18V7.5Z" />
+                <path d="m12 16 2.8 2.8L21 12.6" />
+              </svg>
             </div>
-            <span id="server-state" class="status-badge neutral">연결 확인 중</span>
+            <p class="hero-eyebrow">KOSIS × AI FACT CHECK</p>
+            <h1 id="heroTitle">뉴스 속 숫자,<br /><em>공식 통계</em>로 확인하세요.</h1>
+            <p class="hero-copy">
+              조선일보 기사 URL을 입력하면 검증 가능한 문장을 먼저 보여드립니다.<br class="desktop-break" />
+              원하는 문장만 골라 국가통계포털 자료와 비교해 보세요.
+            </p>
+            <div class="feature-row" aria-label="주요 기능">
+              <span><i aria-hidden="true">✓</i> 검증 문장 직접 선택</span>
+              <span><i aria-hidden="true">✓</i> KOSIS 통계표 매칭</span>
+              <span><i aria-hidden="true">✓</i> 판정 근거 표시</span>
+            </div>
           </div>
+        </section>
 
-          <label class="url-field">기사 URL<input id="url" name="url" required type="url" inputmode="url" autocomplete="url" placeholder="https://news.example.com/article/…" /></label>
-          <div class="url-help">
-            <strong>URL 하나면 충분합니다</strong>
-            <span>서버가 기사 제목·작성일·본문을 읽고 수치가 포함된 주장 문장을 최대 8개까지 자동으로 선별합니다.</span>
+        <section id="conversationStage" class="conversation-stage" aria-label="기사 사실검증 대화">
+          <div id="chatStream" class="chat-stream" aria-live="polite"></div>
+
+          <aside id="guidePanel" class="guide-panel" aria-label="분석 진행 단계">
+            <div class="guide-head">
+              <p>ANALYSIS FLOW</p>
+              <h2>검증 진행 상황</h2>
+            </div>
+            <ol id="flowList" class="flow-list">
+              <li data-step="preprocess">
+                <span>01</span>
+                <div><strong>기사 수집·정제</strong><small>문장과 문맥을 정리합니다</small></div>
+              </li>
+              <li data-step="claim">
+                <span>02</span>
+                <div><strong>통계 주장 탐지</strong><small>검증 가능한 문장을 찾습니다</small></div>
+              </li>
+              <li data-step="selection">
+                <span>03</span>
+                <div><strong>검증 문장 선택</strong><small>직접 확인할 문장을 고릅니다</small></div>
+              </li>
+              <li data-step="measurement">
+                <span>04</span>
+                <div><strong>측정값 구조화</strong><small>지표·단위·기간을 찾습니다</small></div>
+              </li>
+              <li data-step="kosis">
+                <span>05</span>
+                <div><strong>KOSIS 대조</strong><small>공식 통계와 비교합니다</small></div>
+              </li>
+            </ol>
+            <div class="guide-note">
+              근거가 충분하지 않으면 무리하게 맞고 틀림을 정하지 않고 ‘판단불가’로 표시합니다.
+            </div>
+          </aside>
+        </section>
+
+        <form id="analysisForm" class="composer" novalidate>
+          <fieldset class="input-method">
+            <legend>기사 입력 방식</legend>
+            <div id="inputModeTabs" class="input-tabs" role="tablist" aria-label="기사 입력 방식">
+              <button
+                id="directModeTab"
+                class="input-tab"
+                hidden
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="directInputPane"
+                data-input-mode="direct"
+              >
+                <span class="tab-icon" aria-hidden="true">✎</span>
+                <span><strong>본문 직접 입력</strong><small>원문과 기사 날짜 입력</small></span>
+              </button>
+              <button
+                id="urlModeTab"
+                class="input-tab active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="urlInputPane"
+                data-input-mode="url"
+              >
+                <span class="tab-icon" aria-hidden="true">↗</span>
+                <span><strong>기사 URL 입력</strong><small>본문과 날짜 자동 수집</small></span>
+              </button>
+            </div>
+          </fieldset>
+
+          <section id="directInputPane" class="input-pane" role="tabpanel" aria-labelledby="directModeTab" hidden>
+            <div class="composer-head">
+              <label for="articleBody">기사 원문</label>
+              <span id="charCount">0 / 200,000</span>
+            </div>
+            <textarea
+              id="articleBody"
+              name="body"
+              rows="3"
+              maxlength="200000"
+              placeholder="검증할 기사 전체를 여기에 붙여넣으세요."
+            ></textarea>
+            <div class="direct-meta-grid">
+              <label>
+                <span>기사 날짜 <em>필수</em></span>
+                <input id="articleDate" type="date" max="9999-12-31" />
+              </label>
+              <label>
+                <span>기사 제목 <small>선택</small></span>
+                <input id="articleTitle" type="text" maxlength="500" placeholder="기사 제목" />
+              </label>
+            </div>
+          </section>
+
+          <section id="urlInputPane" class="input-pane url-input-pane" role="tabpanel" aria-labelledby="urlModeTab">
+            <label for="articleUrl">기사 URL</label>
+            <div class="url-input-row">
+              <span class="url-prefix" aria-hidden="true">↗</span>
+              <input
+                id="articleUrl"
+                type="url"
+                maxlength="2000"
+                inputmode="url"
+                autocomplete="url"
+                placeholder="https://news.example.com/article/123"
+              />
+            </div>
+            <p class="input-help">
+              공개 조선일보 기사에서 제목·날짜·본문을 자동 수집합니다.
+            </p>
+          </section>
+
+          <div class="composer-actions">
+            <label class="mode-control" for="kosisMode" hidden>
+              <span>검증 범위</span>
+              <select id="kosisMode">
+                <option value="table">통계표 탐색</option>
+                <option value="metadata">메타데이터 확인</option>
+                <option value="verify" selected>실제값까지 검증</option>
+              </select>
+            </label>
+            <label class="mode-control" for="retrievalMode" hidden>
+              <span>검색 방식</span>
+              <select id="retrievalMode">
+                <option value="auto" selected>자동 선택</option>
+                <option value="lexical">키워드 검색</option>
+                <option value="hybrid">Hybrid 검색</option>
+              </select>
+            </label>
+            <p class="keyboard-hint">Ctrl + Enter로 분석</p>
+            <button id="submitButton" class="analyze-button" type="submit">
+              <span>기사 분석하기</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="m5 10 9-6-3 6 3 6-9-6Z" />
+              </svg>
+            </button>
           </div>
-          <button id="submit-button" type="submit"><span>검증 시작</span><span aria-hidden="true">→</span></button>
-          <p class="form-note">로그인·구독이 필요한 기사나 본문 수집을 차단한 사이트는 처리되지 않을 수 있습니다. 불확실한 수치는 UNRESOLVED로 표시합니다.</p>
+          <p id="formError" class="form-error" role="alert"></p>
         </form>
 
-        <section class="result-panel" aria-live="polite" aria-labelledby="result-title">
-          <div class="section-heading">
-            <div>
-              <span class="step-number">02</span>
-              <h2 id="result-title">검증 결과</h2>
-            </div>
-            <span id="job-state" class="status-badge neutral">대기 중</span>
-          </div>
-          <div id="empty-state" class="empty-state">
-            <div class="data-mark" aria-hidden="true"><i></i><i></i><i></i></div>
-            <strong>검증 결과가 여기에 표시됩니다</strong>
-            <span>처리 중에는 현재 단계도 실시간으로 확인할 수 있습니다.</span>
-          </div>
-          <ol id="progress" class="progress-list hidden" aria-label="검증 진행 단계"></ol>
-          <div id="result" class="results hidden"></div>
-          <div id="error" class="error-box hidden" role="alert"></div>
-        </section>
-      </section>
-    </main>
-    <footer><span>KOSIS 기반 시범 서비스</span><span>생성형 AI 결과는 공식 발표 자료와 함께 확인하세요.</span></footer>
-    <script src="/app.js" defer></script>
+        <p class="service-note">AI가 공식 통계와 문맥을 비교합니다. 중요한 판단에는 원문 출처를 함께 확인해 주세요.</p>
+      </main>
+    </div>
   </body>
 </html>

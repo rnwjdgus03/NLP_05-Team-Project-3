@@ -12,7 +12,7 @@ EnvironmentFile=/home/ubuntu/kosis-project/.env
 Environment=KOSIS_FRONTEND_HOST=127.0.0.1
 Environment=KOSIS_FRONTEND_PORT=3100
 Environment=KOSIS_API_BASE_URL=http://127.0.0.1:8000
-ExecStart=/home/ubuntu/kosis-project/tools/node/bin/node /home/ubuntu/kosis-project/frontend_server/server.mjs
+ExecStart=/home/ubuntu/kosis-project/tools/node-v22.23.2-linux-x64/bin/node /home/ubuntu/kosis-project/frontend_server/server.mjs
 Restart=on-failure
 RestartSec=3
 

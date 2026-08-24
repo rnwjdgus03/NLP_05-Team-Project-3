@@ -1,0 +1,82 @@
+{
+  "schema_version": "kosis-public-generalization-audit-v1",
+  "created_at": "2026-08-24",
+  "policy": {
+    "blind_sets_are_evaluation_only": true,
+    "blind_results_used_for_tuning": false,
+    "v62_dataset_role": "DEVELOPMENT_ONLY_NOT_BLIND",
+    "v62_blind_labels_used": 0,
+    "v62_historical_table_ids_used_for_exclusion_only": true
+  },
+  "v33_blind100_failure_funnel": {
+    "gold_claims": 100,
+    "counts": {
+      "SUCCESS": 65,
+      "STAGE_A_TABLE": 20,
+      "STAGE_BC_ITEM": 11,
+      "STAGE_BC_OBJ": 4,
+      "PERIOD": 0
+    },
+    "source_sha256": "74047390b0a3a10a0b04311cc0e2d48f9ac59f6fe1f68e3e25786c9ad3e55281"
+  },
+  "subsequent_blind100": [
+    {
+      "evaluation": "v34_candidate_to_v35_blind100",
+      "item_top5": 0.71,
+      "coordinate_top5": 0.68,
+      "source_sha256": "66c0eae45ab5afed062b5d60dca03d84b91f63d9652f641f06f1721d6d11901d"
+    },
+    {
+      "evaluation": "v36_frozen_to_v37_blind100",
+      "item_top5": 0.65,
+      "coordinate_top5": 0.64,
+      "source_sha256": "a141af00c7182f7e5650f02460b01d1e72e4227bc34ba1054ee7c6d8a330768c"
+    },
+    {
+      "evaluation": "v39_frozen_to_v40_blind100",
+      "item_top5": 0.56,
+      "coordinate_top5": 0.5,
+      "source_sha256": "cf8fe31d628fc5527d206288673a464bfc2bf3cc84890e34791b8a2b7bb67ae4"
+    },
+    {
+      "evaluation": "v42_frozen_to_v43_blind100",
+      "item_top5": 0.73,
+      "coordinate_top5": 0.7,
+      "source_sha256": "ba6f5d264a141111d73132185f1f9c5fbb4c07438912c01edad793929decb1bc"
+    }
+  ],
+  "v62_table_disjoint_development600": {
+    "claims": 600,
+    "tables": 300,
+    "historical_gold_tables_scanned": 1099,
+    "historical_table_overlap": 0,
+    "metrics": {
+      "item_top1": 0.41833333333333333,
+      "item_top3": 0.6,
+      "item_top5": 0.6466666666666666,
+      "coordinate_top1": 0.38666666666666666,
+      "coordinate_top3": 0.5516666666666666,
+      "coordinate_top5": 0.6033333333333334,
+      "stage_a_top30": 0.78
+    },
+    "failure_funnel": {
+      "SUCCESS": 357,
+      "STAGE_A_TABLE": 132,
+      "STAGE_BC_ITEM": 85,
+      "STAGE_BC_OBJ": 26
+    },
+    "stage_a_top30_root_causes": {
+      "SUCCESS_TOP30": 468,
+      "RAW_RECALL_MISS": 107,
+      "FIXED_BLEND_TOP30_DROP": 19,
+      "MERGE_TOP50_DROP": 6
+    },
+    "source_sha256": {
+      "dataset_manifest": "6637ca5d54613c425f854677b87f5109f5485f264b97687bc5f9d152380c69fe",
+      "coordinate_summary": "57d4b4ebc7bb6551d6063cd3629927c42fcb70c01dace47e7d2721e5074d2dad",
+      "failure_funnel": "506c6ab0a2b2eb758886f45fab682d03153eccd7f25fedad7b83c2b1e0dc716e",
+      "stage_a_audit": "4dddeb55779e93c1b3a7675a8f3ef0e1691cd74dc43ee242867d7f201810d488"
+    }
+  },
+  "conclusion": "v60 passes its development300 stop gate but does not demonstrate stable target-level performance on table-disjoint development600."
+}
