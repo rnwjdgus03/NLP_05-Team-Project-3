@@ -72,6 +72,16 @@ python test_frontend_url_only.py
 
 `test_frontend_v60_adapter.mjs`는 임시 모의 FastAPI를 띄워 문장 탐지, 선택 세션, v60 작업 등록, 상태 조회, 결과 프록시, 정적 UI 제공을 함께 확인합니다.
 
+## 잠금 URL50 이후 서버 승격
+
++`deploy/promote_v60_after_url50.sh`는 다음 조건을 모두 확인한 뒤에만 실행합니다.
+
++- `identity_audit.json`의 `status`가 `PASS`
++- `service_readiness.json`의 `status`가 `PASS`
++- 최종 UI의 Linux 계약 테스트 통과
++
++스크립트는 기존 프론트를 백업하고 v60 API와 최종 BFF를 systemd 서비스로 설치한 뒤 `/readyz`와 `/healthz`를 재검증합니다. 잠금 URL50이 실행 중이거나 승격 게이트가 FAIL이면 실행하지 않습니다.
+
 ## 안전 원칙
 
 - URL 수집기는 사설·loopback·link-local 주소를 차단합니다.
