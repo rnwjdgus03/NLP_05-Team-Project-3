@@ -340,6 +340,7 @@ textarea::placeholder,input::placeholder { color:#9aa49f; }
 .value-row { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:11px; }
 .value-chip { padding:6px 9px; border-radius:9px; background:#f1f6f2; font-size:10px; font-weight:750; }
 .reason-copy { margin:0; color:var(--muted); font-size:10px; line-height:1.6; }
+.official-copy { margin:7px 0 0; color:var(--brand-dark); font-size:10px; font-weight:800; line-height:1.55; }
 .hold-intro { margin:0 0 14px; color:var(--muted); font-size:11px; line-height:1.65; }
 .evidence-block { margin-top:10px; padding:13px 14px; border-radius:12px; background:#f7f9f7; }
 .evidence-block.kosis-evidence { background:#f1f6f2; }
@@ -354,6 +355,12 @@ textarea::placeholder,input::placeholder { color:#9aa49f; }
 .candidate-item { display:grid; grid-template-columns:23px 1fr auto; gap:8px; align-items:center; padding:8px; border-radius:9px; background:#f8faf8; font-size:10px; }
 .candidate-rank { width:22px; height:22px; display:grid; place-items:center; border-radius:6px; background:var(--brand-soft); color:var(--brand-dark); font-weight:850; }
 .candidate-id { color:var(--muted); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:8px; }
+.technical-details { margin-top:12px; padding:11px 12px; border:1px solid #edf1ee; border-radius:12px; background:#fbfdfb; }
+.technical-details summary { color:#52625a; font-size:10px; font-weight:800; cursor:pointer; }
+.technical-body { display:grid; gap:7px; margin-top:10px; }
+.technical-row { display:grid; grid-template-columns:92px 1fr; gap:10px; align-items:start; }
+.technical-label { color:var(--muted); font-size:9px; font-weight:800; }
+.technical-value { color:#3c4d44; font-size:9px; line-height:1.55; overflow-wrap:anywhere; }
 .empty-result { padding:19px; border:1px dashed #cbd8d0; border-radius:14px; color:var(--muted); text-align:center; white-space:pre-line; font-size:11px; line-height:1.6; }
 .selection-heading { margin-bottom:14px; }
 .selection-heading h2 { margin:0 0 5px; font-size:19px; letter-spacing:-.04em; }

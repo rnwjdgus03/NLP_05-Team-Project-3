@@ -191,6 +191,61 @@ function safeConvertedValue(item) {
   return `약 ${formatKoreanNumber(converted)}${displayUnit}`;
 }
 
+function extractReasonMetric(reason, label) {
+  const pattern = new RegExp(`${label}=([^,/]+)`);
+  const match = String(reason || "").match(pattern);
+  return match ? match[1].trim() : "";
+}
+
+function compactEvidencePath(item) {
+  return [
+    item.kosis_table_name,
+    item.kosis_item_name,
+    ...(item.kosis_object_names || []),
+  ].filter(Boolean).join(" > ");
+}
+
+function buildHumanReason(item) {
+  const statusClass = verdictClass(item);
+  const diffRate = extractReasonMetric(item.status_reason, "차이율");
+  const hasOfficialValue = hasValue(item.kosis_actual_value);
+
+  if (statusClass === "match") {
+    return diffRate
+      ? `뉴스 수치와 KOSIS 공식값의 차이율이 ${diffRate}로 허용 기준 안에 있어 일치로 판정했습니다.`
+      : "뉴스 수치와 KOSIS 공식값이 허용 기준 안에 있어 일치로 판정했습니다.";
+  }
+  if (statusClass === "mismatch") {
+    return diffRate
+      ? `뉴스 수치와 KOSIS 공식값의 차이율이 ${diffRate}로 커서 검토가 필요합니다.`
+      : "뉴스 수치와 KOSIS 공식값 사이에 차이가 있어 검토가 필요합니다.";
+  }
+  if (hasOfficialValue) {
+    return "공식 통계 후보는 찾았지만, 기간·단위·대상 기준이 완전히 확정되지 않아 판단을 보류했습니다.";
+  }
+  return "대조할 KOSIS 공식 통계값을 확정하지 못해 판단을 보류했습니다.";
+}
+
+function appendTechnicalDetails(container, item) {
+  const details = element("details", "technical-details");
+  const summary = element("summary", "", "검증 좌표 자세히 보기");
+  const body = element("div", "technical-body");
+  const path = compactEvidencePath(item);
+  const rows = [
+    ["KOSIS 경로", path || "확정된 후보 없음"],
+    ["기간", item.kosis_period_used || item.period || "-"],
+    ["단위", item.kosis_unit || item.unit || "-"],
+  ];
+  if (item.status_reason) rows.push(["내부 검증 로그", item.status_reason]);
+  rows.forEach(([label, value]) => {
+    const row = element("div", "technical-row");
+    row.append(element("span", "technical-label", label), element("span", "technical-value", value));
+    body.append(row);
+  });
+  details.append(summary, body);
+  container.append(details);
+}
+
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -477,10 +532,10 @@ function appendSummaryGrid(container, summary) {
   container.append(grid);
 }
 
-function appendCandidates(container, candidates) {
+function appendCandidates(container, candidates, title = `KOSIS 통계표 후보 ${candidates?.length || 0}개`) {
   if (!candidates?.length) return;
   const details = element("details", "candidate-details");
-  const summary = element("summary", "", `KOSIS 통계표 후보 ${candidates.length}개`);
+  const summary = element("summary", "", title);
   const list = element("div", "candidate-list");
   candidates.forEach((candidate) => {
     const row = element("div", "candidate-item");
@@ -506,9 +561,7 @@ function appendMeasurement(container, item, index) {
     const intro = element(
       "p",
       "hold-intro",
-      hasEvidence
-        ? "공식 통계 후보는 찾았지만, 기준 일치 확인이 필요합니다."
-        : "대조할 공식 통계값을 확정하지 못했습니다.",
+      buildHumanReason(item),
     );
     const claimBlock = element("div", "evidence-block");
     claimBlock.append(
@@ -549,15 +602,20 @@ function appendMeasurement(container, item, index) {
   if (item.indicator) valueRow.append(element("span", "value-chip", item.indicator));
   if (item.period) valueRow.append(element("span", "value-chip", item.period));
   if (item.kosis_actual_value) {
-    const actual = [item.kosis_actual_value, item.kosis_unit].filter(Boolean).join(" ");
+    const actual = [formatKoreanNumber(item.kosis_actual_value), item.kosis_unit].filter(Boolean).join("");
     valueRow.append(element("span", "value-chip", `KOSIS ${actual}`));
   }
-  const reason = element("p", "reason-copy", item.status_reason || "세부 사유가 없습니다.");
+  const reason = element("p", "reason-copy", buildHumanReason(item));
   card.append(head, quote, valueRow, reason);
+  const converted = safeConvertedValue(item);
+  if (converted) {
+    card.append(element("p", "official-copy", `환산 기준 공식값: ${converted}`));
+  }
   if (item.enrichment_actions) {
     card.append(element("p", "action-copy", `권장 보강 · ${item.enrichment_actions}`));
   }
-  appendCandidates(card, item.candidates);
+  appendTechnicalDetails(card, item);
+  appendCandidates(card, item.candidates, `KOSIS 통계표 후보 ${item.candidates?.length || 0}개 보기`);
   container.append(card);
 }
 
