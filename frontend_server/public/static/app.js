@@ -32,6 +32,26 @@ const verifyMessages = [
 const SELECTION_STEP_INDEX = 2;
 const VERIFY_STEP_INDEX = 3;
 
+const BACKEND_FLOW_STEP = {
+  hcx_extraction: 3,
+  prepare: 3,
+  gate_only_unresolved: 4,
+  v42_pipeline: 4,
+  final_kosis_verification: 4,
+  result_serialization: 4,
+  complete: flowItems.length,
+};
+
+const BACKEND_PROGRESS_COPY = {
+  hcx_extraction: ["수치와 기간을 구조화하고 있어요.", "선택한 문장의 지표·단위·시점을 확인합니다."],
+  prepare: ["KOSIS 검증 가능성을 확인하고 있어요.", "공식 통계와 비교할 수 있는 수치만 통과시킵니다."],
+  gate_only_unresolved: ["검증 가능한 공식값을 찾지 못했어요.", "판단 보류 결과를 정리합니다."],
+  v42_pipeline: ["KOSIS 통계와 대조하고 있어요.", "통계표·항목·분류 좌표를 찾고 실제값을 조회합니다."],
+  final_kosis_verification: ["KOSIS 공식값을 확인하고 있어요.", "확정된 후보 좌표로 공식 통계값을 비교합니다."],
+  result_serialization: ["판정 근거를 정리하고 있어요.", "검토자가 볼 수 있는 설명을 생성합니다."],
+  complete: ["검증을 완료했어요.", "결과를 화면에 표시합니다."],
+};
+
 
 function responseError(payload, fallback) {
   if (payload?.error?.message) return payload.error;
@@ -43,12 +63,14 @@ function sleep(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-async function pollVerification(jobId) {
+async function pollVerification(jobId, onProgress = () => {}) {
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const stateResponse = await fetch(`/api/verifications/${jobId}`);
     const state = await stateResponse.json();
     if (!stateResponse.ok) throw responseError(state, "검증 상태를 확인하지 못했습니다.");
+    onProgress(state.progress_step || state.status);
     if (state.status === "SUCCEEDED") {
+      onProgress("complete");
       const resultResponse = await fetch(`/api/verifications/${jobId}/result`);
       const result = await resultResponse.json();
       if (!resultResponse.ok) throw responseError(result, "검증 결과를 가져오지 못했습니다.");
@@ -213,6 +235,16 @@ function setFlowStep(activeIndex) {
     item.classList.toggle("active", index === activeIndex);
     item.classList.toggle("done", index < activeIndex || activeIndex >= flowItems.length);
   });
+}
+
+function setBackendProgress(step, loading) {
+  const flowIndex = BACKEND_FLOW_STEP[step];
+  if (flowIndex !== undefined) setFlowStep(flowIndex);
+  const copy = BACKEND_PROGRESS_COPY[step];
+  if (copy && loading) {
+    loading.strong.textContent = copy[0];
+    loading.small.textContent = copy[1];
+  }
 }
 
 function resetFlow() {
@@ -387,7 +419,7 @@ function lockSelectionCard(article, checkboxes, buttons, count) {
 
 async function verifySelectedClaims(detection, claimIds) {
   const loading = appendLoadingMessage(verifyMessages);
-  const progressTimer = startProgress(loading, verifyMessages, VERIFY_STEP_INDEX);
+  setFlowStep(VERIFY_STEP_INDEX);
   scrollToLatest();
 
   try {
@@ -403,7 +435,7 @@ async function verifySelectedClaims(detection, claimIds) {
     });
     const job = await response.json();
     if (!response.ok) throw responseError(job, "검증 요청에 실패했습니다.");
-    const rawResult = await pollVerification(job.job_id);
+    const rawResult = await pollVerification(job.job_id, (step) => setBackendProgress(step, loading));
     const result = normalizeVerificationResult(rawResult, detection, claimIds);
     loading.article.remove();
     appendResultMessage(result);
@@ -413,7 +445,6 @@ async function verifySelectedClaims(detection, claimIds) {
     appendErrorMessage(error);
     resetFlow();
   } finally {
-    window.clearInterval(progressTimer);
     scrollToLatest();
   }
 }

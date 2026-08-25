@@ -1,6 +1,6 @@
-# KOSIS v31b Service API
+# KOSIS v64 Service API
 
-블라인드 평가를 통과한 `v31b_20260821_r1` 동결본을 수정하지 않고 호출하는 FastAPI 계층입니다. GPU 파이프라인은 단일 작업 큐로 직렬 실행되므로 같은 L4에서 BGE/Reranker 작업이 겹치지 않습니다.
+최종 PoC 후보 `v64_candidate_20260824_r1` 동결 엔진을 호출하는 FastAPI 계층입니다. GPU 파이프라인은 단일 작업 큐로 직렬 실행되므로 같은 L4에서 BGE/Reranker 작업이 겹치지 않습니다.
 
 ## API 흐름
 
@@ -44,7 +44,7 @@ Swagger 문서는 `/docs`, 상태 확인은 `/healthz`와 `/readyz`입니다.
 
 ## 운영 원칙
 
-- 엔진 경로는 `/home/ubuntu/kosis-project/freezes/v31b_20260821_r1`로 고정합니다.
+- 엔진 경로는 `/home/ubuntu/kosis-project/freezes/v64_candidate_20260824_r1/engine`로 고정합니다.
 - 동결 manifest SHA가 다르거나 엔진 파일이 쓰기 가능하면 서비스가 기동하지 않습니다.
 - Uvicorn worker는 반드시 1개만 사용합니다. 여러 worker를 띄우면 GPU 큐가 중복됩니다.
 - `.env`와 실제 API 키는 Git/ZIP/프론트 코드에 넣지 않습니다.

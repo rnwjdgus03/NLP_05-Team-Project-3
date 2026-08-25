@@ -56,7 +56,6 @@
 ├─ freezes/v64_candidate_20260824_r1/          # 최종 PoC 동결 엔진
 ├─ service_api/                                 # 안정화된 FastAPI 서비스 골격
 ├─ frontend_server/                             # URL 입력 BFF/UI 골격
-├─ evaluation/v31b_blind/                       # 이전 소규모 블라인드 기준선
 ├─ evaluation/generalization_audit/              # 공개용 일반화 감사 집계
 ├─ evaluation/v60_locked_url50/                  # 잠금 URL50 승격 감사
 ├─ evaluation/v65_blind100/                      # 신규 독립 blind100 근거
