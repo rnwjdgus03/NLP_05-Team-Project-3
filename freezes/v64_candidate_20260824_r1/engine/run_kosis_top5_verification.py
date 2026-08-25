@@ -531,6 +531,26 @@ def selection_priority(row: Mapping[str, Any]) -> tuple[int, int, int, int, int,
     )
 
 
+def verification_fingerprint(row: Mapping[str, Any]) -> tuple[Any, ...]:
+    axes = []
+    for level in range(1, 9):
+        axis_id = _text(row.get(f"selected_obj_l{level}_axis_id"))
+        value_id = _text(row.get(f"selected_obj_l{level}"))
+        if axis_id or value_id:
+            axes.append((level, axis_id, value_id))
+    return (
+        _text(row.get("org_id")),
+        _text(row.get("tbl_id")),
+        _text(row.get("selected_itm_id")),
+        tuple(axes),
+        _text(row.get("api_prd_se") or row.get("prd_se")),
+        _text(row.get("period")),
+        _text(row.get("previous_period") or row.get("comparison_period")),
+        _text(row.get("mapping_type")),
+        _text(row.get("period_aggregation")),
+    )
+
+
 def classify(verified: Mapping[str, Any]) -> str:
     review = _text(verified.get("verification_review_required")).upper() == "Y"
     preflight_ok = coordinate_preflight_valid(verified) and (
@@ -862,6 +882,7 @@ def main() -> None:
                 key=lambda pair: selection_priority(pair[1]), reverse=True,
             )
             previous_code = ""
+            seen_fingerprints: set[tuple[Any, ...]] = set()
             claim_verified: list[dict[str, Any]] = []
 
             def verify_group(
@@ -870,6 +891,15 @@ def main() -> None:
             ) -> None:
                 nonlocal previous_code
                 for candidate, row in pairs:
+                    fingerprint = verification_fingerprint(row)
+                    if fingerprint in seen_fingerprints:
+                        print(
+                            f"[verify] claim={claim_id} duplicate coordinate skipped "
+                            f"source={row.get('candidate_sources')} fallback={fallback_state}",
+                            flush=True,
+                        )
+                        continue
+                    seen_fingerprints.add(fingerprint)
                     attempt_rank = len(claim_verified) + 1
                     row["api_attempt_rank"] = attempt_rank
                     row["retry_from_previous_code"] = previous_code
