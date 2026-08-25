@@ -340,6 +340,14 @@ textarea::placeholder,input::placeholder { color:#9aa49f; }
 .value-row { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:11px; }
 .value-chip { padding:6px 9px; border-radius:9px; background:#f1f6f2; font-size:10px; font-weight:750; }
 .reason-copy { margin:0; color:var(--muted); font-size:10px; line-height:1.6; }
+.hold-intro { margin:0 0 14px; color:var(--muted); font-size:11px; line-height:1.65; }
+.evidence-block { margin-top:10px; padding:13px 14px; border-radius:12px; background:#f7f9f7; }
+.evidence-block.kosis-evidence { background:#f1f6f2; }
+.evidence-title { display:block; margin-bottom:7px; color:#263a30; font-size:10px; }
+.evidence-claim,.evidence-path,.evidence-value,.evidence-converted { margin:0; font-size:11px; line-height:1.65; }
+.evidence-path { color:#3f5449; }
+.evidence-value { margin-top:5px; font-weight:800; }
+.evidence-converted { color:var(--brand-dark); font-weight:800; }
 .candidate-details { margin-top:12px; padding-top:11px; border-top:1px solid #edf1ee; }
 .candidate-details summary { color:var(--brand); font-size:10px; font-weight:750; }
 .candidate-list { display:grid; gap:6px; margin-top:8px; }

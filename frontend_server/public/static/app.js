@@ -64,7 +64,9 @@ function normalizeVerificationResult(result, detection, selectedClaimIds) {
   const claims = result.claims || [];
   const measurements = claims.map((item) => {
     const claim = item.claim || {};
-    const evidence = item.selected_evidence || null;
+    const evidence = item.selected_evidence
+      || (item.candidates || []).find((candidate) => candidate?.kosis_value !== null && candidate?.kosis_value !== "")
+      || null;
     const candidates = (item.candidates || []).slice(0, 5).map((candidate, index) => ({
       rank: index + 1,
       tbl_id: candidate.table?.tbl_id || "",
@@ -73,7 +75,7 @@ function normalizeVerificationResult(result, detection, selectedClaimIds) {
     }));
     const status = item.verdict === "MATCH"
       ? "일치"
-      : item.verdict === "MISMATCH_REVIEW_REQUIRED" ? "불일치 검토 필요" : "판단불가";
+      : item.verdict === "MISMATCH_REVIEW_REQUIRED" ? "불일치 검토 필요" : "판단 보류";
     return {
       claim_measurement_id: item.claim_measurement_id,
       claim_text: claim.text || "",
@@ -92,6 +94,9 @@ function normalizeVerificationResult(result, detection, selectedClaimIds) {
       kosis_actual_value: evidence?.kosis_value ?? "",
       kosis_unit: evidence?.item?.unit || "",
       kosis_period_used: evidence?.period || "",
+      kosis_table_name: evidence?.table?.name || "",
+      kosis_item_name: evidence?.item?.name || "",
+      kosis_object_names: (evidence?.objects || []).map((object) => object.value_name).filter(Boolean),
       needs_review: item.verdict !== "MATCH",
     };
   });
@@ -123,6 +128,45 @@ function normalizeVerificationResult(result, detection, selectedClaimIds) {
     },
     measurements,
   };
+}
+
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function formatKoreanNumber(value) {
+  const number = Number(String(value).replaceAll(",", ""));
+  if (!Number.isFinite(number)) return String(value);
+  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 3 }).format(number);
+}
+
+function safeConvertedValue(item) {
+  const rawValue = Number(String(item.kosis_actual_value).replaceAll(",", ""));
+  if (!Number.isFinite(rawValue)) return "";
+
+  const sourceUnit = String(item.kosis_unit || "").replaceAll(" ", "");
+  const claimText = String(item.claim_text || "").replaceAll(" ", "");
+  const supportedUnits = [
+    "백만달러", "천달러", "만달러", "억달러", "달러",
+    "백만원", "천원", "만원", "억원", "조원", "원",
+    "천명", "만명", "명",
+  ];
+  const claimUnit = supportedUnits.find((unit) => claimText.includes(unit))
+    || String(item.unit || "").replaceAll(" ", "");
+  const scale = {
+    명: 1, 천명: 1e3, 만명: 1e4,
+    원: 1, 천원: 1e3, 만원: 1e4, 백만원: 1e6, 억원: 1e8, 조원: 1e12,
+    달러: 1, 천달러: 1e3, 만달러: 1e4, 백만달러: 1e6, 억달러: 1e8,
+  };
+  if (!(sourceUnit in scale) || !(claimUnit in scale)) return "";
+
+  const sourceFamily = sourceUnit.includes("달러") ? "달러" : sourceUnit.includes("원") ? "원" : "명";
+  const claimFamily = claimUnit.includes("달러") ? "달러" : claimUnit.includes("원") ? "원" : "명";
+  if (sourceFamily !== claimFamily) return "";
+
+  const converted = rawValue * scale[sourceUnit] / scale[claimUnit];
+  const displayUnit = claimUnit.replace("달러", " 달러").trim();
+  return `약 ${formatKoreanNumber(converted)}${displayUnit}`;
 }
 
 function element(tag, className, text) {
@@ -423,8 +467,49 @@ function appendMeasurement(container, item, index) {
   const card = element("section", "measurement-card");
   const head = element("div", "measurement-head");
   const label = element("span", "measurement-label", `MEASUREMENT ${String(index + 1).padStart(2, "0")}`);
-  const verdict = element("span", `verdict ${verdictClass(item)}`, item.status || "판단불가");
+  const verdict = element("span", `verdict ${verdictClass(item)}`, item.status || "판단 보류");
   head.append(label, verdict);
+
+  if (item.status_code === "UNRESOLVED") {
+    const hasEvidence = hasValue(item.kosis_actual_value);
+    const intro = element(
+      "p",
+      "hold-intro",
+      hasEvidence
+        ? "공식 통계 후보는 찾았지만, 기준 일치 확인이 필요합니다."
+        : "대조할 공식 통계값을 확정하지 못했습니다.",
+    );
+    const claimBlock = element("div", "evidence-block");
+    claimBlock.append(
+      element("strong", "evidence-title", "뉴스 주장"),
+      element("p", "evidence-claim", item.claim_text || "원문 문장 없음"),
+    );
+
+    const evidenceBlock = element("div", "evidence-block kosis-evidence");
+    evidenceBlock.append(element("strong", "evidence-title", "KOSIS 근거 후보"));
+    if (hasEvidence) {
+      const path = [
+        item.kosis_table_name,
+        item.kosis_item_name,
+        ...(item.kosis_object_names || []),
+      ].filter(Boolean).join(" > ") || "KOSIS 공식 통계 후보";
+      const period = item.kosis_period_used ? `${item.kosis_period_used} 공식값` : "공식값";
+      const actual = `${formatKoreanNumber(item.kosis_actual_value)}${item.kosis_unit || ""}`;
+      evidenceBlock.append(
+        element("p", "evidence-path", path),
+        element("p", "evidence-value", `${period}: ${actual}`),
+      );
+      const converted = safeConvertedValue(item);
+      if (converted) {
+        evidenceBlock.append(element("p", "evidence-converted", `환산값: ${converted}`));
+      }
+    } else {
+      evidenceBlock.append(element("p", "evidence-path", "확정된 후보 없음"));
+    }
+    card.append(head, intro, claimBlock, evidenceBlock);
+    container.append(card);
+    return;
+  }
 
   const quote = element("p", "claim-quote", item.claim_text || "원문 문장 없음");
   const valueRow = element("div", "value-row");
