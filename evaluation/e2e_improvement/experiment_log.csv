@@ -1,0 +1,4 @@
+experiment_id,commit,change,hypothesis,dataset,sample_size,ready_precision,ready_recall,tbl_recall_at_1,tbl_recall_at_3,tbl_recall_at_5,item_accuracy,obj_accuracy,coordinate_exact_match,verdict_accuracy,end_to_end_accuracy,median_latency,p95_latency,notes,decision
+E000,41e297b,baseline audit,measure current evidence without tuning,v65_blind100,100,,,,0.59,0.58,,0.54,,,,,historical independent table-disjoint result; not reusable for tuning,baseline
+E001,WORKTREE,span-aware measurement identity,equal observations from distinct periods must not collapse,synthetic regression,3,,,,,,,,,,,,,,three regression cases pass; production metrics require new negative-inclusive extraction gold,candidate
+E002,WORKTREE,official axis-order and API-response echo validation,wrong axis ordering or non-echoed API rows must never become verified,synthetic regression,6,,,,,,,,,,,,,,safety regression tests pass; no independent accuracy claim,candidate

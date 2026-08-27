@@ -1,0 +1,40 @@
+{
+  "baseline_git_commit": "41e297b3f9327d6c2f25968f54602912407473bd",
+  "historical_independent_v65_blind100": {
+    "dataset_role": "OPENED_HISTORICAL_BLIND_NOT_FOR_TUNING",
+    "sample_size": 100,
+    "table_recall_at_5": 0.59,
+    "item_recall_at_5": 0.58,
+    "coordinate_exact_at_5": 0.54,
+    "item_recall_at_5_wilson95": [0.482, 0.672],
+    "coordinate_exact_at_5_wilson95": [0.443, 0.634]
+  },
+  "dev600_base": {
+    "dataset_role": "DEVELOPMENT_SYNTHETIC_COORDINATE_FIXTURE",
+    "sample_size": 600,
+    "table_at_5_correct": 388,
+    "item_at_5_correct": 388,
+    "coordinate_at_5_correct": 362,
+    "coordinate_at_5": 0.6033333333,
+    "coordinate_given_item_at_5": 0.9329896907,
+    "coordinate_misses": 238,
+    "coordinate_misses_caused_by_table_not_top5": 212,
+    "coordinate_only_misses": 26
+  },
+  "dev600_failure_funnel": {
+    "success": 357,
+    "stage_a_table": 132,
+    "item": 85,
+    "obj": 26
+  },
+  "expanded_pool_ceiling": {
+    "dataset_role": "DEVELOPMENT_POSTHOC_CANDIDATE_POOL_ONLY",
+    "table_recall_at_50": 0.855,
+    "warning": "This is not Top-5 coordinate or end-to-end accuracy."
+  },
+  "current_e2e_status": {
+    "score": null,
+    "reason": "INSUFFICIENT_GOLD",
+    "detail": "No current v64-aligned negative-inclusive article-disjoint gold preserves extraction, READY, mapping and verdict outcomes for every measurement."
+  }
+}
