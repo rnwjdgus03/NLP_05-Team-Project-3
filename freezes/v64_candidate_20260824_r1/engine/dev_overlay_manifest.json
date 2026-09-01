@@ -1,0 +1,23 @@
+{
+  "schema_version": "kosis-engine-dev-overlay-v1",
+  "overlay_id": "v43_e2e_contract_fixes_20260823_r1",
+  "parent_freeze_id": "v42_service_20260823_r1",
+  "parent_code_tree_sha256": "d4fb3c698626c0c098a1d2c383199a39423886f7e4e72654bb4cc74c5cb28594",
+  "status": "DEVELOPMENT_ONLY_NOT_FROZEN",
+  "modified_files": [
+    "extract_hcx.py",
+    "prepare_kosis_mapping_input.py",
+    "run_kosis_top5_verification.py"
+  ],
+  "changes": [
+    "hierarchical Korean magnitude number normalization",
+    "previous_period to comparison_period verifier adapter",
+    "derived rate/difference mapping takes precedence over level-indicator unit conflict"
+  ],
+  "evaluation_policy": "Do not rerun or replace the locked v42 URL30 result. Validate on the pre-existing non-blind development URL set, then create a new locked URL set.",
+  "tests": {
+    "parent_regression_tests": 83,
+    "new_regression_tests": 7,
+    "total_passed": 90
+  }
+}

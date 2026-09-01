@@ -1,0 +1,14 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.npy binary
+*.npz binary
+
+# Preserve the frozen candidate byte-for-byte for manifest verification.
+freezes/v64_candidate_20260824_r1/** -text !eol

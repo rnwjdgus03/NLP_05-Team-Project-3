@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="뉴스 속 수치 기반 주장을 AI로 탐지하고 KOSIS 공식 통계와 비교 검증하는 PoC입니다." />
+    <title>AI 뉴스 수치 검증 PoC</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span>AI NEWS CLAIM VERIFICATION · POC</div>
+        <h1>뉴스 속 숫자를 찾아,<br /><span>공식 통계로 검증합니다.</span></h1>
+        <p>기사 URL 하나로 검증 가능한 수치 주장을 탐지하고, KOSIS 통계표의 ITEM·OBJ·기간 좌표를 찾아 공식값과 비교한 뒤 판정 근거를 설명합니다.</p>
+      </header>
+
+      <section class="pipeline-overview" aria-label="검증 파이프라인">
+        <article><span>01</span><strong>수치 주장 탐지</strong><small>기사 본문에서 검증 가능한 숫자 문장을 AI로 구조화</small></article>
+        <article><span>02</span><strong>통계표·좌표 검색</strong><small>의미 검색 후 ITEM·OBJ·기간을 공식 메타데이터로 확인</small></article>
+        <article><span>03</span><strong>KOSIS 공식값 조회</strong><small>확정된 좌표로 KOSIS Open API의 실제 통계값 조회</small></article>
+        <article><span>04</span><strong>비교 판정·근거</strong><small>MATCH 또는 판단 보류와 함께 사용한 표·항목·수치를 표시</small></article>
+      </section>
+
+      <section class="workspace" aria-labelledby="form-title">
+        <form id="verify-form" class="input-panel">
+          <div class="section-heading">
+            <div>
+              <span class="step-number">01</span>
+              <h2 id="form-title">검증할 기사</h2>
+            </div>
+            <span id="server-state" class="status-badge neutral">연결 확인 중</span>
+          </div>
+
+          <label class="url-field">기사 URL<input id="url" name="url" required type="url" inputmode="url" autocomplete="url" placeholder="https://news.example.com/article/…" /></label>
+          <div class="url-help">
+            <strong>URL 하나면 충분합니다</strong>
+            <span>서버가 기사 제목·작성일·본문을 읽고 통계 관련성이 높은 수치 주장 문장을 최대 4개까지 자동으로 선별합니다.</span>
+          </div>
+          <button id="submit-button" type="submit"><span>검증 시작</span><span aria-hidden="true">→</span></button>
+          <p class="form-note">이 서비스는 기술 검증용 PoC입니다. 로그인·구독이 필요한 기사나 본문 수집을 차단한 사이트는 처리되지 않을 수 있으며, 정확한 표·항목·기간이 확인되지 않은 경우 수치를 억지로 판정하지 않고 UNRESOLVED로 표시합니다.</p>
+        </form>
+
+        <section class="result-panel" aria-live="polite" aria-labelledby="result-title">
+          <div class="section-heading">
+            <div>
+              <span class="step-number">02</span>
+              <h2 id="result-title">검증 결과</h2>
+            </div>
+            <span id="job-state" class="status-badge neutral">대기 중</span>
+          </div>
+          <div id="empty-state" class="empty-state">
+            <div class="data-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+            <strong>검증 결과가 여기에 표시됩니다</strong>
+            <span>처리 중에는 현재 단계도 실시간으로 확인할 수 있습니다.</span>
+          </div>
+          <ol id="progress" class="progress-list hidden" aria-label="검증 진행 단계"></ol>
+          <div id="result" class="results hidden"></div>
+          <div id="error" class="error-box hidden" role="alert"></div>
+        </section>
+      </section>
+    </main>
+    <footer><span>AI 기반 뉴스 수치 주장 추출 및 KOSIS 사실검증 PoC</span><span>생성형 AI 결과는 KOSIS 공식 발표 자료와 함께 확인하세요.</span></footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

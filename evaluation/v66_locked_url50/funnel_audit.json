@@ -1,0 +1,54 @@
+{
+  "schema_version": "kosis-real-url-e2e-audit-v1",
+  "counts": {
+    "fetch_succeeded_articles": 50,
+    "gate_only_articles": 25,
+    "ready_measurements": 96,
+    "enrich_measurements": 52,
+    "rejected_measurements": 254,
+    "verified_candidate_rows": 269,
+    "pipeline_articles": 25
+  },
+  "source_gate_outcomes": {
+    ":UNRESOLVED": 45,
+    ":MATCH": 5
+  },
+  "verified_verdict_code_counts": {
+    "MATCH": 19,
+    "REVISION_VINTAGE_RISK": 7,
+    "WITHIN_UNCERTAINTY_BAND": 4,
+    "MISMATCH_BLOCKED_UNCONFIRMED_COORDINATE": 68,
+    "ACTUAL_DERIVATION_FAILED": 32,
+    "UNIT_UNCERTAIN": 90,
+    "LIKELY_MISMAPPING": 10,
+    "PERIODICITY_NOT_AVAILABLE": 14,
+    "KOSIS_API_ERROR": 3,
+    "SEMANTIC_SCOPE_REVIEW_REQUIRED": 21,
+    "OBJ_UNRESOLVED": 1
+  },
+  "gate_reason_counts": {
+    "NOT_KOSIS_VALUE": 81,
+    "OUT_OF_KOSIS_SCOPE": 116,
+    "MEASUREMENT_REVIEW_REQUIRED": 4,
+    "ROLE_NOT_DIRECT_TARGET": 5,
+    "BINDING_NOT_CONFIRMED": 4,
+    "PERIOD_MISSING": 12,
+    "SHARE_CLAIM_UNSUPPORTED": 15,
+    "DERIVED_DIFFERENCE": 6,
+    "NO_MEASUREMENT": 18,
+    "GLOBAL_COMPARISON": 2,
+    "RANK_NOT_DIRECTLY_COMPARABLE": 4,
+    "SINGLE_COMPANY_METRIC": 13,
+    "FORECAST_VALUE": 8,
+    "TARGET_VALUE_NOT_OBSERVED": 1,
+    "CONVERTED_CURRENCY_VALUE": 2,
+    "DECLARED_SINGLE_COMPANY": 4,
+    "CONTEXTUAL_QUANTIFIER": 2,
+    "DAILY_MARKET_RATE": 1,
+    "PERIODICITY_MISSING": 2,
+    "PLAN_VALUE": 2,
+    "DERIVED_VALUE_REQUIRES_COMPUTATION": 2,
+    "SUB_MONTHLY_PERIOD_UNSUPPORTED": 1,
+    "POSSIBLE_COMPANY_METRIC": 1
+  }
+}

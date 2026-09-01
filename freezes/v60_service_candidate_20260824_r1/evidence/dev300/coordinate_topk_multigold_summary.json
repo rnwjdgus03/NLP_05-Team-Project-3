@@ -1,0 +1,135 @@
+{
+  "eligible_gold_claims": 300,
+  "eligible_gold_rows": 456,
+  "eligible_overlap": 300,
+  "gold_coordinate_status_row_counts": {
+    "ALTERNATE_RESOLVED": 156,
+    "UNIQUE": 300
+  },
+  "gold_file": "/home/ubuntu/kosis-project/runs/v41_primary_tail_metadata_cascade_20260823_r1/dev_coordinate_gold300_api_alternates.csv",
+  "gold_rows": 456,
+  "ks": [
+    1,
+    3,
+    5
+  ],
+  "metrics": {
+    "coordinate": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "full": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "item": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    },
+    "table": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    }
+  },
+  "metrics_all_eligible_gold": {
+    "coordinate": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "full": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "item": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    },
+    "table": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    }
+  },
+  "metrics_prediction_overlap": {
+    "coordinate": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "full": {
+      "accuracy_at_1": 0.49333333333333335,
+      "accuracy_at_3": 0.6666666666666666,
+      "accuracy_at_5": 0.7433333333333333,
+      "hit_at_1": 148,
+      "hit_at_3": 200,
+      "hit_at_5": 223,
+      "mrr": 0.5830555555555555
+    },
+    "item": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    },
+    "table": {
+      "accuracy_at_1": 0.5233333333333333,
+      "accuracy_at_3": 0.6966666666666667,
+      "accuracy_at_5": 0.7733333333333333,
+      "hit_at_1": 157,
+      "hit_at_3": 209,
+      "hit_at_5": 232,
+      "mrr": 0.6126666666666667
+    }
+  },
+  "missing_prediction_packets": 0,
+  "prediction_claims": 300,
+  "prediction_file": "/home/ubuntu/kosis-project/runs/v60_dev300_coordinate_regression_20260824_r1/final_candidates_top5.jsonl",
+  "prediction_overlap": 300,
+  "schema_version": "kosis-coordinate-topk-multigold-claim-eval-v1"
+}

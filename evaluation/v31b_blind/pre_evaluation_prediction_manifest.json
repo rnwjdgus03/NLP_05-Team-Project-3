@@ -1,0 +1,10 @@
+{
+  "schema_version": "kosis-v32-pre-evaluation-prediction-v1",
+  "gold_file_read_by_prediction": false,
+  "input_sha256": "6a6afb75182548e14987d8047f9a04e6e04222cb717aeb4663f3c1890081b8cc",
+  "frozen_code_tree_sha256": "3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf",
+  "prepared_rows": 30,
+  "prediction_packets": 30,
+  "prediction_sha256": "cd40124f35bee6f87255feb788fb7521cb7a96be562c9bce6d72659700a2c600",
+  "prediction_completed_at": "2026-08-20T15:26:45.562525+00:00"
+}

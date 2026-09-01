@@ -1,0 +1,31 @@
+{
+  "schema_version": "kosis-stage-a-table-recall-eval-v1",
+  "gold_rows": 30,
+  "eligible_gold_claims": 30,
+  "prediction_packets": 30,
+  "prediction_overlap": 30,
+  "missing_prediction_packets": 0,
+  "metrics_all_eligible_gold": {
+    "hit_at_1": 26,
+    "accuracy_at_1": 0.8666666666666667,
+    "hit_at_3": 29,
+    "accuracy_at_3": 0.9666666666666667,
+    "hit_at_5": 29,
+    "accuracy_at_5": 0.9666666666666667,
+    "hit_at_10": 29,
+    "accuracy_at_10": 0.9666666666666667,
+    "mrr": 0.9055555555555556
+  },
+  "input_scope_gold_claims": 30,
+  "metrics_prediction_overlap": {
+    "hit_at_1": 26,
+    "accuracy_at_1": 0.8666666666666667,
+    "hit_at_3": 29,
+    "accuracy_at_3": 0.9666666666666667,
+    "hit_at_5": 29,
+    "accuracy_at_5": 0.9666666666666667,
+    "hit_at_10": 29,
+    "accuracy_at_10": 0.9666666666666667,
+    "mrr": 0.9055555555555556
+  }
+}

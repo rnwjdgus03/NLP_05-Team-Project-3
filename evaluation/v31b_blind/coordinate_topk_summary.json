@@ -1,0 +1,158 @@
+{
+  "eligible_gold_rows": 30,
+  "eligible_overlap": 30,
+  "gold_coordinate_status_counts": {
+    "UNIQUE": 30
+  },
+  "gold_file": "/home/ubuntu/kosis-project/blind/v32_identifiable_ready_unused_coordinate30_20260821/blind_coordinate_gold30_locked.csv",
+  "gold_rows": 30,
+  "ks": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "metrics": {
+    "coordinate": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "full": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "item": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    },
+    "table": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    }
+  },
+  "metrics_all_eligible_gold": {
+    "coordinate": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "full": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "item": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    },
+    "table": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    }
+  },
+  "metrics_prediction_overlap": {
+    "coordinate": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "full": {
+      "accuracy_at_1": 0.7666666666666667,
+      "accuracy_at_10": 0.9333333333333333,
+      "accuracy_at_3": 0.9,
+      "accuracy_at_5": 0.9333333333333333,
+      "hit_at_1": 23,
+      "hit_at_10": 28,
+      "hit_at_3": 27,
+      "hit_at_5": 28,
+      "mrr": 0.8194444444444444
+    },
+    "item": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    },
+    "table": {
+      "accuracy_at_1": 0.8333333333333334,
+      "accuracy_at_10": 0.9666666666666667,
+      "accuracy_at_3": 0.9333333333333333,
+      "accuracy_at_5": 0.9666666666666667,
+      "hit_at_1": 25,
+      "hit_at_10": 29,
+      "hit_at_3": 28,
+      "hit_at_5": 29,
+      "mrr": 0.875
+    }
+  },
+  "missing_prediction_packets": 0,
+  "prediction_claims": 30,
+  "prediction_file": "/home/ubuntu/kosis-project/runs/v32_unused_blind30_prediction_20260821/local_api_candidates_top5.jsonl",
+  "prediction_overlap": 30,
+  "schema_version": "kosis-coordinate-topk-eval-v2"
+}

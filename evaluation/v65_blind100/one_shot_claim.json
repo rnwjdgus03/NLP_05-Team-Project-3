@@ -1,0 +1,7 @@
+{
+  "schema_version": "kosis-v65-blind100-one-shot-claim-v1",
+  "claimed_at_utc": "2026-08-24T05:31:23.327879+00:00",
+  "candidate_freeze_id": "v64_candidate_20260824_r1",
+  "blind_manifest_sha256": "864c7c80f8bcaa4bb9f64295cc8238f940e0b19a7d27ece2b6a71b87de5ed3da",
+  "status": "CLAIMED_BEFORE_PREDICTION"
+}

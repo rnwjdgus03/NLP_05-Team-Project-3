@@ -1,0 +1,36 @@
+{
+  "schema_version": "kosis-v61-blind100-gate-v1",
+  "created_at_utc": "2026-08-24T05:48:33.867564+00:00",
+  "dataset_role": "BLIND_EVALUATION_ONLY_NO_TUNING",
+  "candidate_freeze_id": "v64_candidate_20260824_r1",
+  "candidate_engine_tree_sha256": "760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64",
+  "blind_manifest_sha256": "864c7c80f8bcaa4bb9f64295cc8238f940e0b19a7d27ece2b6a71b87de5ed3da",
+  "freeze_manifest_sha256": "a56205cd41553bdafecd0faf2b8491e682bf7c0869393feec17ee9b9215362ef",
+  "evaluation_summary_sha256": "a30487c27ffd56c3b31a3a3aa5cba314178cbef1274b35e53a4631e8561f01ba",
+  "eligible_overlap": 100,
+  "prediction_claims": 100,
+  "missing_prediction_packets": 0,
+  "metrics": {
+    "item_accuracy_at_5": 0.58,
+    "coordinate_accuracy_at_5": 0.54
+  },
+  "preregistered_thresholds": {
+    "item_accuracy_at_5_min": 0.75,
+    "coordinate_accuracy_at_5_min": 0.7,
+    "eligible_overlap_exact": 100,
+    "missing_prediction_packets_max": 0
+  },
+  "checks": {
+    "blind_role": true,
+    "candidate_frozen_before_gold": true,
+    "candidate_freeze_identity": true,
+    "candidate_code_identity": true,
+    "eligible_overlap_exact": true,
+    "prediction_claims_exact": true,
+    "missing_prediction_packets_max": true,
+    "item_top5_threshold": false,
+    "coordinate_top5_threshold": false
+  },
+  "promotion_gate": "FAIL",
+  "post_evaluation_policy": "No candidate rule, weight, prompt, or retrieval change may be derived from this blind100 result."
+}

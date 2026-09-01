@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kosis_table_handoff_v1.schema.json",
+  "title": "KOSIS hybrid table retrieval handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pipeline_stage",
+    "status",
+    "claim_measurement_id",
+    "query",
+    "candidate_count",
+    "latency_ms",
+    "incomplete_reason",
+    "table_candidates",
+    "retrieval"
+  ],
+  "properties": {
+    "schema_version": {"const": "kosis-table-handoff-v1"},
+    "pipeline_stage": {"const": "hybrid-table-top3-postgres"},
+    "status": {
+      "enum": [
+        "ready_for_kosis_mcp",
+        "retrieval_abstention",
+        "metadata_incomplete",
+        "technical_failure"
+      ]
+    },
+    "claim_measurement_id": {"type": "string", "minLength": 1},
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "claim_text": {"type": "string"},
+        "indicator": {"type": "string"},
+        "industry_or_item": {"type": "string"},
+        "measurement_item": {"type": "string"},
+        "period": {"type": "string"},
+        "prd_se": {"type": "string"},
+        "value": {"type": "string"},
+        "unit": {"type": "string"},
+        "region": {"type": "string"}
+      }
+    },
+    "candidate_count": {"type": "integer", "minimum": 0, "maximum": 3},
+    "latency_ms": {"type": "number", "minimum": 0},
+    "incomplete_reason": {"type": "string"},
+    "table_candidates": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/tableCandidate"}
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lexical_backend", "embedding_model", "reranker_model",
+        "embedding_revision", "reranker_revision",
+        "lexical_top_k", "dense_top_k", "rerank_top_k", "final_top_k",
+        "semantic_tables_sha256", "metadata_snapshot_id",
+        "input_sha256", "artifact_hashes",
+        "max_metadata_packet_bytes", "run_fingerprint", "latency_ms"
+      ],
+      "properties": {
+        "lexical_backend": {"const": "bm25-korean-bigram-v1"},
+        "embedding_model": {"const": "BAAI/bge-m3"},
+        "reranker_model": {"const": "BAAI/bge-reranker-v2-m3"},
+        "embedding_revision": {"type": "string", "minLength": 1},
+        "reranker_revision": {"type": "string", "minLength": 1},
+        "lexical_top_k": {"type": "integer", "minimum": 1},
+        "dense_top_k": {"type": "integer", "minimum": 1},
+        "rerank_top_k": {"type": "integer", "minimum": 1},
+        "final_top_k": {"type": "integer", "minimum": 1, "maximum": 3},
+        "semantic_tables_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "metadata_snapshot_id": {"type": "string", "minLength": 1},
+        "input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_hashes": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "required": [
+            "embeddings.npy", "manifest.json", "kosis_hybrid_top3.py",
+            "kosis_semantic_search.py", "run_kosis_hybrid_postgres_top3.py",
+            "kosis_postgres_store.py", "kosis_metadata_schema.sql",
+            "kosis_table_handoff_v1.schema.json"
+          ]
+        },
+        "max_metadata_packet_bytes": {"type": "integer", "minimum": 1},
+        "run_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "latency_ms": {"type": "number", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "tableCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rank", "org_id", "tbl_id", "tbl_name", "category_path", "scores",
+        "items", "axes", "periodicities", "metadata_complete",
+        "metadata_status", "missing_metadata_sections"
+      ],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 1, "maximum": 3},
+        "org_id": {"type": "string", "minLength": 1},
+        "tbl_id": {"type": "string", "minLength": 1},
+        "tbl_name": {"type": "string"},
+        "category_path": {"type": "string"},
+        "scores": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lexical_rank", "dense_rank", "fusion_score", "reranker_score",
+            "lexical_score", "dense_score"
+          ],
+          "properties": {
+            "lexical_rank": {"type": ["integer", "null"], "minimum": 1},
+            "dense_rank": {"type": ["integer", "null"], "minimum": 1},
+            "fusion_score": {"type": ["number", "null"]},
+            "reranker_score": {"type": "number"},
+            "lexical_score": {"type": ["number", "null"]},
+            "dense_score": {"type": ["number", "null"]}
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/item"}
+        },
+        "axes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/axis"}
+        },
+        "periodicities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/periodicity"}
+        },
+        "metadata_complete": {"type": "boolean"},
+        "metadata_status": {
+          "enum": [
+            "complete", "catalog_only", "partial", "quarantined",
+            "packet_truncated", "table_missing"
+          ]
+        },
+        "missing_metadata_sections": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["table", "items", "axes", "axis_values", "periodicities"]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "metadata_status": {"const": "complete"},
+                "metadata_complete": {"const": true},
+                "missing_metadata_sections": {"maxItems": 0}
+              }
+            },
+            {
+              "properties": {
+                "metadata_status": {
+                  "enum": [
+                    "catalog_only", "partial", "quarantined",
+                    "packet_truncated", "table_missing"
+                  ]
+                },
+                "metadata_complete": {"const": false},
+                "missing_metadata_sections": {"minItems": 1}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_id", "item_name", "parent_item_id", "unit_id", "unit_name",
+        "unit_eng_name"
+      ],
+      "properties": {
+        "item_id": {"type": "string"},
+        "item_name": {"type": "string"},
+        "parent_item_id": {"type": "string"},
+        "unit_id": {"type": "string"},
+        "unit_name": {"type": "string"},
+        "unit_eng_name": {"type": "string"}
+      }
+    },
+    "axis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis_id", "axis_name", "axis_order", "values"],
+      "properties": {
+        "axis_id": {"type": "string"},
+        "axis_name": {"type": "string"},
+        "axis_order": {"type": "integer", "minimum": 1},
+        "values": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/axisValue"}
+        }
+      }
+    },
+    "axisValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_id", "value_name", "parent_value_id"],
+      "properties": {
+        "value_id": {"type": "string"},
+        "value_name": {"type": "string"},
+        "parent_value_id": {"type": "string"}
+      }
+    },
+    "periodicity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prd_se", "range_text"],
+      "properties": {
+        "prd_se": {"type": "string"},
+        "range_text": {"type": "string"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "candidate_count": {"const": 0},
+            "table_candidates": {"maxItems": 0}
+          }
+        },
+        {
+          "properties": {
+            "candidate_count": {"const": 1},
+            "table_candidates": {
+              "minItems": 1,
+              "maxItems": 1,
+              "contains": {"properties": {"rank": {"const": 1}}}
+            }
+          }
+        },
+        {
+          "properties": {
+            "candidate_count": {"const": 2},
+            "table_candidates": {
+              "minItems": 2,
+              "maxItems": 2,
+              "allOf": [
+                {"contains": {"properties": {"rank": {"const": 1}}}},
+                {"contains": {"properties": {"rank": {"const": 2}}}}
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "candidate_count": {"const": 3},
+            "table_candidates": {
+              "minItems": 3,
+              "maxItems": 3,
+              "allOf": [
+                {"contains": {"properties": {"rank": {"const": 1}}}},
+                {"contains": {"properties": {"rank": {"const": 2}}}},
+                {"contains": {"properties": {"rank": {"const": 3}}}}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "status": {"const": "ready_for_kosis_mcp"},
+            "candidate_count": {"minimum": 1},
+            "incomplete_reason": {"const": ""},
+            "table_candidates": {
+              "items": {
+                "allOf": [
+                  {"$ref": "#/$defs/tableCandidate"},
+                  {"properties": {
+                    "metadata_complete": {"const": true},
+                    "metadata_status": {"const": "complete"},
+                    "missing_metadata_sections": {"maxItems": 0},
+                    "items": {"minItems": 1},
+                    "axes": {
+                      "minItems": 1,
+                      "items": {
+                        "allOf": [
+                          {"$ref": "#/$defs/axis"},
+                          {"properties": {"values": {"minItems": 1}}}
+                        ]
+                      }
+                    },
+                    "periodicities": {"minItems": 1}
+                  }}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "retrieval_abstention"},
+            "candidate_count": {"const": 0},
+            "incomplete_reason": {"const": "NO_TABLE_CANDIDATES"}
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "metadata_incomplete"},
+            "candidate_count": {"minimum": 1},
+            "incomplete_reason": {"minLength": 1},
+            "table_candidates": {
+              "minItems": 1,
+              "contains": {
+                "properties": {
+                  "metadata_complete": {"const": false},
+                  "metadata_status": {
+                    "enum": [
+                      "catalog_only", "partial", "quarantined",
+                      "packet_truncated", "table_missing"
+                    ]
+                  },
+                  "missing_metadata_sections": {"minItems": 1}
+                },
+                "required": [
+                  "metadata_complete", "metadata_status", "missing_metadata_sections"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "status": {"const": "technical_failure"},
+            "candidate_count": {"const": 0},
+            "incomplete_reason": {"minLength": 1}
+          }
+        }
+      ]
+    }
+  ]
+}

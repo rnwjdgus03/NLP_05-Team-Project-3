@@ -1,0 +1,15 @@
+{
+  "schema_version": "kosis-v60-publication-snapshot-v1",
+  "created_at_utc": "2026-08-24T01:39:25.429358+00:00",
+  "source_freeze_id": "v60_service_candidate_20260824_r1",
+  "source_code_tree_sha256": "743360d418f5173bfa8445f0e25126a5bd20320967a21398388538ff964f3cef",
+  "publication_note": "GitHub-safe copy. Runtime secrets, databases, indexes and credentials are excluded. The publication tree is a selected subset, so its tree hash is not the immutable runtime engine hash recorded in the source freeze manifest.",
+  "copied_files": 189,
+  "excluded_paths": [],
+  "redacted_paths": [],
+  "normalized_paths": [
+    "engine/V39_IMPLEMENTATION_REPORT.md",
+    "engine/compact_audit.py"
+  ],
+  "secret_scan": "PASS"
+}

@@ -1,0 +1,23 @@
+[Unit]
+Description=KOSIS v60 final URL-only frontend BFF
+After=network-online.target kosis-v60-api.service
+Wants=network-online.target
+Requires=kosis-v60-api.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/kosis-project/frontend_server
+EnvironmentFile=/home/ubuntu/kosis-project/.env
+Environment=KOSIS_FRONTEND_HOST=127.0.0.1
+Environment=KOSIS_FRONTEND_PORT=3100
+Environment=KOSIS_API_BASE_URL=http://127.0.0.1:8001
+Environment=KOSIS_MAX_ARTICLE_CLAIMS=4
+ExecStart=/home/ubuntu/kosis-project/tools/node-v22.23.2-linux-x64/bin/node /home/ubuntu/kosis-project/frontend_server/server.mjs
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

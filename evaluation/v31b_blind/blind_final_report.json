@@ -1,0 +1,43 @@
+{
+  "schema_version": "kosis-v32-blind-final-report-v1",
+  "freeze_id": "v31b_20260821_r1",
+  "frozen_code_tree_sha256": "3d2b7ebf51ec456ba9bf23525539b6e2e37bb3a9d28e5e90ac2ff1ced10bc8bf",
+  "metrics": {
+    "stage_a_table_top10": 0.9666666666666667,
+    "table_item_top5": 0.9666666666666667,
+    "coordinate_top5": 0.9333333333333333,
+    "full_top5": 0.9333333333333333
+  },
+  "claim_decision_status_counts": {
+    "VERIFIED_MATCH": 26,
+    "UNRESOLVED": 4
+  },
+  "claim_verdict_code_counts": {
+    "MATCH": 42,
+    "MISMATCH_BLOCKED_UNCONFIRMED_COORDINATE": 12,
+    "LIKELY_MISMAPPING": 8,
+    "UNIT_UNCERTAIN": 7,
+    "ACTUAL_DERIVATION_FAILED": 7,
+    "SEMANTIC_SCOPE_REVIEW_REQUIRED": 13
+  },
+  "false_value_mismatch_claims": 0,
+  "unsafe_status_counts": {},
+  "thresholds": {
+    "stage_a_table_top10_min": 0.8,
+    "table_item_top5_min": 0.7,
+    "coordinate_top5_min": 0.6,
+    "full_top5_min": 0.5,
+    "false_value_mismatch_max": 0,
+    "uncertain_must_be_unresolved": true
+  },
+  "checks": {
+    "stage_a_table_top10": true,
+    "table_item_top5": true,
+    "coordinate_top5": true,
+    "full_top5": true,
+    "false_value_mismatch": true,
+    "uncertain_is_unresolved": true
+  },
+  "all_preregistered_checks_pass": true,
+  "evaluated_at": "2026-08-20T15:27:59.286553+00:00"
+}

@@ -1,0 +1,34 @@
+[Unit]
+Description=KOSIS v60 frozen verification API
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/kosis-project/freezes/v60_service_candidate_20260824_r1/api
+EnvironmentFile=/home/ubuntu/kosis-project/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=KOSIS_PROJECT_ROOT=/home/ubuntu/kosis-project
+Environment=KOSIS_EXPECTED_FREEZE_ID=v60_service_candidate_20260824_r1
+Environment=KOSIS_EXPECTED_CODE_SHA256=743360d418f5173bfa8445f0e25126a5bd20320967a21398388538ff964f3cef
+Environment=KOSIS_ENGINE_DIR=/home/ubuntu/kosis-project/freezes/v60_service_candidate_20260824_r1/engine
+Environment=KOSIS_INDEX_DIR=/home/ubuntu/kosis-project/indexes/bge_m3_table_v2_complete
+Environment=KOSIS_PYTHON=/home/ubuntu/kosis-project/.venv/bin/python
+Environment=KOSIS_SERVICE_ROOT=/home/ubuntu/kosis-project/runs/service_v60_production
+Environment=KOSIS_SERVICE_RUNS_DIR=/home/ubuntu/kosis-project/runs/service_v60_production/jobs
+Environment=KOSIS_SERVICE_STATE_DB=/home/ubuntu/kosis-project/runs/service_v60_production/state/jobs.sqlite3
+Environment=KOSIS_POSTGRES_DSN=postgresql:///kosis_project
+Environment=KOSIS_DEVICE=cuda
+Environment=KOSIS_REQUIRE_READONLY_ENGINE=true
+Environment=KOSIS_MAX_ROWS_PER_JOB=20
+Environment=KOSIS_CORS_ORIGINS=http://127.0.0.1:3100
+ExecStart=/home/ubuntu/kosis-project/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

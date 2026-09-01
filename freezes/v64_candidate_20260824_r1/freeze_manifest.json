@@ -1,0 +1,72 @@
+{
+  "schema_version": "kosis-v64-mapping-candidate-freeze-v1",
+  "freeze_id": "v64_candidate_20260824_r1",
+  "status": "FROZEN_CANDIDATE_PENDING_NEW_BLIND100",
+  "created_at_utc": "2026-08-24T05:27:57.791270+00:00",
+  "code_tree_sha256": "760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64",
+  "frozen_before_new_blind_selection": true,
+  "components": {
+    "engine": {
+      "path": "engine",
+      "tree_sha256": "760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64"
+    }
+  },
+  "development_evaluation": {
+    "dataset_role": "DEVELOPMENT_ONLY_NOT_BLIND",
+    "evaluation_mode": "SUPERVISED_EXACT_MAPPING_CACHE_RESUBSTITUTION",
+    "claims": 600,
+    "promotion_gate": "PASS",
+    "item_accuracy_at_5": 0.9033333333333333,
+    "coordinate_accuracy_at_5": 0.9016666666666666,
+    "baseline_item_accuracy_at_5": 0.6466666666666666,
+    "baseline_coordinate_accuracy_at_5": 0.6033333333333334,
+    "disclosure": "The cache was built and evaluated on the same development600 rows. These are development/resubstitution metrics, not blind generalization metrics.",
+    "gate_sha256": "8500f695bcadbc7e59e24feaa58cdfd70f8c750914d1541f0bb981f0a29fef9c",
+    "development_manifest_sha256": "6637ca5d54613c425f854677b87f5109f5485f264b97687bc5f9d152380c69fe",
+    "blind_labels_used": 0,
+    "historical_table_overlap": 0
+  },
+  "mapping_memory": {
+    "dataset_role": "DEVELOPMENT_SUPERVISED_CACHE",
+    "entry_count": 522,
+    "covered_development_rows": 522,
+    "collision_key_count": 31,
+    "key_fields": [
+      "metric_domain",
+      "indicator",
+      "canonical_unit",
+      "prd_se"
+    ],
+    "memory_sha256": "3ac6feae68d9d0c48619718d4a70b7b405b9662b8a035a9478ec3df4f822a866",
+    "blind_labels_used": 0
+  },
+  "period_probe": {
+    "dataset_role": "DEVELOPMENT_ONLY",
+    "ready_measurements": 2,
+    "verified_match_rows": 0,
+    "probe_sha256": "8d79fa5a5f6a2edce40aabf05929ff3f69eb7a33de75402b3f43ea4dff87b683",
+    "ab_status": "PASS",
+    "baseline_ready_measurements": 0,
+    "candidate_ready_measurements": 2,
+    "ready_delta": 2,
+    "ready_regressions": 0,
+    "period_ab_sha256": "6f777083c3dbe49aa4ba591fc956f2917941138502cb0aa6584b4c3f41858dab"
+  },
+  "preregistered_new_blind100_thresholds": {
+    "item_accuracy_at_5_min": 0.75,
+    "coordinate_accuracy_at_5_min": 0.7,
+    "eligible_overlap_exact": 100,
+    "missing_prediction_packets_max": 0
+  },
+  "evaluation_policy": {
+    "v33_reuse": false,
+    "v61_reuse": false,
+    "new_blind100_runs": 1,
+    "no_tuning_after_unblind": true,
+    "finish_project_after_one_shot_blind_regardless_of_result": true
+  },
+  "tests": {
+    "status": "PASS",
+    "scope": "engine/tests"
+  }
+}

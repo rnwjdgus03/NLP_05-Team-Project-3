@@ -1,0 +1,39 @@
+{
+  "schema_version": "kosis-real-url-e2e-summary-v1",
+  "locked_urls": 50,
+  "article_fetch_succeeded": 50,
+  "article_fetch_failed": 0,
+  "article_fetch_success_rate": 1.0,
+  "jobs_succeeded": 50,
+  "jobs_failed": 0,
+  "job_success_rate_given_fetch": 1.0,
+  "measurements": 96,
+  "ready_measurements": 96,
+  "extracted_measurements": 393,
+  "verdict_counts": {
+    "UNRESOLVED": 252,
+    "MATCH": 11
+  },
+  "selected_evidence_count": 11,
+  "selected_evidence_rate": 0.11458333333333333,
+  "fetch_submit_latency_seconds": {
+    "p50": 2.368812705986784,
+    "p95": 3.538677413991536,
+    "max": 4.529312957005459
+  },
+  "queue_latency_seconds": {
+    "p50": 3031.093149,
+    "p95": 6106.009873
+  },
+  "run_latency_seconds": {
+    "p50": 87.7813,
+    "p95": 290.35885,
+    "max": 386.485148
+  },
+  "engine_counts": {
+    "v64_candidate_20260824_r1|760033bbd941a26acd6af1fc0360ef9665ae78d46adc81e80f901c80ce5a7d64": 50
+  },
+  "fetch_error_counts": {},
+  "job_error_counts": {},
+  "completed_at": "2026-08-24T07:46:42.762441+00:00"
+}

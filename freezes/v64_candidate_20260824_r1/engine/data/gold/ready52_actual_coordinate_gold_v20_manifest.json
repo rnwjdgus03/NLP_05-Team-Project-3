@@ -1,0 +1,24 @@
+{
+  "schema_version": "ready52-actual-coordinate-gold-v20",
+  "created_at": "2026-08-19T05:18:18.068836+00:00",
+  "ready_source": "C:\\Users\\김진성\\OneDrive\\문서\\부트캠프\\outputs\\user_v16_hybrid_results_20260819\\06_in_ready_all_latest_prepared_all.csv",
+  "ready_source_sha256": "f0591a195a88b4ef2439735e9a7f78ba10d0dc2fe9e8f6b27a3d55797bcd7d49",
+  "previous_gold_source": "C:\\Users\\김진성\\OneDrive\\문서\\부트캠프\\gold-v1-lock-work\\data\\gold\\mcp_auto_gold_250.csv",
+  "previous_gold_source_sha256": "7e09d8d91c7279b2bed1be194fc77c81271b1356a9e428b259e1fb25353ede41",
+  "ready_total": 52,
+  "coordinate_gold_rows": 30,
+  "coverage_of_ready": 0.5769230769230769,
+  "inherited_actual_coordinates": 11,
+  "new_mcp_actual_coordinates": 19,
+  "table_counts": {
+    "127/DT_092_115_2009_S023": 3,
+    "360/DT_1R11001_FRM101": 13,
+    "127/DT_127005_005": 3,
+    "115/DT_115_2012_AA001": 9,
+    "101/DT_1K41012": 1,
+    "101/DT_1J22041": 1
+  },
+  "excluded_policy": "공식 집계 좌표가 없거나 KOSIS 범위 밖인 READY는 골드로 만들지 않음",
+  "mcp_procedure": "KOSIS search/known table -> validate -> table_info -> get_data",
+  "output_sha256": "30051833f06e5f203ff46ea265927410e1c59f596eca521ad3ce3694c44a779d"
+}

@@ -1,0 +1,59 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python / notebooks
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Local data, indexes, databases and model caches
+data/raw/
+data/inputs/
+data/indexes/
+*.sqlite
+*.sqlite3
+*.db
+*.faiss
+*.npy
+*.npz
+.cache/
+
+# Reproducible run artifacts
+outputs/
+runs/
+checkpoints/
+service_api/state/
+service_api/e2e/
+*_api_cache.json
+*.log
+*.tar
+*.tar.gz
+*.zip
+*.pem
+*.key
+
+# Server-only large artifacts
+indexes/
+postgres_snapshot*/
+*.dump
+*.sql.gz
+
+# Large source catalogs (download/build locally)
+chosun_full.csv
+kosis_table_summary_*.csv
+kosis_meta_index*.csv
+kosis_metadata_summary*.csv
+
+# OS / office temporary files
+.DS_Store
+Thumbs.db
+~$*.xlsx
+
+# Local experiment worktrees and sync scratch
+candidates/
+.server_sync/
